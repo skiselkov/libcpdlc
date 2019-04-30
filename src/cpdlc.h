@@ -150,7 +150,7 @@ typedef enum {
 	CPDLC_UL114_RED_SPD_TO_spd_OR_LESS,
 	CPDLC_UL115_DO_NOT_EXCEED_spd,
 	CPDLC_UL116_RESUME_NORMAL_SPD,
-	CPDLC_UL117_CONTACT_icaounitname_freq,
+	CPDLC_UL117_CTC_icaounitname_freq,
 	CPDLC_UL118_AT_pos_CONTACT_icaounitname_freq,
 	CPDLC_UL119_AT_time_CONTACT_icaounitname_freq,
 	CPDLC_UL120_MONITOR_icaounitname_freq,
@@ -287,14 +287,6 @@ typedef enum {
 	CPDLC_DL65_DUE_TO_WX,
 	CPDLC_DL66_DUE_TO_ACFT_PERF,
 	CPDLC_DL67_FREETEXT_NORMAL_text,
-	CPDLC_DL67b_WE_CAN_ACPT_alt_AT_time,
-	CPDLC_DL67c_WE_CAN_ACPT_spd_AT_time,
-	CPDLC_DL67d_WE_CAN_ACPT_dir_dist_AT_time,
-	CPDLC_DL67e_WE_CANNOT_ACPT_alt,
-	CPDLC_DL67f_WE_CANNOT_ACPT_spd,
-	CPDLC_DL67g_WE_CANNOT_ACPT_dir_dist,
-	CPDLC_DL67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt,
-	CPDLC_DL67i_WHEN_CAN_WE_EXPCT_DES_TO_alt,
 	CPDLC_DL68_FREETEXT_DISTRESS_text,
 	CPDLC_DL69_UNUSED,
 	CPDLC_DL70_REQ_HDG_deg,
@@ -309,6 +301,17 @@ typedef enum {
 	CPDLC_DL79_ATIS_code,
 	CPDLC_DL80_DEVIATING_dir_dist_OF_ROUTE
 } cpdlc_dl_msg_type_t;
+
+typedef enum {
+	CPDLC_DL67b_WE_CAN_ACPT_alt_AT_time = 'b',
+	CPDLC_DL67c_WE_CAN_ACPT_spd_AT_time = 'c',
+	CPDLC_DL67d_WE_CAN_ACPT_dir_dist_AT_time = 'd',
+	CPDLC_DL67e_WE_CANNOT_ACPT_alt = 'e',
+	CPDLC_DL67f_WE_CANNOT_ACPT_spd = 'f',
+	CPDLC_DL67g_WE_CANNOT_ACPT_dir_dist = 'g',
+	CPDLC_DL67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt = 'h',
+	CPDLC_DL67i_WHEN_CAN_WE_EXPCT_DES_TO_alt = 'i',
+} cpdlc_dl_msg_subtype_t;
 
 typedef enum {
 	CPDLC_RESP_WU,	/* Wilco / Unable */
@@ -339,6 +342,7 @@ typedef enum {
 } cpdlc_arg_type_t;
 
 typedef enum {
+	CPDLC_DIR_ANY,
 	CPDLC_DIR_LEFT,
 	CPDLC_DIR_RIGHT
 } cpdlc_dir_t;
@@ -356,7 +360,7 @@ typedef union {
 		int	hrs;
 		int	mins;
 	} time;
-	char		pos[8];
+	char		pos[32];
 	cpdlc_dir_t	dir;
 	float		dist;	/* nautical miles */
 	int		vvi;	/* feet per minute */
@@ -371,15 +375,18 @@ typedef union {
 	char		freetext[512];
 } cpdlc_arg_t;
 
-enum { CPDLC_MAX_ARGS = 5 };
+enum { CPDLC_MAX_ARGS = 5, CPDLC_MAX_RESP_MSGS = 4 };
 
 typedef struct {
-	unsigned		msg_nr;
-	char			msg_nr_suffix;	/* for the weird 67x messages */
+	int			msg_type;
+	char			msg_subtype;	/* for the weird 67x messages */
+	const char		*text;
 	unsigned		num_args;
 	cpdlc_arg_type_t	args[CPDLC_MAX_ARGS];
 	cpdlc_resp_type_t	resp;
-	const char		*text;
+	unsigned		num_resp_msgs;
+	int			resp_msg_types[CPDLC_MAX_RESP_MSGS];
+	int			resp_msg_subtypes[CPDLC_MAX_RESP_MSGS];
 } cpdlc_msg_info_t;
 
 typedef struct {
