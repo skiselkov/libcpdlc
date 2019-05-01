@@ -1,20 +1,29 @@
 /*
- * CDDL HEADER START
+ * Copyright 2019 Saso Kiselkov
  *
- * This file and its contents are supplied under the terms of the
- * Common Development and Distribution License ("CDDL"), version 1.0.
- * You may only use this file in accordance with the terms of version
- * 1.0 of the CDDL.
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
  *
- * A full copy of the text of the CDDL should have accompanied this
- * source.  A copy of the CDDL is also available via the Internet at
- * http://www.illumos.org/license/CDDL.
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
  *
- * CDDL HEADER END
-*/
-/*
- * Copyright 2019 Saso Kiselkov. All rights reserved.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
+
+#include <stdbool.h>
 
 #include "cpdlc.h"
 
@@ -24,7 +33,7 @@
 	CPDLC_UL167_DUE_TO_AIRSPACE_RESTR, \
 	CPDLC_UL169_FREETEXT_NORMAL_text
 
-const cpdlc_msg_info_t cpdlc_ul_infos[] = {
+static const cpdlc_msg_info_t ul_infos[] = {
     { .msg_type = CPDLC_UL0_UNABLE, .text = "UNABLE", .resp = CPDLC_RESP_NE },
     { .msg_type = CPDLC_UL1_STANDBY, .text = "STANDBY", .resp = CPDLC_RESP_NE },
     {
@@ -1257,38 +1266,45 @@ const cpdlc_msg_info_t cpdlc_ul_infos[] = {
     { .msg_type = -1 }	/* List terminator */
 };
 
-const cpdlc_msg_info_t cpdlc_dl_infos[] = {
+static const cpdlc_msg_info_t dl_infos[] = {
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL0_WILCO,
 	.text = "WILCO",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL1_UNABLE,
 	.text = "UNABLE",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL2_STANDBY,
 	.text = "STANDBY",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL3_ROGER,
 	.text = "ROGER",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL4_AFFIRM,
 	.text = "AFFIRM",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL5_NEGATIVE,
 	.text = "NEGATIVE",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL6_REQ_alt,
 	.text = "REQUEST [altitude]",
 	.num_args = 1,
@@ -1298,6 +1314,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL19_MAINT_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL7_REQ_BLOCK_alt_TO_alt,
 	.text = "REQUEST BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
@@ -1307,6 +1324,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL30_MAINT_BLOCK_alt_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL8_REQ_CRZ_CLB_TO_alt,
 	.text = "REQUEST CRUISE CLIMB TO [altitude]",
 	.num_args = 1,
@@ -1316,6 +1334,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL34_CRZ_CLB_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL9_REQ_CLB_TO_alt,
 	.text = "REQUEST CLIMB TO [altitude]",
 	.num_args = 1,
@@ -1325,6 +1344,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL20_CLB_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL10_REQ_DES_TO_alt,
 	.text = "REQUEST DESCENT TO [altitude]",
 	.num_args = 1,
@@ -1334,6 +1354,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL23_DES_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL11_AT_pos_REQ_CLB_TO_alt,
 	.text = "AT [position] REQUEST CLIMB TO [altitude]",
 	.num_args = 2,
@@ -1343,6 +1364,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL22_AT_pos_CLB_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL12_AT_pos_REQ_DES_TO_alt,
 	.text = "AT [position] REQUEST DESCENT TO [altitude]",
 	.num_args = 2,
@@ -1352,6 +1374,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL25_AT_pos_DES_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL13_AT_time_REQ_CLB_TO_alt,
 	.text = "AT [time] REQUEST CLIMB TO [altitude]",
 	.num_args = 2,
@@ -1361,6 +1384,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL21_AT_time_CLB_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL14_AT_time_REQ_DES_TO_alt,
 	.text = "AT [time] REQUEST DESCENT TO [altitude]",
 	.num_args = 2,
@@ -1370,6 +1394,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL24_AT_time_DES_TO_alt }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL15_REQ_OFFSET_dir_dist_OF_ROUTE,
 	.text = "REQUEST OFFSET [direction] [distance] OF ROUTE",
 	.num_args = 2,
@@ -1379,6 +1404,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL64_OFFSET_dir_dist_OF_ROUTE }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE,
 	.text = "AT [position] REQUEST OFFSET [direction] [distance] OF ROUTE",
 	.num_args = 3,
@@ -1388,6 +1414,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL65_AT_pos_OFFSET_dir_dist_OF_ROUTE }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE,
 	.text = "AT [time] REQUEST OFFSET [direction] [distance] OF ROUTE",
 	.num_args = 3,
@@ -1397,6 +1424,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL66_AT_time_OFFSET_dir_dist_OF_ROUTE }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL18_REQ_spd,
 	.text = "REQUEST [speed]",
 	.num_args = 1,
@@ -1406,6 +1434,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL106_MAINT_spd }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL19_REQ_spd_TO_spd,
 	.text = "REQUEST [speed] TO [speed]",
 	.num_args = 2,
@@ -1415,6 +1444,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL110_MAINT_spd_TO_spd }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL20_REQ_VOICE_CTC,
 	.text = "REQUEST VOICE CONTACT",
 	.resp = CPDLC_RESP_Y,
@@ -1422,6 +1452,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL117_CTC_icaounitname_freq }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL21_REQ_VOICE_CTC_ON_freq,
 	.text = "REQUEST VOICE CONTACT ON [frequency]",
 	.num_args = 1,
@@ -1431,6 +1462,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL117_CTC_icaounitname_freq }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL22_REQ_DIR_TO_pos,
 	.text = "REQUEST DIRECT TO [position]",
 	.num_args = 1,
@@ -1440,6 +1472,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL74_DIR_TO_pos }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL23_REQ_proc,
 	.text = "REQUEST [procedure name]",
 	.num_args = 1,
@@ -1449,6 +1482,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL81_CLR_proc }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL24_REQ_route,
 	.text = "REQUEST [route clearance]",
 	.num_args = 1,
@@ -1458,6 +1492,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL80_CLR_route }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL25_REQ_PDC,
 	.text = "REQUEST CLEARANCE",
 	.resp = CPDLC_RESP_Y,
@@ -1465,6 +1500,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL73_PDC_route }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL26_REQ_WX_DEVIATION_TO_pos_VIA_route,
 	.text = "REQUEST WEATHER DEVIATION TO [position] VIA [route clearance]",
 	.num_args = 2,
@@ -1474,6 +1510,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL79_CLR_TO_pos_VIA_route }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE,
 	.text = "REQUEST WEATHER DEVIATION UP TO [direction] "
 	    "[distance offset] OF ROUTE",
@@ -1484,6 +1521,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL82_CLR_DEVIATE_UP_TO_dir_dist_OF_ROUTE }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL28_LEAVING_alt,
 	.text = "LEAVING [altitude]",
 	.num_args = 1,
@@ -1491,6 +1529,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL29_CLIMBING_TO_alt,
 	.text = "CLIMBING TO [altitude]",
 	.num_args = 1,
@@ -1498,6 +1537,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL30_DESCENDING_TO_alt,
 	.text = "DESCENDING TO [altitude]",
 	.num_args = 1,
@@ -1505,6 +1545,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL31_PASSING_pos,
 	.text = "PASSING [position]",
 	.num_args = 1,
@@ -1512,6 +1553,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL32_PRESENT_ALT_alt,
 	.text = "PASSING [position]",
 	.num_args = 1,
@@ -1519,6 +1561,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL33_PRESENT_POS_pos,
 	.text = "PRESENT POSITION [position]",
 	.num_args = 1,
@@ -1526,6 +1569,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL34_PRESENT_SPD_spd,
 	.text = "PRESENT SPEED [speed]",
 	.num_args = 1,
@@ -1533,6 +1577,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL35_PRESENT_HDG_deg,
 	.text = "PRESENT HEADING [degrees]",
 	.num_args = 1,
@@ -1540,6 +1585,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL36_PRESENT_GND_TRK_deg,
 	.text = "PRESENT GROUND TRACK [degrees]",
 	.num_args = 1,
@@ -1547,6 +1593,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL37_LEVEL_alt,
 	.text = "LEVEL [altitude]",
 	.num_args = 1,
@@ -1554,6 +1601,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL38_ASSIGNED_ALT_alt,
 	.text = "ASSIGNED ALTITUDE [altitude]",
 	.num_args = 1,
@@ -1561,6 +1609,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL39_ASSIGNED_SPD_spd,
 	.text = "ASSIGNED SPEED [speed]",
 	.num_args = 1,
@@ -1568,6 +1617,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL40_ASSIGNED_ROUTE_route,
 	.text = "ASSIGNED ROUTE [route]",
 	.num_args = 1,
@@ -1575,11 +1625,13 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL41_BACK_ON_ROUTE,
 	.text = "BACK ON ROUTE",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL42_NEXT_WPT_pos,
 	.text = "NEXT WAYPOINT [position]",
 	.num_args = 1,
@@ -1587,6 +1639,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL43_NEXT_WPT_ETA_time,
 	.text = "NEXT WAYPOINT [time]",
 	.num_args = 1,
@@ -1594,6 +1647,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL44_ENSUING_WPT_pos,
 	.text = "ENSUING WAYPOINT [position]",
 	.num_args = 1,
@@ -1601,6 +1655,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL45_REPORTED_WPT_pos,
 	.text = "REPORTED WAYPOINT [position]",
 	.num_args = 1,
@@ -1608,6 +1663,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL46_REPORTED_WPT_time,
 	.text = "REPORTED WAYPOINT [time]",
 	.num_args = 1,
@@ -1615,6 +1671,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL47_SQUAWKING_code,
 	.text = "SQUAWKING [beacon code]",
 	.num_args = 1,
@@ -1622,6 +1679,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL48_POS_REPORT_posreport,
 	.text = "POSITION REPORT [posreport]",
 	.num_args = 1,
@@ -1629,6 +1687,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL49_WHEN_CAN_WE_EXPCT_spd,
 	.text = "WHEN CAN WE EXPECT [speed]",
 	.num_args = 1,
@@ -1642,6 +1701,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	}
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL50_WHEN_CAN_WE_EXPCT_spd_TO_spd,
 	.text = "WHEN CAN WE EXPECT [speed] TO [speed]",
 	.num_args = 2,
@@ -1655,6 +1715,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	}
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL51_WHEN_CAN_WE_EXPCT_BACK_ON_ROUTE,
 	.text = "WHEN CAN WE EXPECT BACK ON ROUTE",
 	.resp = CPDLC_RESP_Y,
@@ -1666,6 +1727,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	}
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL52_WHEN_CAN_WE_EXPECT_LOWER_ALT,
 	.text = "WHEN CAN WE EXPECT LOWER ALTITUDE",
 	.resp = CPDLC_RESP_Y,
@@ -1677,6 +1739,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	}
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL53_WHEN_CAN_WE_EXPECT_HIGHER_ALT,
 	.text = "WHEN CAN WE EXPECT HIGHER ALTITUDE",
 	.resp = CPDLC_RESP_Y,
@@ -1688,6 +1751,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	}
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt,
 	.text = "WHEN CAN WE EXPECT CRUISE CLIMB TO [altitude]",
 	.num_args = 1,
@@ -1701,6 +1765,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	},
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL62_ERROR_errorinfo,
 	.text = "ERROR [error information]",
 	.num_args = 1,
@@ -1708,11 +1773,13 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL63_NOT_CURRENT_DATA_AUTHORITY,
 	.text = "NOT CURRENT DATA AUTHORITY",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL64_CURRENT_DATA_AUTHORITY_id,
 	.text = "[icao facility designation]",
 	.num_args = 1,
@@ -1720,16 +1787,19 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL65_DUE_TO_WX,
 	.text = "DUE TO WEATHER",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL66_DUE_TO_ACFT_PERF,
 	.text = "DUE TO AIRCRAFT PERFORMANCE",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL67_FREETEXT_NORMAL_text,
 	.text = "[freetext]",
 	.num_args = 1,
@@ -1737,6 +1807,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67b_WE_CAN_ACPT_alt_AT_time,
 	.text = "WE CAN ACCEPT [altitude] AT [time]",
@@ -1745,6 +1816,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67c_WE_CAN_ACPT_spd_AT_time,
 	.text = "WE CAN ACCEPT [speed] AT [time]",
@@ -1753,6 +1825,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67d_WE_CAN_ACPT_dir_dist_AT_time,
 	.text = "WE CAN ACCEPT [direction] [distance offset] AT [time]",
@@ -1761,6 +1834,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67e_WE_CANNOT_ACPT_alt,
 	.text = "WE CANNOT ACCEPT [altitude]",
@@ -1769,6 +1843,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67f_WE_CANNOT_ACPT_spd,
 	.text = "WE CANNOT ACCEPT [speed]",
@@ -1777,6 +1852,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67g_WE_CANNOT_ACPT_dir_dist,
 	.text = "WE CANNOT ACCEPT [direction] [distance offset]",
@@ -1785,6 +1861,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt,
 	.text = "WHEN CAN WE EXPECT CLIMB TO [altitude]",
@@ -1793,6 +1870,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = 67,
 	.msg_subtype = CPDLC_DL67i_WHEN_CAN_WE_EXPCT_DES_TO_alt,
 	.text = "WHEN CAN WE EXPECT DESCENT TO [altitude]",
@@ -1801,6 +1879,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL68_FREETEXT_DISTRESS_text,
 	.text = "[freetext]",
 	.num_args = 1,
@@ -1808,6 +1887,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL70_REQ_HDG_deg,
 	.text = "REQUEST HEADING [degrees]",
 	.num_args = 1,
@@ -1817,6 +1897,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL94_TURN_dir_HDG_deg }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL71_REQ_GND_TRK_deg,
 	.text = "REQUEST GROUND TRACK [degrees]",
 	.num_args = 1,
@@ -1826,6 +1907,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp_msg_types = { CPDLC_UL95_TURN_dir_GND_TRK_deg }
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL72_REACHING_alt,
 	.text = "REACHING [altitude]",
 	.num_args = 1,
@@ -1833,6 +1915,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL73_VERSION_number,
 	.text = "[version nr]",
 	.num_args = 1,
@@ -1840,16 +1923,19 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL74_MAINT_OWN_SEPARATION_AND_VMC,
 	.text = "MAINTAIN OWN SEPARATION AND VMC",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL75_AT_PILOTS_DISCRETION,
 	.text = "AT PILOTS DISCRETION",
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL76_REACHING_BLOCK_alt_TO_alt,
 	.text = "REACHING BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
@@ -1857,6 +1943,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL77_ASSIGNED_BLOCK_alt_TO_alt,
 	.text = "ASSIGNED BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
@@ -1864,6 +1951,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL78_AT_time_dist_tofrom_pos,
 	.text = "AT [time] [distance] [to/from] [position]",
 	.num_args = 4,
@@ -1874,6 +1962,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL79_ATIS_code,
 	.text = "ATIS [atis code]",
 	.num_args = 1,
@@ -1881,6 +1970,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
 	.resp = CPDLC_RESP_N
     },
     {
+	.is_dl = true,
 	.msg_type = CPDLC_DL80_DEVIATING_dir_dist_OF_ROUTE,
 	.text = "DEVIATING [direction] [distance offset] OF ROUTE",
 	.num_args = 2,
@@ -1889,3 +1979,7 @@ const cpdlc_msg_info_t cpdlc_dl_infos[] = {
     },
     { .msg_type = -1 }	/* List terminator */
 };
+
+const cpdlc_msg_info_t *cpdlc_ul_infos = ul_infos;
+const cpdlc_msg_info_t *cpdlc_dl_infos = dl_infos;
+

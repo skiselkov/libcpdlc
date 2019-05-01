@@ -23,15 +23,37 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_PROTOTYPE_H_
-#define	_LIBCPDLC_PROTOTYPE_H_
+#ifndef	_LIBCPDLC_CPDLC_STRING_H_
+#define	_LIBCPDLC_CPDLC_STRING_H_
+
+#include <string.h>
+
+#include "cpdlc_core.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
+/*
+ * strlcpy is a BSD function not available on Windows, so we roll a simple
+ * version of it ourselves. Also, on BSD it's SLOOOOW. Inline for max perf.
+ */
+static inline void
+cpdlc_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
+{
+	dest[cap - 1] = '\0';
+#ifdef	_MSC_VER
+#pragma	warning(push)
+#pragma	warning(disable: 4996)
+#endif	/* _MSC_VER */
+	strncpy(dest, src, cap - 1);
+#ifdef	_MSC_VER
+#pragma	warning(pop)
+#endif	/* _MSC_VER */
+}
+
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_PROTOTYPE_H_ */
+#endif	/* _LIBCPDLC_CPDLC_STRING_H_ */

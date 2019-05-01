@@ -23,15 +23,12 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_PROTOTYPE_H_
-#define	_LIBCPDLC_PROTOTYPE_H_
+#include <stdio.h>
 
-#ifdef	__cplusplus
-extern "C" {
-#endif
+#include "../src/cpdlc.h"
 
-#ifdef	__cplusplus
+int
+main(void)
+{
+	return (0);
 }
-#endif
-
-#endif	/* _LIBCPDLC_PROTOTYPE_H_ */

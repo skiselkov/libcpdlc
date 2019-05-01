@@ -1,32 +1,34 @@
 /*
- * CDDL HEADER START
+ * Copyright 2019 Saso Kiselkov
  *
- * The contents of this file are subject to the terms of the
- * Common Development and Distribution License, Version 1.0 only
- * (the "License").  You may not use this file except in compliance
- * with the License.
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
  *
- * You can obtain a copy of the license in the file COPYING
- * or http://www.opensource.org/licenses/CDDL-1.0.
- * See the License for the specific language governing permissions
- * and limitations under the License.
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
  *
- * When distributing Covered Code, include this CDDL HEADER in each
- * file and include the License file COPYING.
- * If applicable, add the following below this CDDL HEADER, with the
- * fields enclosed by brackets "[]" replaced with your own identifying
- * information: Portions Copyright [yyyy] [name of copyright owner]
- *
- * CDDL HEADER END
- */
-/*
- * Copyright 2019 Saso Kiselkov. All rights reserved.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef	_LIBCPDLC_CPDLC_H_
 #define	_LIBCPDLC_CPDLC_H_
 
 #include <stdbool.h>
+
+#include "cpdlc_core.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -354,7 +356,7 @@ typedef union {
 	} alt;
 	struct {
 		bool	mach;
-		int	spd;	/* knots */
+		int	spd;	/* knots or 1/1000th of Mach */
 	} spd;
 	struct {
 		int	hrs;
@@ -362,12 +364,12 @@ typedef union {
 	} time;
 	char		pos[32];
 	cpdlc_dir_t	dir;
-	float		dist;	/* nautical miles */
+	double		dist;	/* nautical miles */
 	int		vvi;	/* feet per minute */
-	bool		tofrom;	/* B_TRUE = to, B_FALSE = from */
+	bool		tofrom;	/* true = to, false = from */
 	char		route[512];
 	char		proc[16];
-	int		squawk;
+	unsigned	squawk;
 	char		icaoname[8];
 	double		freq;
 	unsigned	deg;
@@ -375,9 +377,10 @@ typedef union {
 	char		freetext[512];
 } cpdlc_arg_t;
 
-enum { CPDLC_MAX_ARGS = 5, CPDLC_MAX_RESP_MSGS = 4 };
+enum { CPDLC_MAX_ARGS = 5, CPDLC_MAX_RESP_MSGS = 4, CPDLC_MAX_MSG_SEGS = 5 };
 
 typedef struct {
+	bool			is_dl;
 	int			msg_type;
 	char			msg_subtype;	/* for the weird 67x messages */
 	const char		*text;
@@ -391,10 +394,42 @@ typedef struct {
 
 typedef struct {
 	const cpdlc_msg_info_t	*info;
+	cpdlc_arg_t		args[CPDLC_MAX_ARGS];
+} cpdlc_msg_seg_t;
+
+typedef struct {
+	char		from[16];
+	char		to[16];
+	unsigned	min;
+	unsigned	mrn;
+	unsigned	num_segs;
+	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
 } cpdlc_msg_t;
 
-const cpdlc_msg_info_t cpdlc_ul_infos[];
-const cpdlc_msg_info_t cpdlc_dl_infos[];
+const cpdlc_msg_info_t *cpdlc_ul_infos;
+const cpdlc_msg_info_t *cpdlc_dl_infos;
+
+CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(const char *from, const char *to,
+    unsigned min, unsigned mrn);
+CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
+
+CPDLC_API unsigned cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg);
+CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, int msg_type,
+    int msg_subtype);
+
+CPDLC_API unsigned cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg,
+    unsigned seg_nr);
+CPDLC_API cpdlc_arg_type_t cpdlc_msg_seg_get_arg_type(const cpdlc_msg_t *msg,
+    unsigned seg_nr, unsigned arg_nr);
+CPDLC_API void cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr,
+    unsigned arg_nr, void *arg_val1, void *arg_val2);
+CPDLC_API unsigned cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg,
+    unsigned seg_nr, unsigned arg_nr, void *arg_val1, unsigned str_cap,
+    void *arg_val2);
+
+CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
+    unsigned cap);
+CPDLC_API int cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t *msg);
 
 #ifdef	__cplusplus
 }

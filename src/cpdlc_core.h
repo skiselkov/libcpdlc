@@ -23,15 +23,38 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_PROTOTYPE_H_
-#define	_LIBCPDLC_PROTOTYPE_H_
+#ifndef	_LIBCPDLC_CPDLC_CORE_H_
+#define	_LIBCPDLC_CPDLC_CORE_H_
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
+#if	defined(_MSC_VER)
+#define	CPDLC_API	__declspec(dllexport)
+#define	UNUSED_ATTR	__attribute__((unused))
+#else	/* !defined(_MSC_VER) */
+#define	CPDLC_API
+#define	UNUSED_ATTR	__attribute__((unused))
+#endif	/* !defined(_MSC_VER) */
+
+#define	UNUSED(x)	(void)(x)
+
+#if	__STDC_VERSION__ < 199901L
+# if	defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
+#  define	restrict        __restrict
+# else
+#  define	restrict
+# endif
+# if		defined(_MSC_VER)
+#  define	inline  __inline
+# else
+#  define	inline
+# endif
+#endif	/* __STDC_VERSION__ < 199901L */
+
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_PROTOTYPE_H_ */
+#endif	/* _LIBCPDLC_CPDLC_CORE_H_ */

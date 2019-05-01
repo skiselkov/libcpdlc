@@ -23,15 +23,52 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_PROTOTYPE_H_
-#define	_LIBCPDLC_PROTOTYPE_H_
+#ifndef	_LIBCPDLC_CPDLC_ALLOC_H_
+#define	_LIBCPDLC_CPDLC_ALLOC_H_
+
+#include <stdlib.h>
+
+#include "cpdlc_assert.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
+static inline void *
+safe_malloc(size_t size)
+{
+	void *p = malloc(size);
+	if (size > 0) {
+		VERIFY_MSG(p != NULL, "Cannot allocate %lu bytes: "
+		    "out of memory", (long unsigned)size);
+	}
+	return (p);
+}
+
+static inline void *
+safe_calloc(size_t nmemb, size_t size)
+{
+	void *p = calloc(nmemb, size);
+	if (nmemb > 0 && size > 0) {
+		VERIFY_MSG(p != NULL, "Cannot allocate %lu bytes: "
+		    "out of memory", (long unsigned)(nmemb * size));
+	}
+	return (p);
+}
+
+static inline void *
+safe_realloc(void *oldptr, size_t size)
+{
+	void *p = realloc(oldptr, size);
+	if (size > 0) {
+		VERIFY_MSG(p != NULL, "Cannot allocate %lu bytes: "
+		    "out of memory", (long unsigned)size);
+	}
+	return (p);
+}
+
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_PROTOTYPE_H_ */
+#endif	/* _LIBCPDLC_CPDLC_ALLOC_H_ */

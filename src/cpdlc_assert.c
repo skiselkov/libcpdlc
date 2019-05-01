@@ -23,15 +23,25 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_PROTOTYPE_H_
-#define	_LIBCPDLC_PROTOTYPE_H_
+#include <stdarg.h>
+#include <stdio.h>
 
-#ifdef	__cplusplus
-extern "C" {
-#endif
+#include "cpdlc_assert.h"
 
-#ifdef	__cplusplus
+cpdlc_assfail_t cpdlc_assfail = NULL;
+void *cpdlc_assfail_userinfo = NULL;
+
+/* To avoid having to use the allocator or the stack, which might be b0rked. */
+static char buf[1024];
+
+void
+cpdlc_assfail_impl(const char *filename, int line, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof (buf), fmt, ap);
+	va_end(ap);
+
+	cpdlc_assfail(filename, line, buf, cpdlc_assfail_userinfo);
 }
-#endif
-
-#endif	/* _LIBCPDLC_PROTOTYPE_H_ */
