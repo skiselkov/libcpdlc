@@ -53,6 +53,13 @@ extern "C" {
 # endif
 #endif	/* __STDC_VERSION__ < 199901L */
 
+#ifndef	MIN
+#define	MIN(x, y)	((x) < (y) ? (x) : (y))
+#endif
+#ifndef	MAX
+#define	MAX(x, y)	((x) > (y) ? (x) : (y))
+#endif
+
 #ifdef	__cplusplus
 }
 #endif

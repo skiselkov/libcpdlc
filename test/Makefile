@@ -23,6 +23,7 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 CFLAGS += -W -Wall -Wextra -Werror
+LIBS += -lm
 
 SRCPREFIX=../src
 
