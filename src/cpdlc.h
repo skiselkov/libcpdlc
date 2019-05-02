@@ -351,7 +351,8 @@ typedef enum {
 
 typedef union {
 	struct {
-		bool	fl;
+		bool	fl;	/* flight level? */
+		bool	met;	/* metric? */
 		int	alt;	/* feet */
 	} alt;
 	struct {
@@ -419,6 +420,8 @@ CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(unsigned min, unsigned mrn);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
+    unsigned cap);
+CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API cpdlc_msg_t *cpdlc_msg_decode(const char *in_buf, int *consumed);
 

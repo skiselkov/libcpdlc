@@ -36,13 +36,21 @@ handle_buf(const char *buf)
 	cpdlc_msg_t *msg = cpdlc_msg_decode(buf, &consumed);
 
 	if (msg != NULL) {
-		unsigned l = cpdlc_msg_encode(msg, NULL, 0);
-		char *newbuf = malloc(l + 1);
+		unsigned l;
+		char *newbuf;
 
+		l = cpdlc_msg_encode(msg, NULL, 0);
+		newbuf = malloc(l + 1);
 		cpdlc_msg_encode(msg, newbuf, l + 1);
 		printf("%s", newbuf);
-
 		free(newbuf);
+
+		l = cpdlc_msg_readable(msg, NULL, 0);
+		newbuf = malloc(l + 1);
+		cpdlc_msg_readable(msg, newbuf, l + 1);
+		printf("%s\n", newbuf);
+		free(newbuf);
+
 		cpdlc_msg_free(msg);
 	}
 }

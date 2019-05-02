@@ -647,7 +647,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
     {
 	.msg_type =
 	    CPDLC_UM91_HOLD_AT_pos_MAINT_alt_INBD_deg_TURN_dir_LEG_TIME_time,
-	.text = "HOLD AT [position] MAINTAIN [altitude] INBOUND TRACK"
+	.text = "HOLD AT [position] MAINTAIN [altitude] INBOUND TRACK "
 	    "[degrees] [direction] TURN LEG TIME [leg type]",
 	.num_args = 5,
 	.args = {
@@ -795,7 +795,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
     {
 	.msg_type = CPDLC_UM112_INCR_SPD_TO_spd_OR_GREATER,
 	.text = "INCREASE SPEED TO [speed] OR GREATER",
-	.num_args = 1,
+	.num_args = 2,
 	.args = { CPDLC_ARG_SPEED },
 	.resp = CPDLC_RESP_WU
     },
@@ -835,7 +835,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
     {
 	.msg_type = CPDLC_UM118_AT_pos_CONTACT_icaounitname_freq,
 	.text = "AT [position] CONTACT [icaounitname] [frequency]",
-	.num_args = 2,
+	.num_args = 3,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_ICAONAME, CPDLC_ARG_FREQUENCY },
 	.resp = CPDLC_RESP_WU
     },
@@ -912,7 +912,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM130_REPORT_PASSING_pos,
 	.text = "REPORT PASSING [position]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_ALTITUDE },
+	.args = { CPDLC_ARG_POSITION },
 	.resp = CPDLC_RESP_R
     },
     {
@@ -1183,11 +1183,15 @@ static const cpdlc_msg_info_t ul_infos[] = {
     {
 	.msg_type = CPDLC_UM169_FREETEXT_NORMAL_text,
 	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
 	.resp = CPDLC_RESP_R
     },
     {
 	.msg_type = CPDLC_UM170_FREETEXT_DISTRESS_text,
 	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
 	.resp = CPDLC_RESP_R
     },
     {

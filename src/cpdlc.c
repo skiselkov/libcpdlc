@@ -104,7 +104,7 @@ escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 			out_buf[j] = '\0';
 		}
 		if (isalnum(c) || c == ' ' || c == '.' || c == ',') {
-			out_buf[j] = in_buf[j];
+			out_buf[j] = in_buf[i];
 		} else {
 			if (j + 4 < cap)
 				snprintf(&out_buf[j], 4, "%%%02x", c);
@@ -148,102 +148,209 @@ unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 
 static void
 encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
-    unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
+    bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
 {
 	char textbuf[1024];
 
 	switch (arg_type) {
 	case CPDLC_ARG_ALTITUDE:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s%d",
-		    arg->alt.fl ? "FL" : "",
-		    arg->alt.fl ? arg->alt.alt / 100 : arg->alt.alt);
+		if (readable) {
+			const char *units;
+			int value;
+
+			if (arg->alt.fl) {
+				if (arg->alt.met) {
+					value = arg->alt.alt;
+					units = "M";
+				} else {
+					value = arg->alt.alt / 100;
+					units = "";
+				}
+			} else {
+				if (arg->alt.met) {
+					value = arg->alt.alt;
+					units = "M";
+				} else {
+					value = arg->alt.alt;
+					units = "FT";
+				}
+			}
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d%s",
+			    arg->alt.fl ? "FL" : "", value, units);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s%d%s",
+			    arg->alt.fl ? "FL" : "",
+			    (arg->alt.fl && !arg->alt.met) ?
+			    arg->alt.alt / 100 : arg->alt.alt,
+			    arg->alt.met ? "M" : "");
+		}
 		break;
 	case CPDLC_ARG_SPEED:
 		if (arg->spd.mach) {
 			if (arg->spd.spd < 1000) {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " M.%03d", arg->spd.spd);
+				    "%sM.%03d", readable ? "" : " ",
+				    arg->spd.spd);
 			} else {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " M%d.%03d", arg->spd.spd / 1000,
+				    "%sM%d.%03d", readable ? "" : " ",
+				    arg->spd.spd / 1000,
 				    arg->spd.spd % 1000);
 			}
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
-			    arg->spd.spd);
+			if (readable) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%dKT", arg->spd.spd);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %d", arg->spd.spd);
+			}
 		}
 		break;
 	case CPDLC_ARG_TIME:
 		if (arg->time.hrs < 0) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " NOW");
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%sNOW",
+			    readable ? "" : " ");
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    " %02d:%02d", arg->time.hrs, arg->time.mins);
+			if (readable) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%02d:%02d", arg->time.hrs, arg->time.mins);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %02d%02d", arg->time.hrs, arg->time.mins);
+			}
 		}
 		break;
 	case CPDLC_ARG_POSITION:
-		escape_percent(arg->pos, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    arg->pos);
+		} else {
+			escape_percent(arg->pos, textbuf, sizeof (textbuf));
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+			    textbuf);
+		}
 		break;
 	case CPDLC_ARG_DIRECTION:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %c",
-		    arg->dir == CPDLC_DIR_ANY ? 'N' :
-		    (arg->dir == CPDLC_DIR_LEFT ? 'L' : 'R'));
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    arg->dir == CPDLC_DIR_ANY ? "" :
+			    (arg->dir == CPDLC_DIR_LEFT ? "LEFT" : "RIGHT"));
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %c",
+			    arg->dir == CPDLC_DIR_ANY ? 'N' :
+			    (arg->dir == CPDLC_DIR_LEFT ? 'L' : 'R'));
+		}
 		break;
 	case CPDLC_ARG_DISTANCE:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %.01f",
-		    arg->dist);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%.01fNM", arg->dist);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %.01f", arg->dist);
+		}
 		break;
 	case CPDLC_ARG_VVI:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d", arg->vvi);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%dFT/MIN",
+			    arg->vvi);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+			    arg->vvi);
+		}
 		break;
 	case CPDLC_ARG_TOFROM:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
-		    arg->tofrom ? "TO" : "FROM");
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
+		    readable ? "" : " ", arg->tofrom ? "TO" : "FROM");
 		break;
 	case CPDLC_ARG_ROUTE:
-		if (arg->route != NULL)
-			escape_percent(arg->route, textbuf, sizeof (textbuf));
-		else
-			*textbuf = '\0';
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+		if (arg->route != NULL) {
+			if (readable) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%s", arg->route);
+			} else {
+				escape_percent(arg->route, textbuf,
+				    sizeof (textbuf));
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %s", textbuf);
+			}
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%sNIL",
+			    readable ? "" : " ");
+		}
 		break;
 	case CPDLC_ARG_PROCEDURE:
-		escape_percent(arg->proc, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    arg->proc);
+		} else {
+			escape_percent(arg->proc, textbuf, sizeof (textbuf));
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+			    textbuf);
+		}
 		break;
 	case CPDLC_ARG_SQUAWK:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %04d",
-		    arg->squawk);
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%04d",
+		    readable ? "" : " ", arg->squawk);
 		break;
 	case CPDLC_ARG_ICAONAME:
-		escape_percent(arg->icaoname, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    arg->icaoname);
+		} else {
+			escape_percent(arg->icaoname, textbuf,
+			    sizeof (textbuf));
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+			    textbuf);
+		}
 		break;
 	case CPDLC_ARG_FREQUENCY:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %.02f",
-		    arg->freq);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%.03fMHZ",
+			    arg->freq);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %.03f",
+			    arg->freq);
+		}
 		break;
 	case CPDLC_ARG_DEGREES:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d", arg->deg);
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d",
+		    readable ? "" : " ", arg->deg);
 		break;
 	case CPDLC_ARG_BARO:
-		if (arg->baro.hpa) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " Q%.0f",
-			    arg->baro.val);
+		if (readable) {
+			if (arg->baro.hpa) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.0fHPA", arg->baro.val);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.02fIN", arg->baro.val);
+			}
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " A%.02f",
-			    arg->baro.val);
+			if (arg->baro.hpa) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " Q%.0f", arg->baro.val);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " A%.02f", arg->baro.val);
+			}
 		}
 		break;
 	case CPDLC_ARG_FREETEXT:
 		if (arg->freetext != NULL) {
-			escape_percent(arg->freetext, textbuf,
-			    sizeof (textbuf));
+			if (readable) {
+				cpdlc_strlcpy(textbuf, arg->freetext,
+				    sizeof (textbuf));
+			} else {
+				escape_percent(arg->freetext, textbuf,
+				    sizeof (textbuf));
+			}
 		} else {
 			*textbuf = '\0';
 		}
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
+		    readable ? "" : " ", textbuf);
 		break;
 	}
 }
@@ -254,7 +361,7 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 {
 	const cpdlc_msg_info_t *info = seg->info;
 
-	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "/DATA=%s%d",
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "/MSG=%s%d",
 	    info->is_dl ? "DM" : "UM", info->msg_type);
 	if (info->msg_subtype != 0) {
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%c",
@@ -262,8 +369,8 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 	}
 
 	for (unsigned i = 0; i < info->num_args; i++) {
-		encode_arg(info->args[i], &seg->args[i], n_bytes_p, buf_p,
-		    cap_p);
+		encode_arg(info->args[i], &seg->args[i], false, n_bytes_p,
+		    buf_p, cap_p);
 	}
 }
 
@@ -316,11 +423,69 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	return (n_bytes);
 }
 
+static void
+readable_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
+    unsigned *cap_p)
+{
+	const cpdlc_msg_info_t *info = seg->info;
+	const char *start = info->text;
+	const char *end = start + strlen(info->text);
+	char textbuf[512];
+
+	for (unsigned arg = 0; start < end; arg++) {
+		const char *open = strchr(start, '[');
+		const char *close = strchr(start, ']');
+		if (open == NULL) {
+			open = end;
+			close = end;
+		}
+		cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
+		    (uintptr_t)(open - start) + 1));
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s", textbuf);
+
+		if (close == end) {
+			ASSERT3U(arg, ==, info->num_args);
+			break;
+		}
+
+		encode_arg(info->args[arg], &seg->args[arg], true, n_bytes_p,
+		    buf_p, cap_p);
+		/*
+		 * If the argument was at the end of the text line, `start'
+		 * can now be pointing past `end'. So we must NOT deref it
+		 * before it gets re-validated at the top of this loop.
+		 */
+		start = close + 1;
+		if (info->args[arg] == CPDLC_ARG_DIRECTION &&
+		    seg->args[arg].dir == CPDLC_DIR_ANY) {
+			/*
+			 * Skip an extra space when the turn direction is
+			 * `ANY'
+			 */
+			start++;
+		}
+	}
+}
+
+unsigned
+cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf, unsigned cap)
+{
+	unsigned n_bytes = 0;
+
+	for (unsigned i = 0; i < msg->num_segs; i++) {
+		readable_seg(&msg->segs[i], &n_bytes, &buf, &cap);
+		if (i + 1 < msg->num_segs)
+			APPEND_SNPRINTF(n_bytes, buf, cap, " ");
+	}
+
+	return (n_bytes);
+}
+
 static bool
 validate_message(const cpdlc_msg_t *msg)
 {
 	if (msg->num_segs == 0) {
-		fprintf(stderr, "Message malformed: no DATA segments found\n");
+		fprintf(stderr, "Message malformed: no message segments found\n");
 		return (false);
 	}
 	if (msg->min > CPDLC_MAX_MSG_SEQ_NR) {
@@ -341,6 +506,20 @@ is_hold(bool is_dl, int msg_type)
 {
 	return (!is_dl && msg_type ==
 	    CPDLC_UM91_HOLD_AT_pos_MAINT_alt_INBD_deg_TURN_dir_LEG_TIME_time);
+}
+
+static bool
+is_offset(bool is_dl, int msg_type)
+{
+	return ((is_dl &&
+	    (msg_type == CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE ||
+	    msg_type == CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE ||
+	    msg_type == CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE)) ||
+	    (!is_dl &&
+	    (msg_type == CPDLC_UM64_OFFSET_dir_dist_OF_ROUTE ||
+	    msg_type == CPDLC_UM65_AT_pos_OFFSET_dir_dist_OF_ROUTE ||
+	    msg_type == CPDLC_UM66_AT_time_OFFSET_dir_dist_OF_ROUTE ||
+	    msg_type == CPDLC_UM152_WHEN_CAN_YOU_ACPT_dir_dist_OFFSET)));
 }
 
 static bool
@@ -431,7 +610,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 		start++;
 	}
 
-	info = msg_infos_lookup(is_dl, msg_type, 0);
+	info = msg_infos_lookup(is_dl, msg_type, msg_subtype);
 	if (info == NULL) {
 		fprintf(stderr, "Malformed message: invalid message type\n");
 		return (false);
@@ -457,24 +636,35 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    start[1] == 'L') {
 				arg->alt.fl = true;
 				if (sscanf(&start[2], "%d",
-				    &seg->args[num_args].alt.alt) != 1 ||
-				    seg->args[num_args].alt.alt <= 0 ||
-				    seg->args[num_args].alt.alt > 1000) {
+				    &arg->alt.alt) != 1 ||
+				    arg->alt.alt <= 0) {
 					fprintf(stderr, "Malformed message: "
 					    "invalid flight level\n");
 					return (false);
 				}
-				arg->alt.alt *= 100;
 			} else {
 				arg->alt.alt = atoi(start);
-				if (sscanf(start, "%d",
-				    &seg->args[num_args].alt.alt) != 1 ||
+				if (sscanf(start, "%d", &arg->alt.alt) != 1 ||
 				    arg->alt.alt < -1500 ||
 				    arg->alt.alt > 100000) {
 					fprintf(stderr, "Malformed message: "
 					    "invalid altitude\n");
 					return (false);
 				}
+			}
+			arg_end = find_arg_end(start, end);
+			if (*(arg_end - 1) == 'M')
+				arg->alt.met = true;
+			/* Multiply non-metric FLs by 100 */
+			if (arg->alt.fl && !arg->alt.met)
+				arg->alt.alt *= 100;
+			/* Second round of validation for FLs */
+			if (arg->alt.fl &&
+			    ((!arg->alt.met && arg->alt.alt > 100000) ||
+			    (arg->alt.met && arg->alt.alt > 30000))) {
+				fprintf(stderr, "Malformed message: "
+				    "invalid flight level\n");
+				return (false);
 			}
 			break;
 		case CPDLC_ARG_SPEED:
@@ -499,8 +689,21 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			if (strncmp(start, "NOW", 3) == 0) {
 				arg->time.hrs = -1;
 			} else {
-				if (sscanf(start, "%02d:%02d", &arg->time.hrs,
-				    &arg->time.mins) != 2 ||
+				char hrs[3] = { 0 }, mins[3] = { 0 };
+
+				arg_end = find_arg_end(start, end);
+
+				if (arg_end - start != 4) {
+					fprintf(stderr, "Malformed message: "
+					    "invalid time\n");
+					return (false);
+				}
+				hrs[0] = start[0];
+				hrs[1] = start[1];
+				mins[0] = start[2];
+				mins[1] = start[3];
+				if (sscanf(hrs, "%d", &arg->time.hrs) != 1 ||
+				    sscanf(mins, "%d", &arg->time.mins) != 1 ||
 				    arg->time.hrs < 0 || arg->time.hrs > 23 ||
 				    arg->time.mins < 0 || arg->time.mins > 59) {
 					fprintf(stderr, "Malformed message: "
@@ -528,10 +731,11 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 		case CPDLC_ARG_DIRECTION:
 			switch (start[0]) {
 			case 'N':
-				if (is_hold(is_dl, msg_type)) {
+				if (is_hold(is_dl, msg_type) ||
+				    is_offset(is_dl, msg_type)) {
 					fprintf(stderr, "Malformed message: "
-					    "hold legs cannot specify a turn "
-					    "direction of 'ANY'.\n");
+					    "this message type cannot specify "
+					    "a direction of 'ANY'.\n");
 					return (false);
 				}
 				arg->dir = CPDLC_DIR_ANY;
@@ -558,16 +762,19 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			break;
 		case CPDLC_ARG_VVI:
 			arg->vvi = atoi(start);
-			if (arg->vvi < -10000 || arg->vvi > 10000) {
+			if (arg->vvi < 0 || arg->vvi > 10000) {
 				fprintf(stderr, "Malformed message: invalid "
 				    "VVI (%d)\n", arg->vvi);
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_TOFROM:
-			if (strncmp(start, "TO", 2) == 0) {
+			arg_end = find_arg_end(start, end);
+			if (strncmp(start, "TO", 2) == 0 &&
+			    arg_end - start == 2) {
 				arg->tofrom = true;
-			} else if (strncmp(start, "FROM", 4) == 0) {
+			} else if (strncmp(start, "FROM", 4) == 0 &&
+			    arg_end - start == 4) {
 				arg->tofrom = false;
 			} else {
 				fprintf(stderr, "Malformed message: invalid "
@@ -588,6 +795,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				free(arg->route);
 			arg->route = malloc(l + 1);
 			unescape_percent(textbuf, arg->route, l + 1);
+			start = end;
 			break;
 		case CPDLC_ARG_PROCEDURE:
 			arg_end = find_arg_end(start, end);
@@ -606,8 +814,8 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			}
 			break;
 		case CPDLC_ARG_SQUAWK:
-			arg->squawk = atoi(start);
-			if (!is_valid_squawk(arg->squawk)) {
+			if (sscanf(start, "%d", &arg->squawk) != 1 ||
+			    !is_valid_squawk(arg->squawk)) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid squawk code\n");
 				return (false);
@@ -684,10 +892,10 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				    "invalid percent escapes\n");
 				return (false);
 			}
-			if (arg->freetext != NULL)
-				free(arg->freetext);
+			free(arg->freetext);
 			arg->freetext = malloc(l + 1);
 			unescape_percent(textbuf, arg->freetext, l + 1);
+			start = end;
 			break;
 		}
 
@@ -747,17 +955,28 @@ cpdlc_msg_decode(const char *in_buf, int *consumed)
 			msg->min = atoi(&in_buf[4]);
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
 			msg->mrn = atoi(&in_buf[4]);
-		} else if (strncmp(in_buf, "DATA=", 5) == 0) {
+		} else if (strncmp(in_buf, "MSG=", 4) == 0) {
+			cpdlc_msg_seg_t *seg;
+
 			if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
 				fprintf(stderr, "Message malformed: too many "
-				    "DATA segments\n");
+				    "message segments\n");
 				goto errout;
 			}
-			if (!msg_decode_seg(&msg->segs[msg->num_segs],
-			    &in_buf[5], sep)) {
+			seg = &msg->segs[msg->num_segs];
+			if (!msg_decode_seg(seg, &in_buf[4], sep))
+				goto errout;
+			if (msg->num_segs > 0 && msg->segs[0].info->is_dl !=
+			    seg->info->is_dl) {
+				fprintf(stderr, "Message malformed: can't "
+				    "mix DM and UM message segments\n");
 				goto errout;
 			}
 			msg->num_segs++;
+		} else {
+			fprintf(stderr, "Message malformed: unknown message "
+			    "header\n");
+			goto errout;
 		}
 
 		in_buf = sep + 1;
@@ -802,6 +1021,8 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 			    CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt);
 		}
 	}
+	ASSERT_MSG(msg->num_segs == 0 || msg->segs[0].info->is_dl == is_dl,
+	    "Can't mix DM and UM message segments in a single message %p", msg);
 	if (msg->num_segs >= CPDLC_MAX_MSG_SEGS)
 		return (-1);
 	seg = &msg->segs[msg->num_segs];
