@@ -24,11 +24,52 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../src/cpdlc.h"
+
+static void
+handle_buf(const char *buf)
+{
+	int consumed;
+	cpdlc_msg_t *msg = cpdlc_msg_decode(buf, &consumed);
+
+	if (msg != NULL) {
+		unsigned l = cpdlc_msg_encode(msg, NULL, 0);
+		char *newbuf = malloc(l + 1);
+
+		cpdlc_msg_encode(msg, newbuf, l + 1);
+		printf("%s", newbuf);
+
+		free(newbuf);
+		cpdlc_msg_free(msg);
+	}
+}
 
 int
 main(void)
 {
+	char buf[1024];
+	char c;
+
+	memset(buf, 0, sizeof (buf));
+	printf("> ");
+	fflush(stdout);
+
+	while ((c = fgetc(stdin)) != EOF) {
+		buf[strlen(buf)] = c;
+
+		if (c == '\n') {
+			if (strlen(buf) > 1)
+				handle_buf(buf);
+
+			memset(buf, 0, sizeof (buf));
+			printf("> ");
+			fflush(stdout);
+			continue;
+		}
+	}
+
 	return (0);
 }

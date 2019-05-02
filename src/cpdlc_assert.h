@@ -28,6 +28,8 @@
 
 #include <stdlib.h>
 
+#include "cpdlc_core.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -60,7 +62,7 @@ extern "C" {
 		type tmp_x = (type)(x); \
 		type tmp_y = (type)(y); \
 		if (!(tmp_x op tmp_y)) { \
-			cpdlc_assfail_fail(cpdlc_ass_basename(__FILE__), \
+			cpdlc_assfail_impl(cpdlc_ass_basename(__FILE__), \
 			    __LINE__, "assertion %s %s %s failed (" fmt " %s \
 			    " fmt ")", #x, #op, #y, tmp_x, #op, tmp_y); \
 			abort(); \
@@ -111,7 +113,8 @@ typedef void (*cpdlc_assfail_t)(const char *filename, int line,
 extern cpdlc_assfail_t cpdlc_assfail;
 extern void *cpdlc_assfail_userinfo;
 
-void cpdlc_assfail_impl(const char *filename, int line, const char *fmt, ...);
+void cpdlc_assfail_impl(const char *filename, int line,
+    PRINTF_FORMAT(const char *fmt), ...) PRINTF_ATTR(3);
 
 #ifdef	__cplusplus
 }

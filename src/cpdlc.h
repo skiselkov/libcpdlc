@@ -423,8 +423,8 @@ CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
 CPDLC_API cpdlc_msg_t *cpdlc_msg_decode(const char *in_buf, int *consumed);
 
 CPDLC_API unsigned cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg);
-CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, int msg_type,
-    int msg_subtype);
+CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl,
+    unsigned msg_type, unsigned char msg_subtype);
 
 CPDLC_API unsigned cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg,
     unsigned seg_nr);

@@ -36,14 +36,11 @@
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
 	do { \
-		int __wanted_bytes = snprintf((__bufptr), (__bufcap), \
-		    __VA_ARGS__); \
-		int __avail_bytes = (__wanted_bytes <= (int)(__bufcap) ? \
-		    (__bufcap) - __wanted_bytes : (__bufcap)); \
-		ASSERT(__wanted_bytes >= 0); \
-		(__bufptr) += __avail_bytes; \
-		(__bufcap) -= __avail_bytes; \
-		(__total_bytes) += __wanted_bytes; \
+		int __needed = snprintf((__bufptr), (__bufcap), __VA_ARGS__); \
+		int __consumed = MIN(__needed, (int)__bufcap); \
+		(__bufptr) += __consumed; \
+		(__bufcap) -= __consumed; \
+		(__total_bytes) += __needed; \
 	} while (0)
 
 /* IMPORTANT: Bounds check must come first! */
@@ -64,7 +61,7 @@ static const cpdlc_msg_info_t *
 msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 {
 	const cpdlc_msg_info_t *infos =
-	    (is_dl ? cpdlc_ul_infos : cpdlc_dl_infos);
+	    (is_dl ? cpdlc_dl_infos : cpdlc_ul_infos);
 
 	ASSERT3S(msg_type, >=, 0);
 	if (is_dl)
@@ -287,6 +284,8 @@ cpdlc_msg_alloc(unsigned min, unsigned mrn)
 void
 cpdlc_msg_free(cpdlc_msg_t *msg)
 {
+	ASSERT(msg != NULL);
+
 	for (unsigned i = 0; i < msg->num_segs; i++) {
 		cpdlc_msg_seg_t *seg = &msg->segs[i];
 
@@ -324,12 +323,14 @@ validate_message(const cpdlc_msg_t *msg)
 		fprintf(stderr, "Message malformed: no DATA segments found\n");
 		return (false);
 	}
-	if (msg->min == 0) {
-		fprintf(stderr, "Message malformed: missing MIN header\n");
+	if (msg->min > CPDLC_MAX_MSG_SEQ_NR) {
+		fprintf(stderr, "Message malformed: missing or invalid "
+		    "MIN header\n");
 		return (false);
 	}
-	if (msg->min == 0) {
-		fprintf(stderr, "Message malformed: missing MIN header\n");
+	if (msg->mrn > CPDLC_MAX_MSG_SEQ_NR) {
+		fprintf(stderr, "Message malformed: missing or invalid "
+		    "MRN header\n");
 		return (false);
 	}
 	return (true);
@@ -361,6 +362,16 @@ find_arg_end(const char *start, const char *end)
 	while (start < end && !isspace(start[0]))
 		start++;
 	return (start);
+}
+
+static bool
+contains_spaces(const char *str)
+{
+	for (int i = 0, n = strlen(str); i < n; i++) {
+		if (isspace(str[i]))
+			return (true);
+	}
+	return (false);
 }
 
 static bool
@@ -445,15 +456,20 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			if (start + 2 < end && start[0] == 'F' &&
 			    start[1] == 'L') {
 				arg->alt.fl = true;
-				arg->alt.alt = atoi(&start[2]) * 100;
-				if (seg->args[num_args].alt.alt <= 0) {
+				if (sscanf(&start[2], "%d",
+				    &seg->args[num_args].alt.alt) != 1 ||
+				    seg->args[num_args].alt.alt <= 0 ||
+				    seg->args[num_args].alt.alt > 1000) {
 					fprintf(stderr, "Malformed message: "
 					    "invalid flight level\n");
 					return (false);
 				}
+				arg->alt.alt *= 100;
 			} else {
 				arg->alt.alt = atoi(start);
-				if (arg->alt.alt < -2000 ||
+				if (sscanf(start, "%d",
+				    &seg->args[num_args].alt.alt) != 1 ||
+				    arg->alt.alt < -1500 ||
 				    arg->alt.alt > 100000) {
 					fprintf(stderr, "Malformed message: "
 					    "invalid altitude\n");
@@ -494,12 +510,18 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			}
 			break;
 		case CPDLC_ARG_POSITION:
+			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
-			    (uintptr_t)(end - start) + 1));
+			    (uintptr_t)(arg_end - start) + 1));
 			if (unescape_percent(textbuf, arg->pos,
 			    sizeof (arg->pos)) == -1) {
 				fprintf(stderr, "Malformed message: "
-				    "invalid position\n");
+				    "invalid percent escapes\n");
+				return (false);
+			}
+			if (contains_spaces(arg->pos)) {
+				fprintf(stderr, "Malformed message: position "
+				    "cannot contain whitespace\n");
 				return (false);
 			}
 			break;
@@ -577,6 +599,11 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				    "invalid percent escapes\n");
 				return (false);
 			}
+			if (contains_spaces(arg->pos)) {
+				fprintf(stderr, "Malformed message: procedure "
+				    "name cannot contain whitespace\n");
+				return (false);
+			}
 			break;
 		case CPDLC_ARG_SQUAWK:
 			arg->squawk = atoi(start);
@@ -594,6 +621,11 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    sizeof (arg->icaoname)) == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
+				return (false);
+			}
+			if (contains_spaces(arg->pos)) {
+				fprintf(stderr, "Malformed message: icaoname "
+				    "cannot contain whitespace\n");
 				return (false);
 			}
 			break;
@@ -669,6 +701,11 @@ end:
 		    "arguments\n");
 		return (false);
 	}
+	if (start != end) {
+		fprintf(stderr, "Malformed message: too much data in "
+		    "message\n");
+		return (false);
+	}
 
 	return (true);
 }
@@ -681,7 +718,6 @@ cpdlc_msg_decode(const char *in_buf, int *consumed)
 	bool pkt_is_cpdlc = false;
 
 	ASSERT(in_buf != NULL);
-	ASSERT(msg != NULL);
 
 	term = strchr(in_buf, '\n');
 	if (term == NULL) {
@@ -709,18 +745,8 @@ cpdlc_msg_decode(const char *in_buf, int *consumed)
 			pkt_is_cpdlc = true;
 		} else if (strncmp(in_buf, "MIN=", 4) == 0) {
 			msg->min = atoi(&in_buf[4]);
-			if (msg->min > CPDLC_MAX_MSG_SEQ_NR) {
-				fprintf(stderr, "Message malformed: invalid "
-				    "MIN value\n");
-				goto errout;
-			}
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
 			msg->mrn = atoi(&in_buf[4]);
-			if (msg->mrn > CPDLC_MAX_MSG_SEQ_NR) {
-				fprintf(stderr, "Message malformed: invalid "
-				    "MRN value\n");
-				goto errout;
-			}
 		} else if (strncmp(in_buf, "DATA=", 5) == 0) {
 			if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
 				fprintf(stderr, "Message malformed: too many "
@@ -758,7 +784,8 @@ cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg)
 }
 
 int
-cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, int msg_type, int msg_subtype)
+cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
+    unsigned char msg_subtype)
 {
 	cpdlc_msg_seg_t *seg;
 

@@ -60,6 +60,59 @@ extern "C" {
 #define	MAX(x, y)	((x) > (y) ? (x) : (y))
 #endif
 
+#if	defined(__GNUC__) || defined(__clang__)
+#define	PRINTF_ATTR(x)		__attribute__((format(printf, x, x + 1)))
+#define	PRINTF_ATTR2(x,y)	__attribute__((format(printf, x, y)))
+#define	PRINTF_FORMAT(f)	f
+#ifndef	BSWAP32
+#define	BSWAP16(x)	__builtin_bswap16((x))
+#define	BSWAP32(x)	__builtin_bswap32((x))
+#define	BSWAP64(x)	__builtin_bswap64((x))
+#endif	/* BSWAP32 */
+
+#define	COND_LIKELY(x)		__builtin_expect(x, 1)
+#define	COND_UNLIKELY(x)	__builtin_expect(x, 0)
+
+#else	/* !__GNUC__ && !__clang__ */
+
+#define	PRINTF_ATTR(x)
+#define	PRINTF_ATTR2(x,y)
+
+#define	COND_LIKELY(x)		x
+#define	COND_UNLIKELY(x)	x
+
+#if	_MSC_VER >= 1400
+# include <sal.h>
+# if	_MSC_VER > 1400
+#  define	PRINTF_FORMAT(f)	_Printf_format_string_ f
+# else	/* _MSC_VER == 1400 */
+#  define	PRINTF_FORMAT(f)	__format_string f
+# endif /* FORMAT_STRING */
+#else	/* _MSC_VER < 1400 */
+# define	PRINTF_FORMAT(f)	f
+#endif	/* _MSC_VER */
+
+#ifndef	BSWAP32
+#define	BSWAP16(x)	\
+	((((x) & 0xff00u) >> 8) | \
+	(((x) & 0x00ffu) << 8))
+#define	BSWAP32(x)	\
+	((((x) & 0xff000000u) >> 24) | \
+	(((x) & 0x00ff0000u) >> 8) | \
+	(((x) & 0x0000ff00u) << 8) | \
+	(((x) & 0x000000ffu) << 24))
+#define	BSWAP64(x)	\
+	((((x) & 0x00000000000000ffllu) >> 56) | \
+	(((x) & 0x000000000000ff00llu) << 40) | \
+	(((x) & 0x0000000000ff0000llu) << 24) | \
+	(((x) & 0x00000000ff000000llu) << 8) | \
+	(((x) & 0x000000ff00000000llu) >> 8) | \
+	(((x) & 0x0000ff0000000000llu) >> 24) | \
+	(((x) & 0x00ff000000000000llu) >> 40) | \
+	(((x) & 0xff00000000000000llu) << 56))
+#endif	/* BSWAP32 */
+#endif	/* !__GNUC__ && !__clang__ */
+
 #ifdef	__cplusplus
 }
 #endif
