@@ -385,7 +385,9 @@ enum {
     CPDLC_MAX_ARGS = 5,
     CPDLC_MAX_RESP_MSGS = 4,
     CPDLC_MAX_MSG_SEGS = 5,
-    CPDLC_MAX_MSG_SEQ_NR = 63
+    CPDLC_MAX_MSG_SEQ_NR = 63,
+    CPDLC_MAX_VERSION_NR = 1,
+    CPDLC_CALLSIGN_LEN = 16
 };
 
 typedef struct {
@@ -409,6 +411,10 @@ typedef struct {
 typedef struct {
 	unsigned	min;
 	unsigned	mrn;
+	char		to[CPDLC_CALLSIGN_LEN];
+	char		from[CPDLC_CALLSIGN_LEN];
+	bool_t		is_logon;
+	char		*logon_data;
 	unsigned	num_segs;
 	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
 } cpdlc_msg_t;
@@ -423,7 +429,16 @@ CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
-CPDLC_API cpdlc_msg_t *cpdlc_msg_decode(const char *in_buf, int *consumed);
+CPDLC_API bool cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg,
+    int *consumed);
+
+CPDLC_API void cpdlc_msg_set_to(const cpdlc_msg_t *msg, const char *to);
+CPDLC_API const char *cpdlc_msg_get_to(const cpdlc_msg_t *msg);
+CPDLC_API void cpdlc_msg_set_from(const cpdlc_msg_t *msg, const char *from);
+CPDLC_API const char *cpdlc_msg_get_from(const cpdlc_msg_t *msg);
+
+CPDLC_API unsigned cpdlc_msg_get_min(const cpdlc_msg_t *msg);
+CPDLC_API unsigned cpdlc_msg_get_mrn(const cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg);
 CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl,

@@ -396,6 +396,7 @@ cpdlc_msg_free(cpdlc_msg_t *msg)
 	for (unsigned i = 0; i < msg->num_segs; i++) {
 		cpdlc_msg_seg_t *seg = &msg->segs[i];
 
+		free(msg->logon_data);
 		if (seg->info == NULL)
 			continue;
 		for (unsigned j = 0; j < seg->info->num_args; j++) {
@@ -415,6 +416,16 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 
 	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=CPDLC/MIN=%d/MRN=%d",
 	    msg->min, msg->mrn);
+	if (msg->to[0] != '\0') {
+		char textbuf[32];
+		percent_encode(msg->to, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", msg->to);
+	}
+	if (msg->from[0] != '\0') {
+		char textbuf[32];
+		percent_encode(msg->from, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", msg->from);
+	}
 
 	for (unsigned i = 0; i < msg->num_segs; i++)
 		encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
@@ -482,8 +493,23 @@ cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 }
 
 static bool
+validate_logon_message(const cpdlc_msg_t *msg)
+{
+	if (msg->num_segs != 0) {
+		fprintf(stderr, "Message malformed: LOGON messages "
+		    "may not contain MSG segments\n");
+		return (false);
+	}
+	return (true);
+}
+
+static bool
 validate_message(const cpdlc_msg_t *msg)
 {
+	/* LOGON message format is special */
+	if (msg->is_logon)
+		return (validate_logon_message(msg));
+
 	if (msg->num_segs == 0) {
 		fprintf(stderr, "Message malformed: no message segments found\n");
 		return (false);
@@ -918,21 +944,23 @@ end:
 	return (true);
 }
 
-cpdlc_msg_t *
-cpdlc_msg_decode(const char *in_buf, int *consumed)
+bool
+cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 {
 	const char *term;
 	cpdlc_msg_t *msg;
 	bool pkt_is_cpdlc = false;
 
 	ASSERT(in_buf != NULL);
+	ASSERT(msg_p != NULL);
+	ASSERT(consumed != NULL);
 
 	term = strchr(in_buf, '\n');
 	if (term == NULL) {
 		/* No complete message in buffer */
-		if (consumed != NULL)
-			*consumed = 0;
-		return (NULL);
+		*msg_p = NULL;
+		*consumed = 0;
+		return (true);
 	}
 
 	msg = safe_calloc(1, sizeof (*msg));
@@ -955,6 +983,25 @@ cpdlc_msg_decode(const char *in_buf, int *consumed)
 			msg->min = atoi(&in_buf[4]);
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
 			msg->mrn = atoi(&in_buf[4]);
+		} else if (strncmp(in_buf, "LOGON=", 6) == 0) {
+			int l = (sep - &in_buf[6]) + 1;
+
+			free(msg->logon_data);
+			msg->logon_data = safe_malloc(l);
+			cpdlc_strlcpy(msg->logon_data, &in_buf[6], l);
+		} else if (strncmp(in_buf, "TO=", 3) == 0) {
+			char textbuf[32];
+
+			cpdlc_strlcpy(textbuf, &in_buf[3], MAX(sizeof (textbuf),
+			    (uintptr_t)(sep - &in_buf[3]) + 1));
+			unescape_percent(textbuf, msg->to, sizeof (msg->to));
+		} else if (strncmp(in_buf, "FROM=", 3) == 0) {
+			char textbuf[32];
+
+			cpdlc_strlcpy(textbuf, &in_buf[5], MAX(sizeof (textbuf),
+			    (uintptr_t)(sep - &in_buf[5]) + 1));
+			unescape_percent(textbuf, msg->from,
+			    sizeof (msg->from));
 		} else if (strncmp(in_buf, "MSG=", 4) == 0) {
 			cpdlc_msg_seg_t *seg;
 
@@ -985,14 +1032,54 @@ cpdlc_msg_decode(const char *in_buf, int *consumed)
 	if (!pkt_is_cpdlc || !validate_message(msg))
 		goto errout;
 
-	if (consumed != NULL)
-		*consumed = ((term - in_buf) + 1);
-	return (msg);
+	*msg_p = msg;
+	*consumed = ((term - in_buf) + 1);
+	return (true);
 errout:
 	free(msg);
-	if (consumed != NULL)
-		*consumed = 0;
-	return (NULL);
+	*msg_p = NULL;
+	*consumed = 0;
+	return (false);
+}
+
+void
+cpdlc_msg_set_to(const cpdlc_msg_t *msg, const char *to)
+{
+	memset(msg->to, 0, sizeof (msg->to));
+	cpdlc_strlcpy(msg->to, to, sizeof (msg->to));
+}
+
+const char *
+cpdlc_msg_get_to(const cpdlc_msg_t *msg)
+{
+	return (msg->to);
+}
+
+void
+cpdlc_msg_set_from(const cpdlc_msg_t *msg, const char *from)
+{
+	memset(msg->from, 0, sizeof (msg->from));
+	cpdlc_strlcpy(msg->from, from, sizeof (msg->from));
+}
+
+const char *
+cpdlc_msg_get_from(const cpdlc_msg_t *msg)
+{
+	return (msg->from);
+}
+
+unsigned
+cpdlc_msg_get_min(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	return (msg->min);
+}
+
+unsigned
+cpdlc_msg_get_mrn(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	return (msg->mrn);
 }
 
 unsigned
