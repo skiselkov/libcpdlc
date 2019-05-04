@@ -418,12 +418,12 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	    msg->min, msg->mrn);
 	if (msg->to[0] != '\0') {
 		char textbuf[32];
-		percent_encode(msg->to, textbuf, sizeof (textbuf));
+		escape_percent(msg->to, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", msg->to);
 	}
 	if (msg->from[0] != '\0') {
 		char textbuf[32];
-		percent_encode(msg->from, textbuf, sizeof (textbuf));
+		escape_percent(msg->from, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", msg->from);
 	}
 
@@ -1043,7 +1043,7 @@ errout:
 }
 
 void
-cpdlc_msg_set_to(const cpdlc_msg_t *msg, const char *to)
+cpdlc_msg_set_to(cpdlc_msg_t *msg, const char *to)
 {
 	memset(msg->to, 0, sizeof (msg->to));
 	cpdlc_strlcpy(msg->to, to, sizeof (msg->to));
@@ -1056,7 +1056,7 @@ cpdlc_msg_get_to(const cpdlc_msg_t *msg)
 }
 
 void
-cpdlc_msg_set_from(const cpdlc_msg_t *msg, const char *from)
+cpdlc_msg_set_from(cpdlc_msg_t *msg, const char *from)
 {
 	memset(msg->from, 0, sizeof (msg->from));
 	cpdlc_strlcpy(msg->from, from, sizeof (msg->from));

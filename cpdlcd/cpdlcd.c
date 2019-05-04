@@ -24,6 +24,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <poll.h>
 #include <stdbool.h>
@@ -32,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -52,6 +54,8 @@
 #define	READ_BUF_SZ		4096
 #define	MAX_BUF_SZ		8192
 #define	MAX_BUF_SZ_NO_LOGON	128
+#define	MAX_ADDR_LEN	\
+	MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in))
 
 typedef struct {
 	char		callsign[CALLSIGN_LEN];
@@ -60,7 +64,7 @@ typedef struct {
 
 typedef struct {
 	char		from[CALLSIGN_LEN];
-	int		to[CALLSIGN_LEN];
+	char		to[CALLSIGN_LEN];
 	bool		logon_complete;
 
 	uint8_t		addr_buf[MAX_ADDR_LEN];
@@ -80,11 +84,9 @@ typedef struct {
 	char		from[CALLSIGN_LEN];
 	char		to[CALLSIGN_LEN];
 	char		*msg;
-	avl_node_t	node;
+	list_node_t	node;
 } queued_msg_t;
 
-#define	MAX_ADDR_LEN	\
-	MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in))
 typedef struct {
 	uint8_t		addr_buf[MAX_ADDR_LEN];
 	socklen_t	addr_len;
@@ -95,24 +97,28 @@ typedef struct {
 static avl_tree_t	atcs;
 static avl_tree_t	conns;
 static htbl_t		conns_by_from;
-static avl_tree_t	queued_msgs;
+static list_t		queued_msgs;
 static avl_tree_t	listen_socks;
 
 static bool		background = true;
+static bool		do_shutdown = false;
+
+static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
+    const char *fmt, ...);
 
 static bool
 set_sock_nonblock(int fd)
 {
 	int flags;
 
-	return ((flags = fcntl(ls->fd, F_GETFL)) >= 0 &&
-	    fcntl(ls->fd, F_SETFL, flags | O_NONBLOCK) >= 0);
+	return ((flags = fcntl(fd, F_GETFL)) >= 0 &&
+	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
 }
 
 static int
 atc_compar(const void *a, const void *b)
 {
-	const conn_t *aa = a, *ab = b;
+	const atc_t *aa = a, *ab = b;
 	int res = strcmp(aa->callsign, ab->callsign);
 	if (res < 0)
 		return (-1);
@@ -132,18 +138,6 @@ conn_compar(const void *a, const void *b)
 	if (ca->addr_len > cb->addr_len)
 		return (1);
 	res = memcmp(ca->addr_buf, cb->addr_buf, sizeof (ca->addr_len));
-	if (res < 0)
-		return (-1);
-	if (res > 0)
-		return (1);
-	return (0);
-}
-
-static int
-queued_msg_compar(const void *a, const void *b)
-{
-	const queued_msg_t *qa = a, *qb = b;
-	int res = strcmp(qa->to, qb->to);
 	if (res < 0)
 		return (-1);
 	if (res > 0)
@@ -176,7 +170,7 @@ init_structs(void)
 	avl_create(&conns, conn_compar, sizeof (conn_t),
 	    offsetof(conn_t, node));
 	htbl_create(&conns_by_from, 1024, CALLSIGN_LEN, true);
-	avl_create(&queued_msgs, queued_msg_compar, sizeof (queued_msg_t),
+	list_create(&queued_msgs, sizeof (queued_msg_t),
 	    offsetof(queued_msg_t, node));
 	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
 	    offsetof(listen_sock_t, node));
@@ -206,12 +200,11 @@ fini_structs(void)
 	}
 	avl_destroy(&conns);
 
-	cookie = NULL;
-	while ((msg = avl_destroy_nodes(&queued_msgs, &cookie)) != NULL) {
+	while ((msg = list_remove_head(&queued_msgs)) != NULL) {
 		free(msg->msg);
 		free(msg);
 	}
-	avl_destroy(&queued_msgs);
+	list_destroy(&queued_msgs);
 
 	cookie = NULL;
 	while ((ls = avl_destroy_nodes(&listen_socks, &cookie)) != NULL) {
@@ -254,8 +247,6 @@ add_listen_sock(const char *name_port)
 	const char *colon = strchr(name_port, ':');
 	struct hostent *host;
 
-	ls->fd = -1;
-
 	if (colon != NULL) {
 		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
 		if (sscanf(&colon[1], "%d", &port) != 1 ||
@@ -276,19 +267,18 @@ add_listen_sock(const char *name_port)
 		return (false);
 	}
 
-	while (const char **h_addr_list = host->h_addr_list;
-	    *h_addr_list != NULL; h_addr_list++) {
-		listen_sock_t *ls = safe_calloc(1, sizeof (*ls))
+	for (char **h_addr_list = host->h_addr_list; *h_addr_list != NULL;
+	    h_addr_list++) {
+		listen_sock_t *ls = safe_calloc(1, sizeof (*ls));
 		listen_sock_t *old_ls;
 		avl_index_t where;
 		struct sockaddr_in sa4 = { .sin_family = AF_INET };
 		struct sockaddr_in6 sa6 = { .sin6_family = AF_INET6 };
 		const struct sockaddr *sa;
 		socklen_t sa_len;
-		int flags;
 
 		memcpy(ls->addr_buf, *h_addr_list, host->h_length);
-		ls->addr_len = h_length;
+		ls->addr_len = host->h_length;
 
 		old_ls = avl_find(&listen_socks, ls, &where);
 		if (old_ls != NULL) {
@@ -371,8 +361,8 @@ parse_config(const char *conf_path)
 		goto errout;
 	}
 	if (avl_numnodes(&listen_socks) == 0) {
-		fprintf(stderr, "Error: no \"listen\" lines found in config\n");
-		goto errout;
+		if (!add_listen_sock("localhost"))
+			goto errout;
 	}
 
 	conf_free(conf);
@@ -454,9 +444,9 @@ close_conn(conn_t *conn)
 }
 
 static void
-conn_remove_from(const conn_t *conn)
+conn_remove_from(conn_t *conn)
 {
-	list_t *l;
+	const list_t *l;
 
 	ASSERT(conn != NULL);
 	ASSERT(conn->logon_complete);
@@ -529,7 +519,8 @@ conn_send_msg(conn_t *conn, cpdlc_msg_t *msg)
 	} else {
 		conn->outbuf = safe_realloc(conn->outbuf,
 		    conn->outbuf_sz + l + 1);
-		lacf_strlcpy(&conn->outbuf[conn->outbuf_sz], buf, l + 1);
+		lacf_strlcpy((char *)&conn->outbuf[conn->outbuf_sz], buf,
+		    l + 1);
 		/* Exclude training NUL char */
 		conn->outbuf_sz += l;
 	}
@@ -570,11 +561,25 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 }
 
 static void
+store_msg(const cpdlc_msg_t *msg, const char *to)
+{
+	queued_msg_t *qmsg = safe_calloc(1, sizeof (*qmsg));
+	int l = cpdlc_msg_encode(msg, NULL, 0);
+	char *buf = safe_malloc(l + 1);
+
+	cpdlc_msg_encode(msg, buf, l + 1);
+	qmsg->msg = buf;
+	lacf_strlcpy(qmsg->from, cpdlc_msg_get_from(msg), sizeof (qmsg->from));
+	lacf_strlcpy(qmsg->to, to, sizeof (qmsg->to));
+
+	list_insert_tail(&queued_msgs, qmsg);
+}
+
+static void
 conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 {
 	char to[CALLSIGN_LEN] = { 0 };
-	conn_t *tgt_conn;
-	list_t *l;
+	const list_t *l;
 
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
@@ -597,9 +602,9 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	ASSERT(conn->from[0] != '\0');
 	cpdlc_msg_set_from(msg, conn->from);
 
-	l = htbl_lookup_multi(&conn_by_from, to);
+	l = htbl_lookup_multi(&conns_by_from, to);
 	if (list_count(l) == 0) {
-		store_msg(msg);
+		store_msg(msg, to);
 	} else {
 		for (void *mv = list_head(l); mv != NULL;
 		    mv = list_next(l, mv)) {
@@ -623,7 +628,8 @@ conn_process_input(conn_t *conn)
 		int consumed;
 		cpdlc_msg_t *msg;
 
-		if (!cpdlc_msg_decode(&conn->inbuf[consumed_total], &msg,
+		if (!cpdlc_msg_decode(
+		    (const char *)&conn->inbuf[consumed_total], &msg,
 		    &consumed)) {
 			fprintf(stderr, "Error decoding message from client\n");
 			return (false);
@@ -648,6 +654,8 @@ conn_process_input(conn_t *conn)
 		    conn->inbuf_sz);
 		conn->inbuf = realloc(conn->inbuf, conn->inbuf_sz);
 	}
+
+	return (true);
 }
 
 static bool
@@ -655,9 +663,9 @@ handle_conn_input(conn_t *conn)
 {
 	for (;;) {
 		uint8_t buf[READ_BUF_SZ];
-		ssize_t bytes = read(conn->fd, buf, sizeof (buf));
-		ssize_t max_inbuf_sz = (conn->from[0] != '\0' ?
+		size_t max_inbuf_sz = (conn->from[0] != '\0' ?
 		    MAX_BUF_SZ : MAX_BUF_SZ_NO_LOGON);
+		ssize_t bytes = read(conn->fd, buf, sizeof (buf));
 
 		if (bytes < 0) {
 			/* Read error, or no more data pending */
@@ -684,7 +692,7 @@ handle_conn_input(conn_t *conn)
 		if (conn->inbuf_sz + bytes > max_inbuf_sz) {
 			fprintf(stderr, "Input buffer overflow on connection: "
 			    "wanted %d bytes, max %d bytes\n",
-			    conn->inbuf_sz + bytes, max_inbuf_sz);
+			    (int)(conn->inbuf_sz + bytes), (int)max_inbuf_sz);
 			close_conn(conn);
 			return (false);
 		}
@@ -715,7 +723,7 @@ handle_conn_output(conn_t *conn)
 			    strerror(errno));
 		}
 	} else if (bytes > 0) {
-		if (conn->outbuf_sz > bytes) {
+		if ((ssize_t)conn->outbuf_sz > bytes) {
 			memmove(conn->outbuf, &conn->outbuf[bytes],
 			    (conn->outbuf_sz - bytes) + 1);
 			conn->outbuf = safe_realloc(conn->outbuf,
@@ -760,7 +768,7 @@ poll_sockets(void)
 	}
 
 	polls_seen = 0;
-	conn_nr = 0;
+	sock_nr = 0;
 	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
 	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
 		if (pfds[sock_nr].revents & (POLLIN | POLLPRI)) {
@@ -817,12 +825,12 @@ main(int argc, char *argv[])
 	}
 
 	init_structs();
-	if (background && !daemonize())
+	if (background && !daemonize(true, true))
 		return (1);
 	if (!parse_config(conf_path))
 		return (1);
 
-	while (!shutdown)
+	while (!do_shutdown)
 		poll_sockets();
 
 	fini_structs();

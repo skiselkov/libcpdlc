@@ -33,9 +33,9 @@ static void
 handle_buf(const char *buf)
 {
 	int consumed;
-	cpdlc_msg_t *msg = cpdlc_msg_decode(buf, &consumed);
+	cpdlc_msg_t *msg;
 
-	if (msg != NULL) {
+	if (cpdlc_msg_decode(buf, &msg, &consumed)) {
 		unsigned l;
 		char *newbuf;
 

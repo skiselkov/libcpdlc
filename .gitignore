@@ -1,2 +1,4 @@
 *.o
+Makefile.vars
 test/msgtest
+cpdlcd/cpdlcd
