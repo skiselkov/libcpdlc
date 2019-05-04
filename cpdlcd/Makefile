@@ -25,9 +25,11 @@
 include ../Makefile.vars
 
 CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --cflags)
+	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --cflags) \
+	$(shell pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/lin64 -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --libs) \
+	$(shell pkg-config gnutls --libs) \
 	-lm
 
 SRCPREFIX=../src

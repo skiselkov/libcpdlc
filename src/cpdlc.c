@@ -416,15 +416,21 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 
 	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=CPDLC/MIN=%d/MRN=%d",
 	    msg->min, msg->mrn);
-	if (msg->to[0] != '\0') {
-		char textbuf[32];
-		escape_percent(msg->to, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", msg->to);
+	if (msg->is_logon) {
+		char textbuf[64];
+		ASSERT(msg->logon_data != NULL);
+		escape_percent(msg->logon_data, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGON=%s", textbuf);
 	}
 	if (msg->from[0] != '\0') {
 		char textbuf[32];
 		escape_percent(msg->from, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", msg->from);
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", textbuf);
+	}
+	if (msg->to[0] != '\0') {
+		char textbuf[32];
+		escape_percent(msg->to, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
 	}
 
 	for (unsigned i = 0; i < msg->num_segs; i++)
@@ -498,6 +504,11 @@ validate_logon_message(const cpdlc_msg_t *msg)
 	if (msg->num_segs != 0) {
 		fprintf(stderr, "Message malformed: LOGON messages "
 		    "may not contain MSG segments\n");
+		return (false);
+	}
+	if (msg->from[0] == '\0') {
+		fprintf(stderr, "Message malformed: LOGON messages "
+		    "MUST contain a FROM header\n");
 		return (false);
 	}
 	return (true);
@@ -947,15 +958,24 @@ end:
 bool
 cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 {
-	const char *term;
+	const char *start, *term;
 	cpdlc_msg_t *msg;
 	bool pkt_is_cpdlc = false;
+	bool skipped_cr = false;
 
 	ASSERT(in_buf != NULL);
 	ASSERT(msg_p != NULL);
 	ASSERT(consumed != NULL);
 
 	term = strchr(in_buf, '\n');
+	if (term != NULL) {
+		if (term > in_buf && *(term - 1) == '\r') {
+			term -= 1;
+			skipped_cr = true;
+		}
+	} else {
+		term = strchr(in_buf, '\r');
+	}
 	if (term == NULL) {
 		/* No complete message in buffer */
 		*msg_p = NULL;
@@ -967,10 +987,11 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 	msg->min = -1u;
 	msg->mrn = -1u;
 
+	start = in_buf;
 	while (in_buf < term) {
 		const char *sep = strchr(in_buf, '/');
 
-		if (sep == NULL)
+		if (sep == NULL || sep > term)
 			sep = term;
 		if (strncmp(in_buf, "PKT=", 4) == 0) {
 			if (strncmp(&in_buf[4], "CPDLC/", 6) != 0) {
@@ -987,18 +1008,19 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			int l = (sep - &in_buf[6]) + 1;
 
 			free(msg->logon_data);
+			msg->is_logon = true;
 			msg->logon_data = safe_malloc(l);
 			cpdlc_strlcpy(msg->logon_data, &in_buf[6], l);
 		} else if (strncmp(in_buf, "TO=", 3) == 0) {
 			char textbuf[32];
 
-			cpdlc_strlcpy(textbuf, &in_buf[3], MAX(sizeof (textbuf),
+			cpdlc_strlcpy(textbuf, &in_buf[3], MIN(sizeof (textbuf),
 			    (uintptr_t)(sep - &in_buf[3]) + 1));
 			unescape_percent(textbuf, msg->to, sizeof (msg->to));
-		} else if (strncmp(in_buf, "FROM=", 3) == 0) {
+		} else if (strncmp(in_buf, "FROM=", 5) == 0) {
 			char textbuf[32];
 
-			cpdlc_strlcpy(textbuf, &in_buf[5], MAX(sizeof (textbuf),
+			cpdlc_strlcpy(textbuf, &in_buf[5], MIN(sizeof (textbuf),
 			    (uintptr_t)(sep - &in_buf[5]) + 1));
 			unescape_percent(textbuf, msg->from,
 			    sizeof (msg->from));
@@ -1033,7 +1055,7 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 		goto errout;
 
 	*msg_p = msg;
-	*consumed = ((term - in_buf) + 1);
+	*consumed = ((term - start) + 1 + (skipped_cr ? 1 : 0));
 	return (true);
 errout:
 	free(msg);
@@ -1068,6 +1090,15 @@ cpdlc_msg_get_from(const cpdlc_msg_t *msg)
 	return (msg->from);
 }
 
+bool
+cpdlc_msg_get_dl(const cpdlc_msg_t *msg)
+{
+	if (msg->num_segs == 0)
+		return (false);
+	ASSERT(msg->segs[0].info != NULL);
+	return (msg->segs[0].info->is_dl);
+}
+
 unsigned
 cpdlc_msg_get_min(const cpdlc_msg_t *msg)
 {
@@ -1096,7 +1127,7 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 	cpdlc_msg_seg_t *seg;
 
 	ASSERT(msg != NULL);
-	if (is_dl) {
+	if (!is_dl) {
 		ASSERT3U(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
 		ASSERT0(msg_subtype);
 	} else {

@@ -2,3 +2,4 @@
 Makefile.vars
 test/msgtest
 cpdlcd/cpdlcd
+cpdlcd/cpdlcd_*.pem
