@@ -131,7 +131,8 @@ unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 			buf[1] = in_buf[i + 2];
 			buf[2] = '\0';
 			if (!isxdigit(buf[0]) || !isxdigit(buf[1]) ||
-			    sscanf(buf, "%02x", &v) != 1)
+			    sscanf(buf, "%02x", &v) != 1 ||
+			    v == 0 /* Don't allow NUL bytes */)
 				return (-1);
 			if (j < cap)
 				out_buf[j] = v;
@@ -1005,12 +1006,14 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
 			msg->mrn = atoi(&in_buf[4]);
 		} else if (strncmp(in_buf, "LOGON=", 6) == 0) {
-			int l = (sep - &in_buf[6]) + 1;
+			int l = (sep - &in_buf[6]);
+			char textbuf[l + 1];
 
 			free(msg->logon_data);
+			cpdlc_strlcpy(textbuf, &in_buf[6], l + 1);
+			msg->logon_data = safe_malloc(l + 1);
+			unescape_percent(textbuf, msg->logon_data, l + 1);
 			msg->is_logon = true;
-			msg->logon_data = safe_malloc(l);
-			cpdlc_strlcpy(msg->logon_data, &in_buf[6], l);
 		} else if (strncmp(in_buf, "TO=", 3) == 0) {
 			char textbuf[32];
 
@@ -1111,6 +1114,13 @@ cpdlc_msg_get_mrn(const cpdlc_msg_t *msg)
 {
 	ASSERT(msg != NULL);
 	return (msg->mrn);
+}
+
+const char *
+cpdlc_msg_get_logon_data(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	return (msg->logon_data);
 }
 
 unsigned
