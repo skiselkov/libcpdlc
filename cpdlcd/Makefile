@@ -25,13 +25,13 @@
 include ../Makefile.vars
 
 CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG -DLIN=1 -DIBM=0 -DAPL=0 \
-	-I$(ACFUTILS)/src \
+	-D_GNU_SOURCE -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --cflags) \
 	$(shell pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/lin64 -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --libs) \
 	$(shell pkg-config gnutls --libs) \
-	-lm
+	-lpthread -lm
 
 SRCPREFIX=../src
 
@@ -40,7 +40,7 @@ LIB_OBJS= \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o
 
-DAEMON_OBJS=cpdlcd.o blocklist.o $(LIB_OBJS)
+DAEMON_OBJS=blocklist.o cpdlcd.o $(LIB_OBJS)
 
 all : cpdlcd
 

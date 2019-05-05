@@ -86,8 +86,8 @@ msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 	return (NULL);
 }
 
-static unsigned
-escape_percent(const char *in_buf, char *out_buf, unsigned cap)
+unsigned
+cpdlc_escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 {
 	ASSERT(in_buf != NULL);
 
@@ -113,8 +113,8 @@ escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 	}
 }
 
-static int
-unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
+int
+cpdlc_unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 {
 	unsigned j = 0;
 
@@ -227,7 +227,8 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
 			    arg->pos);
 		} else {
-			escape_percent(arg->pos, textbuf, sizeof (textbuf));
+			cpdlc_escape_percent(arg->pos, textbuf,
+			    sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
 		}
@@ -271,7 +272,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 				    "%s", arg->route);
 			} else {
-				escape_percent(arg->route, textbuf,
+				cpdlc_escape_percent(arg->route, textbuf,
 				    sizeof (textbuf));
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 				    " %s", textbuf);
@@ -286,7 +287,8 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
 			    arg->proc);
 		} else {
-			escape_percent(arg->proc, textbuf, sizeof (textbuf));
+			cpdlc_escape_percent(arg->proc, textbuf,
+			    sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
 		}
@@ -300,7 +302,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
 			    arg->icaoname);
 		} else {
-			escape_percent(arg->icaoname, textbuf,
+			cpdlc_escape_percent(arg->icaoname, textbuf,
 			    sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
@@ -344,7 +346,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 				cpdlc_strlcpy(textbuf, arg->freetext,
 				    sizeof (textbuf));
 			} else {
-				escape_percent(arg->freetext, textbuf,
+				cpdlc_escape_percent(arg->freetext, textbuf,
 				    sizeof (textbuf));
 			}
 		} else {
@@ -420,17 +422,18 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	if (msg->is_logon) {
 		char textbuf[64];
 		ASSERT(msg->logon_data != NULL);
-		escape_percent(msg->logon_data, textbuf, sizeof (textbuf));
+		cpdlc_escape_percent(msg->logon_data, textbuf,
+		    sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGON=%s", textbuf);
 	}
 	if (msg->from[0] != '\0') {
 		char textbuf[32];
-		escape_percent(msg->from, textbuf, sizeof (textbuf));
+		cpdlc_escape_percent(msg->from, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", textbuf);
 	}
 	if (msg->to[0] != '\0') {
 		char textbuf[32];
-		escape_percent(msg->to, textbuf, sizeof (textbuf));
+		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
 	}
 
@@ -754,7 +757,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (unescape_percent(textbuf, arg->pos,
+			if (cpdlc_unescape_percent(textbuf, arg->pos,
 			    sizeof (arg->pos)) == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
@@ -823,7 +826,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 		case CPDLC_ARG_ROUTE:
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(end - start) + 1));
-			l = unescape_percent(textbuf, NULL, 0);
+			l = cpdlc_unescape_percent(textbuf, NULL, 0);
 			if (l == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
@@ -832,14 +835,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			if (arg->route != NULL)
 				free(arg->route);
 			arg->route = malloc(l + 1);
-			unescape_percent(textbuf, arg->route, l + 1);
+			cpdlc_unescape_percent(textbuf, arg->route, l + 1);
 			start = end;
 			break;
 		case CPDLC_ARG_PROCEDURE:
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (unescape_percent(textbuf, arg->proc,
+			if (cpdlc_unescape_percent(textbuf, arg->proc,
 			    sizeof (arg->proc)) == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
@@ -863,7 +866,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (unescape_percent(textbuf, arg->icaoname,
+			if (cpdlc_unescape_percent(textbuf, arg->icaoname,
 			    sizeof (arg->icaoname)) == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
@@ -924,7 +927,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 		case CPDLC_ARG_FREETEXT:
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(end - start) + 1));
-			l = unescape_percent(textbuf, NULL, 0);
+			l = cpdlc_unescape_percent(textbuf, NULL, 0);
 			if (l == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
@@ -932,7 +935,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			}
 			free(arg->freetext);
 			arg->freetext = malloc(l + 1);
-			unescape_percent(textbuf, arg->freetext, l + 1);
+			cpdlc_unescape_percent(textbuf, arg->freetext, l + 1);
 			start = end;
 			break;
 		}
@@ -1012,20 +1015,21 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			free(msg->logon_data);
 			cpdlc_strlcpy(textbuf, &in_buf[6], l + 1);
 			msg->logon_data = safe_malloc(l + 1);
-			unescape_percent(textbuf, msg->logon_data, l + 1);
+			cpdlc_unescape_percent(textbuf, msg->logon_data, l + 1);
 			msg->is_logon = true;
 		} else if (strncmp(in_buf, "TO=", 3) == 0) {
 			char textbuf[32];
 
 			cpdlc_strlcpy(textbuf, &in_buf[3], MIN(sizeof (textbuf),
 			    (uintptr_t)(sep - &in_buf[3]) + 1));
-			unescape_percent(textbuf, msg->to, sizeof (msg->to));
+			cpdlc_unescape_percent(textbuf, msg->to,
+			    sizeof (msg->to));
 		} else if (strncmp(in_buf, "FROM=", 5) == 0) {
 			char textbuf[32];
 
 			cpdlc_strlcpy(textbuf, &in_buf[5], MIN(sizeof (textbuf),
 			    (uintptr_t)(sep - &in_buf[5]) + 1));
-			unescape_percent(textbuf, msg->from,
+			cpdlc_unescape_percent(textbuf, msg->from,
 			    sizeof (msg->from));
 		} else if (strncmp(in_buf, "MSG=", 4) == 0) {
 			cpdlc_msg_seg_t *seg;

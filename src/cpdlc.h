@@ -456,6 +456,11 @@ CPDLC_API unsigned cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg,
     unsigned seg_nr, unsigned arg_nr, void *arg_val1, unsigned str_cap,
     void *arg_val2);
 
+unsigned CPDLC_API cpdlc_escape_percent(const char *in_buf, char *out_buf,
+    unsigned cap);
+CPDLC_API int cpdlc_unescape_percent(const char *in_buf, char *out_buf,
+    unsigned cap);
+
 #ifdef	__cplusplus
 }
 #endif

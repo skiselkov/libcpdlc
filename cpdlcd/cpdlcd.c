@@ -42,6 +42,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <curl/curl.h>
 #include <gnutls/gnutls.h>
 
 #include <acfutils/avl.h>
@@ -62,6 +63,7 @@
 #define	MAX_BUF_SZ		8192
 #define	MAX_BUF_SZ_NO_LOGON	128
 #define	POLL_TIMEOUT		1000	/* ms */
+#define	QUEUED_MSG_TIMEOUT	3600	/* seconds */
 
 typedef struct {
 	char		callsign[CALLSIGN_LEN];
@@ -93,6 +95,7 @@ typedef struct {
 typedef struct {
 	char		from[CALLSIGN_LEN];
 	char		to[CALLSIGN_LEN];
+	time_t		created;
 	char		*msg;
 	list_node_t	node;
 } queued_msg_t;
@@ -108,11 +111,14 @@ typedef struct {
 static avl_tree_t	atcs;
 static avl_tree_t	conns;
 static htbl_t		conns_by_from;
-static list_t		queued_msgs;
 static avl_tree_t	listen_socks;
 static char		keyfile[PATH_MAX] = { 0 };
 static char		certfile[PATH_MAX] = { 0 };
 static char		cafile[PATH_MAX] = { 0 };
+
+static list_t		queued_msgs;
+static uint64_t		queued_msg_bytes = 0;
+static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
 
 static gnutls_certificate_credentials_t	x509_creds;
 static gnutls_priority_t		prio_cache;
@@ -225,6 +231,7 @@ fini_structs(void)
 		free(msg);
 	}
 	list_destroy(&queued_msgs);
+	queued_msg_bytes = 0;
 
 	cookie = NULL;
 	while ((ls = avl_destroy_nodes(&listen_socks, &cookie)) != NULL) {
@@ -626,19 +633,34 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 	cpdlc_msg_free(msg);
 }
 
-static void
+static bool
 store_msg(const cpdlc_msg_t *msg, const char *to)
 {
-	queued_msg_t *qmsg = safe_calloc(1, sizeof (*qmsg));
 	int l = cpdlc_msg_encode(msg, NULL, 0);
-	char *buf = safe_malloc(l + 1);
+	queued_msg_t *qmsg;
+	char *buf;
+	uint64_t bytes = sizeof (*qmsg) + l + 1;
+
+	if (queued_msg_bytes + bytes > queued_msg_max_bytes) {
+		fprintf(stderr, "Cannot queue message, global message queue "
+		    "is completely out of space (%lld bytes)",
+		    (long long)queued_msg_max_bytes);
+		return (false);
+	}
+
+	qmsg = safe_calloc(1, sizeof (*qmsg));
+	buf = safe_malloc(l + 1);
 
 	cpdlc_msg_encode(msg, buf, l + 1);
 	qmsg->msg = buf;
+	qmsg->created = time(NULL);
 	lacf_strlcpy(qmsg->from, cpdlc_msg_get_from(msg), sizeof (qmsg->from));
 	lacf_strlcpy(qmsg->to, to, sizeof (qmsg->to));
 
 	list_insert_tail(&queued_msgs, qmsg);
+	queued_msg_bytes += bytes;
+
+	return (true);
 }
 
 static void
@@ -670,7 +692,8 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 
 	l = htbl_lookup_multi(&conns_by_from, to);
 	if (l == NULL || list_count(l) == 0) {
-		store_msg(msg, to);
+		if (!store_msg(msg, to))
+			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
 	} else {
 		for (void *mv = list_head(l); mv != NULL;
 		    mv = list_next(l, mv)) {
@@ -910,22 +933,42 @@ out:
 }
 
 static void
+dequeue_msg(queued_msg_t *qmsg)
+{
+	uint64_t bytes = sizeof (*qmsg) + strlen(qmsg->msg) + 1;
+
+	ASSERT3U(queued_msg_bytes, >=, bytes);
+	queued_msg_bytes -= bytes;
+	list_remove(&queued_msgs, qmsg);
+	free(qmsg->msg);
+	free(qmsg);
+	if (list_count(&queued_msgs) == 0)
+		ASSERT0(queued_msg_bytes);
+}
+
+static void
 handle_queued_msgs(void)
 {
+	time_t now = time(NULL);
+
 	for (queued_msg_t *qmsg = list_head(&queued_msgs), *next_qmsg = NULL;
 	    qmsg != NULL; qmsg = next_qmsg) {
-		const list_t *l = htbl_lookup_multi(&conns_by_from, qmsg->to);
+		const list_t *l;
 
-		if (l == NULL || list_count(l) == 0)
-			continue;
-		for (void *mv = list_head(l); mv != NULL;
-		    mv = list_next(l, mv)) {
-			conn_t *conn = HTBL_VALUE_MULTI(mv);
-			conn_send_buf(conn, qmsg->msg, strlen(qmsg->msg));
+		next_qmsg = list_next(&queued_msgs, qmsg);
+
+		l = htbl_lookup_multi(&conns_by_from, qmsg->to);
+		if (l != NULL && list_count(l) != 0) {
+			for (void *mv = list_head(l); mv != NULL;
+			    mv = list_next(l, mv)) {
+				conn_t *conn = HTBL_VALUE_MULTI(mv);
+				conn_send_buf(conn, qmsg->msg,
+				strlen(qmsg->msg));
+			}
+			dequeue_msg(qmsg);
+		} else if (now - qmsg->created > QUEUED_MSG_TIMEOUT) {
+			dequeue_msg(qmsg);
 		}
-		list_remove(&queued_msgs, qmsg);
-		free(qmsg->msg);
-		free(qmsg);
 	}
 }
 
@@ -1008,6 +1051,7 @@ main(int argc, char *argv[])
 
 	log_init((logfunc_t)puts, "cpdlcd");
 	crc64_init();
+	curl_global_init(CURL_GLOBAL_ALL);
 
 	/* Default certificate names */
 	lacf_strlcpy(keyfile, "cpdlcd_key.pem", sizeof (keyfile));
@@ -1057,6 +1101,7 @@ main(int argc, char *argv[])
 
 	tls_fini();
 	fini_structs();
+	curl_global_cleanup();
 
 	return (0);
 }
