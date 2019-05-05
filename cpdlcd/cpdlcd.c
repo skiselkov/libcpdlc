@@ -765,7 +765,7 @@ handle_conn_input(conn_t *conn)
 					return (true);
 				}
 				fprintf(stderr, "TLS handshake error: %s\n",
-				    gnutls_strerror(bytes));
+				    gnutls_strerror(error));
 				close_conn(conn);
 				return (false);
 			}

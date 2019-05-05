@@ -24,12 +24,22 @@
 
 include ../Makefile.vars
 
-CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG -DLIN=1 -DIBM=0 -DAPL=0 \
+ifeq ($(shell uname),Linux)
+	PLATFORM_DEFS=-DLIN=1 -DIBM=0 -DAPL=0
+	PLATFORM_NAME=linux-64
+	PLATFORM_LIBNAME=lin64
+else
+	PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=1
+	PLATFORM_NAME=mac-64
+	PLATFORM_LIBNAME=mac64
+endif
+
+CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG $(PLATFORM_DEFS) \
 	-D_GNU_SOURCE -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --cflags) \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell pkg-config gnutls --cflags)
-LIBS += -L$(ACFUTILS)/qmake/lin64 -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --libs) \
+LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
 	$(shell pkg-config gnutls --libs) \
 	-lpthread -lm
 
