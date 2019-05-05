@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <netdb.h>
@@ -52,14 +53,15 @@
 #include <acfutils/safe_alloc.h>
 
 #include "../src/cpdlc.h"
+#include "blocklist.h"
+#include "common.h"
 
 #define	CALLSIGN_LEN		16
 #define	CONN_BACKLOG		UINT16_MAX
 #define	READ_BUF_SZ		4096
 #define	MAX_BUF_SZ		8192
 #define	MAX_BUF_SZ_NO_LOGON	128
-#define	MAX_ADDR_LEN	\
-	MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in))
+#define	POLL_TIMEOUT		1000	/* ms */
 
 typedef struct {
 	char		callsign[CALLSIGN_LEN];
@@ -71,8 +73,9 @@ typedef struct {
 	char		to[CALLSIGN_LEN];
 	bool		logon_complete;
 
-	uint8_t		addr_buf[MAX_ADDR_LEN];
+	uint8_t		addr[MAX_ADDR_LEN];
 	socklen_t	addr_len;
+	int		addr_family;
 	int		fd;
 
 	gnutls_session_t	session;
@@ -95,8 +98,9 @@ typedef struct {
 } queued_msg_t;
 
 typedef struct {
-	uint8_t		addr_buf[MAX_ADDR_LEN];
+	uint8_t		addr[MAX_ADDR_LEN];
 	socklen_t	addr_len;
+	int		addr_family;
 	int		fd;
 	avl_node_t	node;
 } listen_sock_t;
@@ -106,9 +110,9 @@ static avl_tree_t	conns;
 static htbl_t		conns_by_from;
 static list_t		queued_msgs;
 static avl_tree_t	listen_socks;
-static char		*keyfile = "cpdlcd_key.pem";
-static char		*certfile = "cpdlcd_cert.pem";
-static char		*cafile = "cpdlcd_ca.pem";
+static char		keyfile[PATH_MAX] = { 0 };
+static char		certfile[PATH_MAX] = { 0 };
+static char		cafile[PATH_MAX] = { 0 };
 
 static gnutls_certificate_credentials_t	x509_creds;
 static gnutls_priority_t		prio_cache;
@@ -119,6 +123,7 @@ static int		default_port = 17622;
 
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
     const char *fmt, ...);
+static void close_conn(conn_t *conn);
 
 static bool
 set_sock_nonblock(int fd)
@@ -151,7 +156,7 @@ conn_compar(const void *a, const void *b)
 		return (-1);
 	if (ca->addr_len > cb->addr_len)
 		return (1);
-	res = memcmp(ca->addr_buf, cb->addr_buf, sizeof (ca->addr_len));
+	res = memcmp(ca->addr, cb->addr, sizeof (ca->addr_len));
 	if (res < 0)
 		return (-1);
 	if (res > 0)
@@ -169,7 +174,7 @@ listen_sock_compar(const void *a, const void *b)
 		return (-1);
 	if (la->addr_len > lb->addr_len)
 		return (1);
-	res = memcmp(la->addr_buf, lb->addr_buf, sizeof (la->addr_len));
+	res = memcmp(la->addr, lb->addr, sizeof (la->addr_len));
 	if (res < 0)
 		return (-1);
 	if (res > 0)
@@ -188,6 +193,7 @@ init_structs(void)
 	    offsetof(queued_msg_t, node));
 	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
 	    offsetof(listen_sock_t, node));
+	blocklist_init();
 }
 
 static void
@@ -227,6 +233,8 @@ fini_structs(void)
 		free(ls);
 	}
 	avl_destroy(&listen_socks);
+
+	blocklist_fini();
 }
 
 static void
@@ -294,8 +302,10 @@ add_listen_sock(const char *name_port)
 			continue;
 
 		ls = safe_calloc(1, sizeof (*ls));
-		memcpy(ls->addr_buf, ai->ai_addr, ai->ai_addrlen);
+		ASSERT3U(ai->ai_addrlen, <=, sizeof (ls->addr));
+		memcpy(ls->addr, ai->ai_addr, ai->ai_addrlen);
 		ls->addr_len = ai->ai_addrlen;
+		ls->addr_family = ai->ai_family;
 
 		old_ls = avl_find(&listen_socks, ls, &where);
 		if (old_ls != NULL) {
@@ -354,8 +364,13 @@ parse_config(const char *conf_path)
 	void *cookie;
 
 	if (conf == NULL) {
-		fprintf(stderr, "Parsing error in config file on line %d\n",
-		    errline);
+		if (errline == -1) {
+			fprintf(stderr, "Can't open %s: %s\n", conf_path,
+			    strerror(errno));
+		} else {
+			fprintf(stderr, "%s: parsing error on %d\n",
+			    conf_path, errline);
+		}
 		return (false);
 	}
 
@@ -367,6 +382,14 @@ parse_config(const char *conf_path)
 		} else if (strncmp(key, "listen/", 7) == 0) {
 			if (!add_listen_sock(value))
 				goto errout;
+		} else if (strcmp(key, "keyfile") == 0) {
+			lacf_strlcpy(keyfile, value, sizeof (keyfile));
+		} else if (strcmp(key, "certfile") == 0) {
+			lacf_strlcpy(certfile, value, sizeof (certfile));
+		} else if (strcmp(key, "cafile") == 0) {
+			lacf_strlcpy(cafile, value, sizeof (cafile));
+		} else if (strcmp(key, "blocklist") == 0) {
+			blocklist_set_filename(value);
 		}
 	}
 
@@ -425,6 +448,39 @@ handle_accepts(listen_sock_t *ls)
 		conn_t *old_conn;
 		avl_index_t where;
 
+		conn->addr_len = sizeof (conn->addr);
+		conn->fd = accept(ls->fd, (struct sockaddr *)conn->addr,
+		    &conn->addr_len);
+		conn->addr_family = ls->addr_family;
+		if (conn->fd == -1) {
+			free(conn);
+			if (errno != EAGAIN && errno != EWOULDBLOCK) {
+				fprintf(stderr, "Error accepting connection: "
+				    "%s", strerror(errno));
+				continue;
+			} else {
+				break;
+			}
+		}
+		if (!blocklist_check(conn->addr, conn->addr_len,
+		    conn->addr_family)) {
+			fprintf(stderr, "Incoming connection blocked: "
+			    "address on blocklist.\n");
+			close(conn->fd);
+			free(conn);
+			continue;
+		}
+
+		set_sock_nonblock(conn->fd);
+		old_conn = avl_find(&conns, conn, &where);
+		if (old_conn != NULL) {
+			fprintf(stderr, "Error accepting connection: "
+			    "duplicate connection encountered?!");
+			close(conn->fd);
+			free(conn);
+			continue;
+		}
+
 		VERIFY0(gnutls_init(&conn->session,
 		    GNUTLS_SERVER | GNUTLS_NONBLOCK | GNUTLS_NO_SIGNAL));
 		VERIFY0(gnutls_priority_set(conn->session, prio_cache));
@@ -434,30 +490,6 @@ handle_accepts(listen_sock_t *ls)
 		    GNUTLS_CERT_IGNORE);
 		gnutls_handshake_set_timeout(conn->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
-
-		conn->addr_len = sizeof (conn->addr_buf);
-		conn->fd = accept(ls->fd, (struct sockaddr *)conn->addr_buf,
-		    &conn->addr_len);
-		if (conn->fd == -1) {
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				fprintf(stderr, "Error accepting connection: "
-				    "%s", strerror(errno));
-				gnutls_deinit(conn->session);
-				free(conn);
-			}
-			break;
-		}
-		set_sock_nonblock(conn->fd);
-		old_conn = avl_find(&conns, conn, &where);
-		if (old_conn != NULL) {
-			fprintf(stderr, "Error accepting connection: "
-			    "duplicate connection encountered?!");
-			close(conn->fd);
-			gnutls_deinit(conn->session);
-			free(conn);
-			continue;
-		}
-
 		gnutls_transport_set_int(conn->session, conn->fd);
 
 		avl_insert(&conns, conn, where);
@@ -830,10 +862,15 @@ poll_sockets(void)
 	}
 	ASSERT3U(sock_nr, ==, num_pfds);
 
-	poll_res = poll(pfds, num_pfds, -1);
+	poll_res = poll(pfds, num_pfds, POLL_TIMEOUT);
 	if (poll_res == -1 && errno != EINTR) {
 		fprintf(stderr, "Error polling on sockets: %s\n",
 		    strerror(errno));
+		free(pfds);
+		return;
+	}
+	if (poll_res == 0) {
+		/* Poll timeout, respin another loop */
 		free(pfds);
 		return;
 	}
@@ -892,11 +929,36 @@ handle_queued_msgs(void)
 	}
 }
 
+static void
+close_blocked_conns(void)
+{
+	/*
+	 * Run through existing connections and close ones which are now
+	 * on the blocklist.
+	 */
+	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
+	    conn = conn_next) {
+		conn_next = AVL_NEXT(&conns, conn);
+		if (!blocklist_check(conn->addr, conn->addr_len,
+		    conn->addr_family)) {
+			close_conn(conn);
+		}
+	}
+}
+
 static bool
 tls_init(void)
 {
-	struct stat st;
-
+#define	CHECKFILE(__filename) \
+	do { \
+		struct stat st; \
+		if (stat((__filename), &st) != 0) { \
+			fprintf(stderr, "Can't stat %s: %s\n", \
+			    (__filename), strerror(errno)); \
+			gnutls_global_deinit(); \
+			return (false); \
+		} \
+	} while (0)
 #define	CHECK(op) \
 	do { \
 		int error = (op); \
@@ -910,22 +972,13 @@ tls_init(void)
 
 	CHECK(gnutls_global_init());
 	CHECK(gnutls_certificate_allocate_credentials(&x509_creds));
-	if (stat(cafile, &st) == 0) {
+	if (cafile[0] != '\0') {
+		CHECKFILE(cafile);
 		CHECK(gnutls_certificate_set_x509_trust_file(x509_creds,
 		    cafile, GNUTLS_X509_FMT_PEM));
 	}
-	if (stat(certfile, &st) != 0) {
-		fprintf(stderr, "Unable stat certfile %s: %s\n", certfile,
-		    strerror(errno));
-		gnutls_global_deinit();
-		return (false);
-	}
-	if (stat(keyfile, &st) != 0) {
-		fprintf(stderr, "Unable stat keyfile %s: %s\n", keyfile,
-		    strerror(errno));
-		gnutls_global_deinit();
-		return (false);
-	}
+	CHECKFILE(keyfile);
+	CHECKFILE(certfile);
 	CHECK(gnutls_certificate_set_x509_key_file(x509_creds, certfile,
 	    keyfile, GNUTLS_X509_FMT_PEM));
         CHECK(gnutls_priority_init(&prio_cache, NULL, NULL));
@@ -936,6 +989,7 @@ tls_init(void)
 
 	return (true);
 #undef	CHECK
+#undef	CHECKFILE
 }
 
 static void
@@ -954,6 +1008,10 @@ main(int argc, char *argv[])
 
 	log_init((logfunc_t)puts, "cpdlcd");
 	crc64_init();
+
+	/* Default certificate names */
+	lacf_strlcpy(keyfile, "cpdlcd_key.pem", sizeof (keyfile));
+	lacf_strlcpy(certfile, "cpdlcd_cert.pem", sizeof (certfile));
 
 	while ((opt = getopt(argc, argv, "hc:dp:")) != -1) {
 		switch (opt) {
@@ -993,6 +1051,8 @@ main(int argc, char *argv[])
 	while (!do_shutdown) {
 		poll_sockets();
 		handle_queued_msgs();
+		if (blocklist_refresh())
+			close_blocked_conns();
 	}
 
 	tls_fini();
