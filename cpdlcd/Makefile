@@ -24,7 +24,8 @@
 
 include ../Makefile.vars
 
-CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG -I$(ACFUTILS)/src \
+CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG -DLIN=1 -DIBM=0 -DAPL=0 \
+	-I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps linux-64 --cflags) \
 	$(shell pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/lin64 -lacfutils \
