@@ -1127,6 +1127,15 @@ cpdlc_msg_get_logon_data(const cpdlc_msg_t *msg)
 	return (msg->logon_data);
 }
 
+void
+cpdlc_msg_set_logon_data(cpdlc_msg_t *msg, const char *logon_data)
+{
+	ASSERT(msg != NULL);
+	free(msg->logon_data);
+	msg->logon_data = strdup(logon_data);
+	msg->is_logon = true;
+}
+
 unsigned
 cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg)
 {

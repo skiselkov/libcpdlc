@@ -59,6 +59,7 @@ typedef struct {
 	size_t		bufsz;
 } dl_info_t;
 
+static bool		inited = false;
 static char		auth_url[PATH_MAX] = { 0 };
 static char		cainfo[PATH_MAX] = { 0 };
 static char		auth_username[64] = { 0 };
@@ -222,6 +223,9 @@ void
 auth_init(const char *url, const char *new_cainfo,
     const char *new_username, const char *new_password)
 {
+	ASSERT(!inited);
+	inited = true;
+
 	if (url != NULL)
 		lacf_strlcpy(auth_url, url, sizeof (auth_url));
 	if (new_cainfo != NULL)
@@ -244,6 +248,10 @@ auth_init(const char *url, const char *new_cainfo,
 void
 auth_fini(void)
 {
+	if (!inited)
+		return;
+	inited = false;
+
 	mutex_enter(&lock);
 	for (auth_sess_t *sess = avl_first(&sessions); sess != NULL;
 	    sess = AVL_NEXT(&sessions, sess)) {

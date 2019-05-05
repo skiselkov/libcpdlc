@@ -54,6 +54,8 @@
 #include <acfutils/safe_alloc.h>
 
 #include "../src/cpdlc.h"
+
+#include "auth.h"
 #include "blocklist.h"
 #include "common.h"
 
@@ -71,10 +73,7 @@ typedef struct {
 } atc_t;
 
 typedef struct {
-	char		from[CALLSIGN_LEN];
-	char		to[CALLSIGN_LEN];
-	bool		logon_complete;
-
+	/* only set & read from main thread */
 	uint8_t		addr[MAX_ADDR_LEN];
 	socklen_t	addr_len;
 	int		addr_family;
@@ -82,6 +81,19 @@ typedef struct {
 
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
+
+	mutex_t		lock;
+
+	/* protected by lock */
+	char		from[CALLSIGN_LEN];
+	char		to[CALLSIGN_LEN];
+	char		logon_from[CALLSIGN_LEN];
+	char		logon_to[CALLSIGN_LEN];
+	bool		logon_in_prog;
+	bool		logon_complete;
+	unsigned	logon_min;
+	auth_sess_key_t	auth_key;
+	bool		is_atc;
 
 	uint8_t		*inbuf;
 	size_t		inbuf_sz;
@@ -369,6 +381,8 @@ parse_config(const char *conf_path)
 	conf_t *conf = conf_read_file(conf_path, &errline);
 	const char *key, *value;
 	void *cookie;
+	const char *auth_url = NULL, *auth_cainfo = NULL;
+	const char *auth_username = NULL, *auth_password = NULL;
 
 	if (conf == NULL) {
 		if (errline == -1) {
@@ -397,6 +411,14 @@ parse_config(const char *conf_path)
 			lacf_strlcpy(cafile, value, sizeof (cafile));
 		} else if (strcmp(key, "blocklist") == 0) {
 			blocklist_set_filename(value);
+		} else if (strcmp(key, "auth/url") == 0) {
+			auth_url = value;
+		} else if (strcmp(key, "auth/cainfo") == 0) {
+			auth_cainfo = value;
+		} else if (strcmp(key, "auth/username") == 0) {
+			auth_username = value;
+		} else if (strcmp(key, "auth/password") == 0) {
+			auth_password = value;
 		}
 	}
 
@@ -404,6 +426,7 @@ parse_config(const char *conf_path)
 		goto errout;
 	if (avl_numnodes(&listen_socks) == 0 && !add_listen_sock("localhost"))
 		goto errout;
+	auth_init(auth_url, auth_cainfo, auth_username, auth_password);
 
 	conf_free(conf);
 	return (true);
@@ -415,6 +438,7 @@ errout:
 static bool
 auto_config(void)
 {
+	auth_init(NULL, NULL, NULL, NULL);
 	return (add_listen_sock("localhost") && add_atc("TEST"));
 }
 
@@ -504,12 +528,17 @@ handle_accepts(listen_sock_t *ls)
 }
 
 static void
-conn_remove_from(conn_t *conn)
+conn_reset_logon(conn_t *conn)
 {
 	const list_t *l;
 
 	ASSERT(conn != NULL);
-	ASSERT(conn->logon_complete);
+	if (conn->logon_in_prog) {
+		auth_sess_kill(conn->auth_key);
+		conn->logon_in_prog = false;
+	}
+	if (!conn->logon_complete)
+		return;
 
 	l = htbl_lookup_multi(&conns_by_from, conn->from);
 	ASSERT(l != NULL);
@@ -522,14 +551,22 @@ conn_remove_from(conn_t *conn)
 		}
 	}
 	conn->logon_complete = false;
+	conn->is_atc = false;
 	memset(conn->from, 0, sizeof (conn->from));
+	memset(conn->to, 0, sizeof (conn->to));
+	memset(conn->logon_from, 0, sizeof (conn->logon_from));
+	memset(conn->logon_to, 0, sizeof (conn->logon_to));
 }
 
 static void
 close_conn(conn_t *conn)
 {
-	if (conn->logon_complete)
-		conn_remove_from(conn);
+	/*
+	 * Must be done before unlinking the connection from any list,
+	 * because we can be called in the background to complete a logon.
+	 */
+	conn_reset_logon(conn);
+
 	avl_remove(&conns, conn);
 	if (conn->tls_handshake_complete)
 		gnutls_bye(conn->session, GNUTLS_SHUT_WR);
@@ -540,28 +577,55 @@ close_conn(conn_t *conn)
 	free(conn);
 }
 
-static bool
+static void
+logon_done_cb(bool result, bool is_atc, void *userinfo)
+{
+	cpdlc_msg_t *msg;
+	conn_t *conn;
+
+	ASSERT(userinfo != NULL);
+	conn = userinfo;
+	ASSERT(conn->logon_in_prog);
+
+	msg = cpdlc_msg_alloc(0, conn->logon_min);
+
+	if (result) {
+		conn->logon_complete = true;
+		conn->is_atc = is_atc;
+		lacf_strlcpy(conn->to, conn->logon_to, sizeof (conn->to));
+		lacf_strlcpy(conn->from, conn->logon_from, sizeof (conn->from));
+		htbl_set(&conns_by_from, conn->from, conn);
+	}
+}
+
+static void
 process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
 
-	/* Authentication TODO */
-
-	if (conn->logon_complete)
-		conn_remove_from(conn);
-
-	conn->logon_complete = true;
-	lacf_strlcpy(conn->to, cpdlc_msg_get_to(msg), sizeof (conn->to));
-	lacf_strlcpy(conn->from, cpdlc_msg_get_from(msg), sizeof (conn->from));
-
-	if (conn->from[0] == '\0') {
+	if (conn->logon_in_prog) {
+		send_error_msg(conn, msg, "LOGON ALREADY IN PROGRESS");
+		return (false);
+	}
+	if (cpdlc_msg_get_from(msg) == NULL) {
 		send_error_msg(conn, msg, "LOGON REQUIRES FROM= HEADER");
 		return (false);
 	}
-	htbl_set(&conns_by_from, conn->from, conn);
+	/* Clear a previous logon */
+	conn_reset_logon(conn);
+	if (cpdlc_msg_get_to(msg) != NULL) {
+		lacf_strlcpy(conn->logon_to, cpdlc_msg_get_to(msg),
+		    sizeof (conn->logon_to));
+	}
+	lacf_strlcpy(conn->logon_from, cpdlc_msg_get_from(msg),
+	    sizeof (conn->logon_from));
+	conn->logon_in_prog = true;
+	conn->logon_min = cpdlc_msg_get_min(msg);
 
-	return (true);
+	/* This is async */
+	conn->auth_sess_key = auth_sess_open(msg, conn->addr,
+	    conn->addr_family, logon_done_cb, conn);
 }
 
 static void
@@ -676,8 +740,10 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		send_error_msg(conn, msg, "LOGON REQUIRED");
 		return;
 	}
-	if (msg->is_logon && !process_logon_msg(conn, msg))
+	if (msg->is_logon) {
+		process_logon_msg(conn, msg);
 		return;
+	}
 
 	if (msg->to[0] != '\0') {
 		lacf_strlcpy(to, msg->to, sizeof (to));
@@ -1099,6 +1165,7 @@ main(int argc, char *argv[])
 			close_blocked_conns();
 	}
 
+	auth_fini();
 	tls_fini();
 	fini_structs();
 	curl_global_cleanup();
