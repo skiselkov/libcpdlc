@@ -50,7 +50,7 @@ LIB_OBJS= \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o
 
-DAEMON_OBJS=auth.o blocklist.o cpdlcd.o $(LIB_OBJS)
+DAEMON_OBJS=auth.o blocklist.o cpdlcd.o msgquota.o $(LIB_OBJS)
 
 all : cpdlcd
 

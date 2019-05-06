@@ -52,14 +52,15 @@
 #include <acfutils/log.h>
 #include <acfutils/list.h>
 #include <acfutils/safe_alloc.h>
+#include <acfutils/thread.h>
 
 #include "../src/cpdlc.h"
 
 #include "auth.h"
 #include "blocklist.h"
 #include "common.h"
+#include "msgquota.h"
 
-#define	CALLSIGN_LEN		16
 #define	CONN_BACKLOG		UINT16_MAX
 #define	READ_BUF_SZ		4096
 #define	MAX_BUF_SZ		8192
@@ -67,10 +68,12 @@
 #define	POLL_TIMEOUT		1000	/* ms */
 #define	QUEUED_MSG_TIMEOUT	3600	/* seconds */
 
-typedef struct {
-	char		callsign[CALLSIGN_LEN];
-	avl_node_t	node;
-} atc_t;
+typedef enum {
+	LOGON_NONE,
+	LOGON_STARTED,
+	LOGON_COMPLETING,
+	LOGON_COMPLETE
+} logon_status_t;
 
 typedef struct {
 	/* only set & read from main thread */
@@ -78,6 +81,9 @@ typedef struct {
 	socklen_t	addr_len;
 	int		addr_family;
 	int		fd;
+
+	uint8_t		*inbuf;
+	size_t		inbuf_sz;
 
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
@@ -89,14 +95,11 @@ typedef struct {
 	char		to[CALLSIGN_LEN];
 	char		logon_from[CALLSIGN_LEN];
 	char		logon_to[CALLSIGN_LEN];
-	bool		logon_in_prog;
-	bool		logon_complete;
+	logon_status_t	logon_status;
 	unsigned	logon_min;
 	auth_sess_key_t	auth_key;
 	bool		is_atc;
-
-	uint8_t		*inbuf;
-	size_t		inbuf_sz;
+	bool		logon_success;
 	uint8_t		*outbuf;
 	size_t		outbuf_sz;
 
@@ -107,6 +110,7 @@ typedef struct {
 typedef struct {
 	char		from[CALLSIGN_LEN];
 	char		to[CALLSIGN_LEN];
+	bool		is_atc;
 	time_t		created;
 	char		*msg;
 	list_node_t	node;
@@ -120,10 +124,23 @@ typedef struct {
 	avl_node_t	node;
 } listen_sock_t;
 
-static avl_tree_t	atcs;
 static avl_tree_t	conns;
 static htbl_t		conns_by_from;
 static avl_tree_t	listen_socks;
+
+/*
+ * Since the main thread can be sitting in poll(), we need an I/O-based
+ * method of waking it up. We do so by poll()ing on the read side of a
+ * pipe. If another thread needs the main thread's attention, it simply
+ * needs to call wake_main_thread(). This then writes a single byte into
+ * the write end of the pipe. If the main thread was sitting in poll(),
+ * it will immediately wake up and start processing. If it was doing
+ * something else, it will immediately exit from poll() on the next call.
+ * As part of standard poll processing, the main thread drains the wakeup
+ * pipe of any written wakeup calls.
+ */
+static int		poll_wakeup_pipe[2] = { -1, -1 };
+
 static char		keyfile[PATH_MAX] = { 0 };
 static char		certfile[PATH_MAX] = { 0 };
 static char		cafile[PATH_MAX] = { 0 };
@@ -141,27 +158,24 @@ static int		default_port = 17622;
 
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
     const char *fmt, ...);
+static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
+static void conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg);
+
+static void
+wake_up_main_thread(void)
+{
+	uint8_t buf[1];
+	(void) write(poll_wakeup_pipe[1], buf, sizeof (buf));
+}
 
 static bool
-set_sock_nonblock(int fd)
+set_fd_nonblock(int fd)
 {
 	int flags;
 
 	return ((flags = fcntl(fd, F_GETFL)) >= 0 &&
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
-}
-
-static int
-atc_compar(const void *a, const void *b)
-{
-	const atc_t *aa = a, *ab = b;
-	int res = strcmp(aa->callsign, ab->callsign);
-	if (res < 0)
-		return (-1);
-	if (res > 0)
-		return (1);
-	return (0);
 }
 
 static int
@@ -203,7 +217,6 @@ listen_sock_compar(const void *a, const void *b)
 static void
 init_structs(void)
 {
-	avl_create(&atcs, atc_compar, sizeof (atc_t), offsetof(atc_t, node));
 	avl_create(&conns, conn_compar, sizeof (conn_t),
 	    offsetof(conn_t, node));
 	htbl_create(&conns_by_from, 1024, CALLSIGN_LEN, true);
@@ -212,21 +225,19 @@ init_structs(void)
 	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
 	    offsetof(listen_sock_t, node));
 	blocklist_init();
+	VERIFY_MSG(pipe(poll_wakeup_pipe) != -1, "pipe() failed: %s",
+	    strerror(errno));
+	set_fd_nonblock(poll_wakeup_pipe[0]);
+	set_fd_nonblock(poll_wakeup_pipe[1]);
 }
 
 static void
 fini_structs(void)
 {
 	void *cookie;
-	atc_t *atc;
 	conn_t *conn;
 	queued_msg_t *msg;
 	listen_sock_t *ls;
-
-	cookie = NULL;
-	while ((atc = avl_destroy_nodes(&atcs, &cookie)) != NULL)
-		free(atc);
-	avl_destroy(&atcs);
 
 	htbl_empty(&conns_by_from, NULL, NULL);
 	htbl_destroy(&conns_by_from);
@@ -254,30 +265,15 @@ fini_structs(void)
 	avl_destroy(&listen_socks);
 
 	blocklist_fini();
+
+	close(poll_wakeup_pipe[0]);
+	close(poll_wakeup_pipe[1]);
 }
 
 static void
 print_usage(const char *progname, FILE *fp)
 {
 	fprintf(fp, "Usage: %s [-h] [-c <conffile>]\n", progname);
-}
-
-static bool
-add_atc(const char *callsign)
-{
-	atc_t *atc = safe_calloc(1, sizeof (*atc));
-	atc_t *old_atc;
-	avl_index_t where;
-
-	lacf_strlcpy(atc->callsign, callsign, sizeof (atc->callsign));
-	old_atc = avl_find(&atcs, atc, &where);
-	if (old_atc != NULL) {
-		fprintf(stderr, "Duplicate ATC entry %s", callsign);
-		return (false);
-	}
-	avl_insert(&atcs, atc, where);
-
-	return (true);
 }
 
 static bool
@@ -358,7 +354,7 @@ add_listen_sock(const char *name_port)
 			    strerror(errno));
 			goto errout;
 		}
-		if (!set_sock_nonblock(ls->fd)) {
+		if (!set_fd_nonblock(ls->fd)) {
 			fprintf(stderr, "Invalid listen directive \"%s\": "
 			    "cannot set socket as non-blocking: %s\n",
 			    name_port, strerror(errno));
@@ -378,6 +374,7 @@ static bool
 parse_config(const char *conf_path)
 {
 	int errline;
+	uint64_t msgquota_max = 0;
 	conf_t *conf = conf_read_file(conf_path, &errline);
 	const char *key, *value;
 	void *cookie;
@@ -397,10 +394,7 @@ parse_config(const char *conf_path)
 
 	cookie = NULL;
 	while (conf_walk(conf, &key, &value, &cookie)) {
-		if (strncmp(key, "atc/name/", 9) == 0) {
-			if (!add_atc(value))
-				goto errout;
-		} else if (strncmp(key, "listen/", 7) == 0) {
+		if (strncmp(key, "listen/", 7) == 0) {
 			if (!add_listen_sock(value))
 				goto errout;
 		} else if (strcmp(key, "keyfile") == 0) {
@@ -419,14 +413,15 @@ parse_config(const char *conf_path)
 			auth_username = value;
 		} else if (strcmp(key, "auth/password") == 0) {
 			auth_password = value;
+		} else if (strcmp(key, "msgquota") == 0) {
+			msgquota_max = atoi(value);
 		}
 	}
 
-	if (avl_numnodes(&atcs) == 0 && !add_atc("TEST"))
-		goto errout;
 	if (avl_numnodes(&listen_socks) == 0 && !add_listen_sock("localhost"))
 		goto errout;
 	auth_init(auth_url, auth_cainfo, auth_username, auth_password);
+	msgquota_init(msgquota_max);
 
 	conf_free(conf);
 	return (true);
@@ -439,7 +434,8 @@ static bool
 auto_config(void)
 {
 	auth_init(NULL, NULL, NULL, NULL);
-	return (add_listen_sock("localhost") && add_atc("TEST"));
+	msgquota_init(0);
+	return (add_listen_sock("localhost"));
 }
 
 static bool
@@ -502,7 +498,7 @@ handle_accepts(listen_sock_t *ls)
 			continue;
 		}
 
-		set_sock_nonblock(conn->fd);
+		set_fd_nonblock(conn->fd);
 		old_conn = avl_find(&conns, conn, &where);
 		if (old_conn != NULL) {
 			fprintf(stderr, "Error accepting connection: "
@@ -523,6 +519,8 @@ handle_accepts(listen_sock_t *ls)
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
 		gnutls_transport_set_int(conn->session, conn->fd);
 
+		mutex_init(&conn->lock);
+
 		avl_insert(&conns, conn, where);
 	}
 }
@@ -533,12 +531,15 @@ conn_reset_logon(conn_t *conn)
 	const list_t *l;
 
 	ASSERT(conn != NULL);
-	if (conn->logon_in_prog) {
+
+	mutex_enter(&conn->lock);
+
+	if (conn->logon_status == LOGON_STARTED) {
 		auth_sess_kill(conn->auth_key);
-		conn->logon_in_prog = false;
+		goto out;
 	}
-	if (!conn->logon_complete)
-		return;
+	if (conn->logon_status != LOGON_COMPLETE)
+		goto out;
 
 	l = htbl_lookup_multi(&conns_by_from, conn->from);
 	ASSERT(l != NULL);
@@ -550,12 +551,15 @@ conn_reset_logon(conn_t *conn)
 			break;
 		}
 	}
-	conn->logon_complete = false;
 	conn->is_atc = false;
 	memset(conn->from, 0, sizeof (conn->from));
 	memset(conn->to, 0, sizeof (conn->to));
 	memset(conn->logon_from, 0, sizeof (conn->logon_from));
 	memset(conn->logon_to, 0, sizeof (conn->logon_to));
+out:
+	conn->logon_status = LOGON_NONE;
+	conn->logon_success = false;
+	mutex_exit(&conn->lock);
 }
 
 static void
@@ -572,6 +576,7 @@ close_conn(conn_t *conn)
 		gnutls_bye(conn->session, GNUTLS_SHUT_WR);
 	close(conn->fd);
 	gnutls_deinit(conn->session);
+	mutex_destroy(&conn->lock);
 	free(conn->inbuf);
 	free(conn->outbuf);
 	free(conn);
@@ -580,22 +585,63 @@ close_conn(conn_t *conn)
 static void
 logon_done_cb(bool result, bool is_atc, void *userinfo)
 {
-	cpdlc_msg_t *msg;
 	conn_t *conn;
 
 	ASSERT(userinfo != NULL);
 	conn = userinfo;
-	ASSERT(conn->logon_in_prog);
 
+	mutex_enter(&conn->lock);
+	ASSERT3U(conn->logon_status, ==, LOGON_STARTED);
+	conn->logon_status = LOGON_COMPLETING;
+	conn->logon_success = result;
+	conn->is_atc = is_atc;
+	mutex_exit(&conn->lock);
+
+	wake_up_main_thread();
+}
+
+static void
+complete_logon(conn_t *conn)
+{
+	cpdlc_msg_t *msg;
+
+	ASSERT(conn);
+
+	mutex_enter(&conn->lock);
+
+	if (conn->logon_status != LOGON_COMPLETING) {
+		mutex_exit(&conn->lock);
+		return;
+	}
 	msg = cpdlc_msg_alloc(0, conn->logon_min);
-
-	if (result) {
-		conn->logon_complete = true;
-		conn->is_atc = is_atc;
+	if (conn->logon_success && !conn->is_atc &&
+	    conn->logon_to[0] == '\0') {
+		conn->logon_status = LOGON_NONE;
+		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
+		cpdlc_msg_seg_set_arg(msg, 0, 0, "LOGON REQUIRES TO= HEADER",
+		    NULL);
+	} else if (conn->logon_success) {
+		conn->logon_status = LOGON_COMPLETE;
 		lacf_strlcpy(conn->to, conn->logon_to, sizeof (conn->to));
 		lacf_strlcpy(conn->from, conn->logon_from, sizeof (conn->from));
 		htbl_set(&conns_by_from, conn->from, conn);
+		cpdlc_msg_set_logon_data(msg, "SUCCESS");
+	} else {
+		conn->logon_status = LOGON_NONE;
+		cpdlc_msg_set_logon_data(msg, "FAILURE");
 	}
+	conn_send_msg(conn, msg);
+	cpdlc_msg_free(msg);
+
+	mutex_exit(&conn->lock);
+}
+
+static void
+complete_logons(void)
+{
+	for (conn_t *conn = avl_first(&conns); conn != NULL;
+	    conn = AVL_NEXT(&conns, conn))
+		complete_logon(conn);
 }
 
 static void
@@ -604,13 +650,18 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
 
-	if (conn->logon_in_prog) {
+	mutex_enter(&conn->lock);
+
+	if (conn->logon_status == LOGON_STARTED ||
+	    conn->logon_status == LOGON_COMPLETING) {
+		mutex_exit(&conn->lock);
 		send_error_msg(conn, msg, "LOGON ALREADY IN PROGRESS");
-		return (false);
+		return;
 	}
 	if (cpdlc_msg_get_from(msg) == NULL) {
+		mutex_exit(&conn->lock);
 		send_error_msg(conn, msg, "LOGON REQUIRES FROM= HEADER");
-		return (false);
+		return;
 	}
 	/* Clear a previous logon */
 	conn_reset_logon(conn);
@@ -620,12 +671,15 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	}
 	lacf_strlcpy(conn->logon_from, cpdlc_msg_get_from(msg),
 	    sizeof (conn->logon_from));
-	conn->logon_in_prog = true;
+	conn->logon_status = LOGON_STARTED;
 	conn->logon_min = cpdlc_msg_get_min(msg);
 
 	/* This is async */
-	conn->auth_sess_key = auth_sess_open(msg, conn->addr,
-	    conn->addr_family, logon_done_cb, conn);
+	conn->auth_key = auth_sess_open(msg, conn->addr, conn->addr_family,
+	    logon_done_cb, conn);
+	/* Mustn't touch logon status after this */
+
+	mutex_exit(&conn->lock);
 }
 
 static void
@@ -635,14 +689,18 @@ conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
 	ASSERT(buf != NULL);
 	ASSERT(buflen != 0);
 
+	mutex_enter(&conn->lock);
+
 	conn->outbuf = safe_realloc(conn->outbuf, conn->outbuf_sz + buflen + 1);
 	lacf_strlcpy((char *)&conn->outbuf[conn->outbuf_sz], buf, buflen + 1);
 	/* Exclude training NUL char */
 	conn->outbuf_sz += buflen;
+
+	mutex_exit(&conn->lock);
 }
 
 static void
-conn_send_msg(conn_t *conn, cpdlc_msg_t *msg)
+conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
 	unsigned l;
 	char *buf;
@@ -655,6 +713,18 @@ conn_send_msg(conn_t *conn, cpdlc_msg_t *msg)
 	cpdlc_msg_encode(msg, buf, l + 1);
 	conn_send_buf(conn, buf, l);
 	free(buf);
+
+	/*
+	 * Check if the message being sent is a service termination.
+	 * In that case, terminate the connection's logon status.
+	 */
+	for (unsigned i = 0, n = msg->num_segs; i < n; i++) {
+		ASSERT(msg->segs[i].info != NULL);
+		if (!msg->segs[i].info->is_dl &&
+		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
+			conn_reset_logon(conn);
+		}
+	}
 }
 
 static void
@@ -697,13 +767,26 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 	cpdlc_msg_free(msg);
 }
 
-static bool
-store_msg(const cpdlc_msg_t *msg, const char *to)
+static void
+send_svc_unavail_msg(conn_t *conn, unsigned orig_min)
 {
-	int l = cpdlc_msg_encode(msg, NULL, 0);
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(0, orig_min);
+	ASSERT(conn != NULL);
+	cpdlc_msg_add_seg(msg, false, CPDLC_UM162_SVC_UNAVAIL, 0);
+	conn_send_msg(conn, msg);
+	cpdlc_msg_free(msg);
+}
+
+static bool
+store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
+{
+	uint64_t bytes = cpdlc_msg_encode(msg, NULL, 0);
 	queued_msg_t *qmsg;
 	char *buf;
-	uint64_t bytes = sizeof (*qmsg) + l + 1;
+
+	ASSERT(msg != NULL);
+	ASSERT(to != NULL);
+	ASSERT(cpdlc_msg_get_from(msg) != NULL);
 
 	if (queued_msg_bytes + bytes > queued_msg_max_bytes) {
 		fprintf(stderr, "Cannot queue message, global message queue "
@@ -711,13 +794,17 @@ store_msg(const cpdlc_msg_t *msg, const char *to)
 		    (long long)queued_msg_max_bytes);
 		return (false);
 	}
+	if (!is_atc && !msgquota_incr(cpdlc_msg_get_from(msg), bytes))
+		return (false);
 
 	qmsg = safe_calloc(1, sizeof (*qmsg));
-	buf = safe_malloc(l + 1);
+	buf = safe_malloc(bytes + 1);
 
-	cpdlc_msg_encode(msg, buf, l + 1);
+	cpdlc_msg_encode(msg, buf, bytes + 1);
+
 	qmsg->msg = buf;
 	qmsg->created = time(NULL);
+	qmsg->is_atc = is_atc;
 	lacf_strlcpy(qmsg->from, cpdlc_msg_get_from(msg), sizeof (qmsg->from));
 	lacf_strlcpy(qmsg->to, to, sizeof (qmsg->to));
 
@@ -736,16 +823,25 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
 
-	if (!conn->logon_complete && !msg->is_logon) {
+	mutex_enter(&conn->lock);
+	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
+		mutex_exit(&conn->lock);
 		send_error_msg(conn, msg, "LOGON REQUIRED");
 		return;
 	}
+	mutex_exit(&conn->lock);
+
 	if (msg->is_logon) {
 		process_logon_msg(conn, msg);
 		return;
 	}
 
 	if (msg->to[0] != '\0') {
+		if (!conn->is_atc) {
+			send_error_msg(conn, msg,
+			    "MESSAGE CANNOT CONTAIN TO= HEADER");
+			return;
+		}
 		lacf_strlcpy(to, msg->to, sizeof (to));
 	} else if (conn->to[0] != '\0') {
 		lacf_strlcpy(to, conn->to, sizeof (to));
@@ -753,18 +849,30 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
 		return;
 	}
+	ASSERT(msg->num_segs > 0);
+	ASSERT(msg->segs[0].info != NULL);
+	if (conn->is_atc && msg->segs[0].info->is_dl) {
+		send_error_msg(conn, msg, "MESSAGE UPLINK/DOWNLINK MISMATCH");
+		return;
+	}
+	if (!conn->is_atc && !msg->segs[0].info->is_dl) {
+		send_svc_unavail_msg(conn, cpdlc_msg_get_min(msg));
+		return;
+	}
+
 	ASSERT(conn->from[0] != '\0');
 	cpdlc_msg_set_from(msg, conn->from);
 
 	l = htbl_lookup_multi(&conns_by_from, to);
 	if (l == NULL || list_count(l) == 0) {
-		if (!store_msg(msg, to))
+		if (!store_msg(msg, to, conn->is_atc))
 			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
 	} else {
-		for (void *mv = list_head(l); mv != NULL;
-		    mv = list_next(l, mv)) {
+		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
+		    mv = mv_next) {
 			conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
 
+			mv_next = list_next(l, mv);
 			ASSERT(tgt_conn != NULL);
 			conn_send_msg(tgt_conn, msg);
 		}
@@ -899,6 +1007,8 @@ handle_conn_output(conn_t *conn)
 	ASSERT(conn != NULL);
 	ASSERT(conn->outbuf != NULL);
 
+	mutex_enter(&conn->lock);
+
 	bytes = gnutls_record_send(conn->session, conn->outbuf,
 	    conn->outbuf_sz);
 	if (bytes < 0) {
@@ -906,6 +1016,7 @@ handle_conn_output(conn_t *conn)
 			if (gnutls_error_is_fatal(bytes)) {
 				fprintf(stderr, "Fatal send error on "
 				    "connection: %s\n", gnutls_strerror(bytes));
+				mutex_exit(&conn->lock);
 				close_conn(conn);
 				return (false);
 			}
@@ -926,6 +1037,8 @@ handle_conn_output(conn_t *conn)
 		}
 	}
 
+	mutex_exit(&conn->lock);
+
 	return (true);
 }
 
@@ -933,9 +1046,14 @@ static void
 poll_sockets(void)
 {
 	unsigned sock_nr = 0;
-	unsigned num_pfds = avl_numnodes(&listen_socks) + avl_numnodes(&conns);
+	unsigned num_pfds = 1 + avl_numnodes(&listen_socks) +
+	    avl_numnodes(&conns);
 	struct pollfd *pfds = safe_calloc(num_pfds, sizeof (*pfds));
 	int poll_res, polls_seen;
+
+	pfds[sock_nr].fd = poll_wakeup_pipe[0];
+	pfds[sock_nr].events = POLLIN;
+	sock_nr++;
 
 	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
 	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
@@ -952,9 +1070,11 @@ poll_sockets(void)
 	ASSERT3U(sock_nr, ==, num_pfds);
 
 	poll_res = poll(pfds, num_pfds, POLL_TIMEOUT);
-	if (poll_res == -1 && errno != EINTR) {
-		fprintf(stderr, "Error polling on sockets: %s\n",
-		    strerror(errno));
+	if (poll_res == -1) {
+		if (errno != EINTR) {
+			fprintf(stderr, "Error polling on sockets: %s\n",
+			    strerror(errno));
+		}
 		free(pfds);
 		return;
 	}
@@ -966,12 +1086,25 @@ poll_sockets(void)
 
 	polls_seen = 0;
 	sock_nr = 0;
+
+	if (pfds[0].revents & POLLIN) {
+		uint8_t buf[4096];
+
+		polls_seen++;
+		/* poll wakeup pipe has been disturbed, drain it */
+		while (read(poll_wakeup_pipe[0], buf, sizeof (buf)) > 0)
+			;
+		if (polls_seen == poll_res)
+			goto out;
+	}
+	sock_nr++;
+
 	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
 	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
 		if (pfds[sock_nr].revents & (POLLIN | POLLPRI)) {
 			handle_accepts(ls);
 			polls_seen++;
-			if (polls_seen == poll_res)
+			if (polls_seen >= poll_res)
 				goto out;
 		}
 	}
@@ -983,13 +1116,17 @@ poll_sockets(void)
 		 */
 		next_conn = AVL_NEXT(&conns, conn);
 		if (pfds[sock_nr].revents & (POLLIN | POLLOUT)) {
-			if (pfds[sock_nr].revents & POLLIN)
-				(void) handle_conn_input(conn);
-			if (conn->outbuf != NULL &&
-			    (pfds[sock_nr].revents & POLLOUT))
-				(void) handle_conn_output(conn);
 			polls_seen++;
-			if (polls_seen == poll_res)
+			if (pfds[sock_nr].revents & POLLIN) {
+				if (!handle_conn_input(conn))
+					continue;
+			}
+			if (conn->outbuf != NULL &&
+			    (pfds[sock_nr].revents & POLLOUT)) {
+				if (!handle_conn_output(conn))
+					continue;
+			}
+			if (polls_seen >= poll_res)
 				goto out;
 		}
 	}
@@ -1001,10 +1138,12 @@ out:
 static void
 dequeue_msg(queued_msg_t *qmsg)
 {
-	uint64_t bytes = sizeof (*qmsg) + strlen(qmsg->msg) + 1;
+	uint64_t bytes = strlen(qmsg->msg);
 
 	ASSERT3U(queued_msg_bytes, >=, bytes);
 	queued_msg_bytes -= bytes;
+	if (!qmsg->is_atc)
+		msgquota_decr(qmsg->from, bytes);
 	list_remove(&queued_msgs, qmsg);
 	free(qmsg->msg);
 	free(qmsg);
@@ -1160,11 +1299,13 @@ main(int argc, char *argv[])
 
 	while (!do_shutdown) {
 		poll_sockets();
+		complete_logons();
 		handle_queued_msgs();
 		if (blocklist_refresh())
 			close_blocked_conns();
 	}
 
+	msgquota_fini();
 	auth_fini();
 	tls_fini();
 	fini_structs();

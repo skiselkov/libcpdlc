@@ -132,23 +132,23 @@ setup_curl(CURL *curl)
 static void
 parse_auth_response(const char *buf, bool *auth_result, bool *auth_atc)
 {
-	size_t num_lines;
-	char **lines;
+	size_t num_comps;
+	char **comps;
 
 	ASSERT(buf != NULL);
 	ASSERT(auth_result != NULL);
 	ASSERT(auth_atc != NULL);
 
-	lines = strsplit(buf, "\n", true, &num_lines);
+	comps = strsplit(buf, "&", true, &num_comps);
 	*auth_result = false;
 	*auth_atc = false;
 
-	for (size_t i = 0; i < num_lines; i++) {
-		strtolower(lines[i]);
-		if (strncmp(lines[i], "auth: ", 6) == 0) {
-			*auth_result = !!atoi(&lines[i][6]);
-		} else if (strncmp(lines[i], "atc: ", 5) == 0) {
-			*auth_atc = !!atoi(&lines[i][5]);
+	for (size_t i = 0; i < num_comps; i++) {
+		strtolower(comps[i]);
+		if (strncmp(comps[i], "auth=", 5) == 0) {
+			*auth_result = !!atoi(&comps[i][5]);
+		} else if (strncmp(comps[i], "atc=", 4) == 0) {
+			*auth_atc = !!atoi(&comps[i][4]);
 		}
 	}
 }
@@ -161,8 +161,8 @@ auth_worker(void *userinfo)
 	dl_info_t dl_info = { .sess = sess };
 	CURLcode res;
 	long code = 0;
-	struct curl_slist *hdrs =
-	    curl_slist_append(NULL, "Content-Type: text/plain");
+	struct curl_slist *hdrs = curl_slist_append(NULL,
+	    "Content-Type: application/x-www-form-urlencoded");
 
 	ASSERT(sess != NULL);
 	thread_set_name("auth_worker");
@@ -267,15 +267,16 @@ auth_fini(void)
 }
 
 auth_sess_key_t
-auth_sess_open(const cpdlc_msg_t *logon_msg, const struct sockaddr *addr,
+auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
     int addr_family, auth_done_cb_t done_cb, void *userinfo)
 {
 	auth_sess_t *sess;
-	char *logon_data_esc;
-	char from_esc[32], to_esc[32], addrbuf[64];
+	char *tmpstr;
+	char addrbuf[64];
 	size_t cap = 0;
-	int l;
 	uint64_t key;
+	/* temp curl context only used for URL-escaping purposes */
+	CURL *curl;
 
 	ASSERT(logon_msg != NULL);
 	ASSERT(addr != NULL);
@@ -287,54 +288,56 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const struct sockaddr *addr,
 		return (0);
 	}
 
+	curl = curl_easy_init();
+	VERIFY(curl != NULL);
+
 	sess = safe_calloc(1, sizeof (*sess));
 	sess->done_cb = done_cb;
 	sess->userinfo = userinfo;
 
 	ASSERT(cpdlc_msg_get_logon_data(logon_msg) != NULL);
-	l = cpdlc_escape_percent(cpdlc_msg_get_logon_data(logon_msg), NULL, 0);
-	logon_data_esc = safe_malloc(l + 1);
-	cpdlc_escape_percent(cpdlc_msg_get_logon_data(logon_msg),
-	    logon_data_esc, l + 1);
-	append_format(&sess->postdata, &cap, "LogonData: %s\n",
-	    logon_data_esc);
+	tmpstr = curl_easy_escape(curl, cpdlc_msg_get_logon_data(logon_msg), 0);
+	append_format(&sess->postdata, &cap, "LOGON=%s", tmpstr);
+	curl_free(tmpstr);
 
 	ASSERT(cpdlc_msg_get_from(logon_msg) != NULL);
-	cpdlc_escape_percent(cpdlc_msg_get_from(logon_msg), from_esc,
-	    sizeof (from_esc));
-	append_format(&sess->postdata, &cap, "From: %s\n", from_esc);
+	tmpstr = curl_easy_escape(curl, cpdlc_msg_get_from(logon_msg), 0);
+	append_format(&sess->postdata, &cap, "&FROM=%s", tmpstr);
+	curl_free(tmpstr);
 
 	if (cpdlc_msg_get_to(logon_msg) != NULL) {
-		cpdlc_escape_percent(cpdlc_msg_get_from(logon_msg), to_esc,
-		    sizeof (to_esc));
-		append_format(&sess->postdata, &cap, "To: %s\n", to_esc);
+		tmpstr = curl_easy_escape(curl, cpdlc_msg_get_to(logon_msg), 0);
+		append_format(&sess->postdata, &cap, "&TO=%s", tmpstr);
+		curl_free(tmpstr);
 	}
-
 	if (addr_family == AF_INET) {
 		const struct sockaddr_in *addr_v4 =
 		    (const struct sockaddr_in *)addr;
 		inet_ntop(addr_family, &addr_v4->sin_addr, addrbuf,
 		    sizeof (addrbuf));
-		append_format(&sess->postdata, &cap, "RemotePort: %d\n",
+		append_format(&sess->postdata, &cap, "&REMOTEPORT=%d",
 		    ntohs(addr_v4->sin_port));
 	} else {
+		char addrbuf[64];
 		const struct sockaddr_in6 *addr_v6 =
 		    (const struct sockaddr_in6 *)addr;
 		inet_ntop(addr_family, &addr_v6->sin6_addr, addrbuf,
 		    sizeof (addrbuf));
-		append_format(&sess->postdata, &cap, "RemotePort: %d\n",
+		append_format(&sess->postdata, &cap, "&REMOTEPORT=%d",
 		    ntohs(addr_v6->sin6_port));
 	}
-	append_format(&sess->postdata, &cap, "RemoteAddr: %s", addrbuf);
+	tmpstr = curl_easy_escape(curl, addrbuf, 0);
+	append_format(&sess->postdata, &cap, "&REMOTEADDR=%s", tmpstr);
+	curl_free(tmpstr);
 
 	mutex_enter(&lock);
 	key = sess->key = next_sess_key++;
 	avl_add(&sessions, sess);
 	VERIFY(thread_create(&sess->thread, auth_worker, sess));
 	mutex_exit(&lock);
-	/* Mustn't touch `sess' after this! */
+	/* Mustn't touch `sess' after this! done_cb might have fired now. */
 
-	free(logon_data_esc);
+	curl_easy_cleanup(curl);
 
 	return (key);
 }

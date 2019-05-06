@@ -23,19 +23,24 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_CPDLCD_COMMON_H_
-#define	_CPDLCD_COMMON_H_
+#ifndef	_CPDLCD_MSGQUOTA_H_
+#define	_CPDLCD_MSGQUOTA_H_
+
+#include <stdbool.h>
+#include <stdint.h>
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-#define	CALLSIGN_LEN	16
-#define	MAX_ADDR_LEN	\
-	MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in))
+void msgquota_init(uint64_t max_bytes);
+void msgquota_fini(void);
+
+bool msgquota_incr(const char *callsign, uint64_t bytes);
+void msgquota_decr(const char *callsign, uint64_t bytes);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _CPDLCD_COMMON_H_ */
+#endif	/* _CPDLCD_MSGQUOTA_H_ */
