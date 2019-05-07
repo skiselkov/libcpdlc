@@ -193,15 +193,14 @@ auth_worker(void *userinfo)
 			    &auth_result, &auth_atc);
 		} else {
 			if (res != CURLE_OK) {
-				fprintf(stderr, "Error querying authenticator "
-				    "%s: %s\n", auth_url,
-				    curl_easy_strerror(res));
+				logMsg("Error querying authenticator %s: "
+				    "%s", auth_url, curl_easy_strerror(res));
 			} else if (dl_info.bufsz == 0) {
-				fprintf(stderr, "Error querying authenticator "
-				    "%s: no data in response\n", auth_url);
+				logMsg("Error querying authenticator %s: "
+				    "no data in response", auth_url);
 			} else {
-				fprintf(stderr, "Error querying authenticator "
-				    "%s: HTTP error %ld\n", auth_url, code);
+				logMsg("Error querying authenticator %s: "
+				    "HTTP error %ld", auth_url, code);
 			}
 		}
 		ASSERT(sess->done_cb != NULL);

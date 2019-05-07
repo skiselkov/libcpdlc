@@ -23,6 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -160,6 +161,7 @@ static gnutls_priority_t		prio_cache;
 static bool		background = true;
 static bool		do_shutdown = false;
 static int		default_port = 17622;
+static bool		req_client_cert = false;
 
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
     const char *fmt, ...);
@@ -300,9 +302,8 @@ add_listen_sock(const char *name_port)
 		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
 		if (sscanf(&colon[1], "%d", &port) != 1 ||
 		    port <= 0 || port > UINT16_MAX) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "expected valid port number after ':' character\n",
-			    name_port);
+			logMsg("Invalid listen directive \"%s\": expected "
+			    "valid port number after ':' character", name_port);
 			return (false);
 		}
 	} else {
@@ -312,8 +313,8 @@ add_listen_sock(const char *name_port)
 
 	error = getaddrinfo(hostname, portbuf, &hints, &ai_full);
 	if (error != 0) {
-		fprintf(stderr, "Invalid listen directive \"%s\": %s\n",
-		    name_port, gai_strerror(error));
+		logMsg("Invalid listen directive \"%s\": %s", name_port,
+		    gai_strerror(error));
 		return (false);
 	}
 
@@ -332,9 +333,8 @@ add_listen_sock(const char *name_port)
 
 		old_ls = avl_find(&listen_socks, ls, &where);
 		if (old_ls != NULL) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "address already used on another socket\n",
-			    name_port);
+			logMsg("Invalid listen directive \"%s\": address "
+			    "already used on another socket", name_port);
 			free(ls);
 			goto errout;
 		}
@@ -343,29 +343,26 @@ add_listen_sock(const char *name_port)
 		ls->fd = socket(ai->ai_family, ai->ai_socktype,
 		    ai->ai_protocol);
 		if (ls->fd == -1) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "cannot create socket: %s\n", name_port,
-			    strerror(errno));
+			logMsg("Invalid listen directive \"%s\": cannot "
+			    "create socket: %s", name_port, strerror(errno));
 			goto errout;
 		}
 		setsockopt(ls->fd, SOL_SOCKET, SO_REUSEADDR, &one,
 		    sizeof (one));
 		if (bind(ls->fd, ai->ai_addr, ai->ai_addrlen) == -1) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "cannot bind socket: %s\n", name_port,
-			    strerror(errno));
+			logMsg("Invalid listen directive \"%s\": cannot bind "
+			    "socket: %s", name_port, strerror(errno));
 			goto errout;
 		}
 		if (listen(ls->fd, CONN_BACKLOG) == -1) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "cannot listen on socket: %s\n", name_port,
-			    strerror(errno));
+			logMsg("Invalid listen directive \"%s\": cannot "
+			    "listen on socket: %s", name_port, strerror(errno));
 			goto errout;
 		}
 		if (!set_fd_nonblock(ls->fd)) {
-			fprintf(stderr, "Invalid listen directive \"%s\": "
-			    "cannot set socket as non-blocking: %s\n",
-			    name_port, strerror(errno));
+			logMsg("Invalid listen directive \"%s\": cannot set "
+			    "socket as non-blocking: %s", name_port,
+			    strerror(errno));
 			goto errout;
 		}
 	}
@@ -396,6 +393,32 @@ str2encflags(const char *value)
 	return (GNUTLS_PKCS_PLAIN);
 }
 
+/*
+ * Parses a numerical byte-count specification with an optional multiplier
+ * suffix and returns the raw number of bytes. For example, '128k' returns
+ * 131072, '2g' returns 2147483648, etc.
+ */
+static uint64_t
+parse_bytes(const char *str)
+{
+	uint64_t value;
+	const char *mult = "kmgtep";
+	char c;
+
+	ASSERT(str != NULL);
+	ASSERT(strlen(str) != 0);
+	value = atoll(str);
+	c = tolower(str[strlen(str) - 1]);
+	for (int i = 0, n = strlen(mult); i < n; i++) {
+		if (c == mult[i]) {
+			value <<= (i + 1) * 10;
+			break;
+		}
+	}
+
+	return (value);
+}
+
 static bool
 parse_config(const char *conf_path)
 {
@@ -408,13 +431,10 @@ parse_config(const char *conf_path)
 	const char *auth_username = NULL, *auth_password = NULL;
 
 	if (conf == NULL) {
-		if (errline == -1) {
-			fprintf(stderr, "Can't open %s: %s\n", conf_path,
-			    strerror(errno));
-		} else {
-			fprintf(stderr, "%s: parsing error on %d\n",
-			    conf_path, errline);
-		}
+		if (errline == -1)
+			logMsg("Can't open %s: %s", conf_path, strerror(errno));
+		else
+			logMsg("%s: parsing error on %d", conf_path, errline);
 		return (false);
 	}
 
@@ -423,43 +443,47 @@ parse_config(const char *conf_path)
 		if (strncmp(key, "listen/", 7) == 0) {
 			if (!add_listen_sock(value))
 				goto errout;
-		} else if (strcmp(key, "tls_keyfile") == 0) {
-			lacf_strlcpy(tls_keyfile, value, sizeof (tls_keyfile));
-		} else if (strcmp(key, "tls_certfile") == 0) {
-			lacf_strlcpy(tls_certfile, value, sizeof (tls_certfile));
-		} else if (strcmp(key, "tls_cafile") == 0) {
-			lacf_strlcpy(tls_cafile, value, sizeof (tls_cafile));
-		} else if (strcmp(key, "tls_crlfile") == 0) {
-			lacf_strlcpy(tls_crlfile, value, sizeof (tls_crlfile));
-		} else if (strcmp(key, "tls_keyfile_pass") == 0) {
-			lacf_strlcpy(tls_keyfile_pass, value,
-			    sizeof (tls_keyfile_pass));
-			if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN)
-				tls_keyfile_enctype = GNUTLS_PKCS_PBES2_AES_256;
-		} else if (strcmp(key, "tls_keyfile_enctype") == 0) {
-			tls_keyfile_enctype = str2encflags(value);
-			if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN) {
-				fprintf(stderr, "Unsupported value for "
-				    "tls_keyfile_enctype (%s). Must be one "
-				    "of: \"3DES\", \"RC3\", \"AES128\", "
-				    "\"AES192\", \"AES256\" or "
-				    "\"PKCS12/3DES\".\n", value);
-				goto errout;
-			}
-		} else if (strcmp(key, "blocklist") == 0) {
-			blocklist_set_filename(value);
-		} else if (strcmp(key, "auth/url") == 0) {
-			auth_url = value;
-		} else if (strcmp(key, "auth/cainfo") == 0) {
-			auth_cainfo = value;
-		} else if (strcmp(key, "auth/username") == 0) {
-			auth_username = value;
-		} else if (strcmp(key, "auth/password") == 0) {
-			auth_password = value;
-		} else if (strcmp(key, "msgquota") == 0) {
-			msgquota_max = atoi(value);
 		}
 	}
+	if (conf_get_str(conf, "tls/keyfile", &value))
+		lacf_strlcpy(tls_keyfile, value, sizeof (tls_keyfile));
+	if (conf_get_str(conf, "tls/keyfile_pass", &value)) {
+		lacf_strlcpy(tls_keyfile_pass, value,
+		    sizeof (tls_keyfile_pass));
+		if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN)
+			tls_keyfile_enctype = GNUTLS_PKCS_PBES2_AES_256;
+	}
+	if (conf_get_str(conf, "tls/keyfile_enctype", &value)) {
+		tls_keyfile_enctype = str2encflags(value);
+		if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN) {
+			logMsg("Unsupported value for tls_keyfile_enctype "
+			    "(%s). Must be one of: \"3DES\", \"RC3\", "
+			    "\"AES128\", \"AES192\", \"AES256\" or "
+			    "\"PKCS12/3DES\".", value);
+			goto errout;
+		}
+	}
+	if (conf_get_str(conf, "tls/certfile", &value))
+		lacf_strlcpy(tls_certfile, value, sizeof (tls_certfile));
+	if (conf_get_str(conf, "tls/cafile", &value))
+		lacf_strlcpy(tls_cafile, value, sizeof (tls_cafile));
+	if (conf_get_str(conf, "tls/crlfile", &value))
+		lacf_strlcpy(tls_crlfile, value, sizeof (tls_crlfile));
+	conf_get_b(conf, "tls/req_client_cert", (bool_t *)&req_client_cert);
+	if (conf_get_str(conf, "blocklist", &value))
+		blocklist_set_filename(value);
+	if (conf_get_str(conf, "auth/url", &value))
+		auth_url = value;
+	if (conf_get_str(conf, "auth/cainfo", &value))
+		auth_cainfo = value;
+	if (conf_get_str(conf, "auth/username", &value))
+		auth_username = value;
+	if (conf_get_str(conf, "auth/password", &value))
+		auth_password = value;
+	if (conf_get_str(conf, "msgqueue/quota", &value))
+		msgquota_max = parse_bytes(value);
+	if (conf_get_str(conf, "msgqueue/max", &value))
+		queued_msg_max_bytes = parse_bytes(value);
 
 	if (avl_numnodes(&listen_socks) == 0 && !add_listen_sock("localhost"))
 		goto errout;
@@ -525,8 +549,8 @@ handle_accepts(listen_sock_t *ls)
 		if (conn->fd == -1) {
 			free(conn);
 			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				fprintf(stderr, "Error accepting connection: "
-				    "%s", strerror(errno));
+				logMsg("Error accepting connection: %s",
+				    strerror(errno));
 				continue;
 			} else {
 				break;
@@ -534,8 +558,8 @@ handle_accepts(listen_sock_t *ls)
 		}
 		if (!blocklist_check(conn->addr, conn->addr_len,
 		    conn->addr_family)) {
-			fprintf(stderr, "Incoming connection blocked: "
-			    "address on blocklist.\n");
+			logMsg("Incoming connection blocked: address on "
+			    "blocklist.");
 			close(conn->fd);
 			free(conn);
 			continue;
@@ -544,8 +568,8 @@ handle_accepts(listen_sock_t *ls)
 		set_fd_nonblock(conn->fd);
 		old_conn = avl_find(&conns, conn, &where);
 		if (old_conn != NULL) {
-			fprintf(stderr, "Error accepting connection: "
-			    "duplicate connection encountered?!");
+			logMsg("Error accepting connection: duplicate "
+			    "connection encountered?!");
 			close(conn->fd);
 			free(conn);
 			continue;
@@ -557,7 +581,7 @@ handle_accepts(listen_sock_t *ls)
 		VERIFY0(gnutls_credentials_set(conn->session,
 		    GNUTLS_CRD_CERTIFICATE, x509_creds));
 		gnutls_certificate_server_set_request(conn->session,
-		    GNUTLS_CERT_IGNORE);
+		    req_client_cert ? GNUTLS_CERT_REQUIRE : GNUTLS_CERT_IGNORE);
 		gnutls_handshake_set_timeout(conn->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
 		gnutls_transport_set_int(conn->session, conn->fd);
@@ -831,9 +855,10 @@ store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
 	ASSERT(to != NULL);
 	ASSERT(cpdlc_msg_get_from(msg) != NULL);
 
-	if (queued_msg_bytes + bytes > queued_msg_max_bytes) {
-		fprintf(stderr, "Cannot queue message, global message queue "
-		    "is completely out of space (%lld bytes)",
+	if (queued_msg_max_bytes != 0 &&
+	    queued_msg_bytes + bytes > queued_msg_max_bytes) {
+		logMsg("Cannot queue message, global message queue is "
+		    "completely out of space (%lld bytes)",
 		    (long long)queued_msg_max_bytes);
 		return (false);
 	}
@@ -937,7 +962,7 @@ conn_process_input(conn_t *conn)
 		if (!cpdlc_msg_decode(
 		    (const char *)&conn->inbuf[consumed_total], &msg,
 		    &consumed)) {
-			fprintf(stderr, "Error decoding message from client\n");
+			logMsg("Error decoding message from client");
 			return (false);
 		}
 		/* No more complete messages pending? */
@@ -965,6 +990,25 @@ conn_process_input(conn_t *conn)
 }
 
 static bool
+tls_verify_peer(conn_t *conn)
+{
+	unsigned int status;
+	int error = gnutls_certificate_verify_peers2(conn->session, &status);
+
+	if (error != GNUTLS_E_SUCCESS) {
+		logMsg("TLS handshake error: error validating client "
+		    "certificate: %s\n", gnutls_strerror(error));
+		return (false);
+	}
+	if (status != 0) {
+		logMsg("TLS handshake error: client certificate "
+		    "failed validation with status 0x%x", status);
+		return (false);
+	}
+	return (true);
+}
+
+static bool
 handle_conn_input(conn_t *conn)
 {
 	for (;;) {
@@ -981,8 +1025,12 @@ handle_conn_input(conn_t *conn)
 					/* Need more data */
 					return (true);
 				}
-				fprintf(stderr, "TLS handshake error: %s\n",
+				logMsg("TLS handshake error: %s",
 				    gnutls_strerror(error));
+				close_conn(conn);
+				return (false);
+			}
+			if (req_client_cert && !tls_verify_peer(conn)) {
 				close_conn(conn);
 				return (false);
 			}
@@ -997,12 +1045,11 @@ handle_conn_input(conn_t *conn)
 			if (bytes == GNUTLS_E_AGAIN)
 				return (true);
 			if (!gnutls_error_is_fatal(bytes)) {
-				fprintf(stderr, "Soft read error on "
-				    "connection, can retry: %s\n",
-				    gnutls_strerror(bytes));
+				logMsg("Soft read error on connection, can "
+				    "retry: %s", gnutls_strerror(bytes));
 				continue;
 			}
-			fprintf(stderr, "Fatal read error on connection: %s\n",
+			logMsg("Fatal read error on connection: %s",
 			    gnutls_strerror(bytes));
 			close_conn(conn);
 			return (false);
@@ -1015,15 +1062,15 @@ handle_conn_input(conn_t *conn)
 		for (ssize_t i = 0; i < bytes; i++) {
 			/* Input sanitization, don't allow control chars */
 			if (buf[i] == 0 || buf[i] > 127) {
-				fprintf(stderr, "Invalid input character on "
-				    "connection: data MUST be plain text\n");
+				logMsg("Invalid input character on "
+				    "connection: data MUST be plain text");
 				close_conn(conn);
 				return (false);
 			}
 		}
 		if (conn->inbuf_sz + bytes > max_inbuf_sz) {
-			fprintf(stderr, "Input buffer overflow on connection: "
-			    "wanted %d bytes, max %d bytes\n",
+			logMsg("Input buffer overflow on connection: received "
+			    "%d bytes, maximum allowable is %d bytes",
 			    (int)(conn->inbuf_sz + bytes), (int)max_inbuf_sz);
 			close_conn(conn);
 			return (false);
@@ -1057,13 +1104,13 @@ handle_conn_output(conn_t *conn)
 	if (bytes < 0) {
 		if (bytes != GNUTLS_E_AGAIN) {
 			if (gnutls_error_is_fatal(bytes)) {
-				fprintf(stderr, "Fatal send error on "
-				    "connection: %s\n", gnutls_strerror(bytes));
+				logMsg("Fatal send error on connection: %s",
+				    gnutls_strerror(bytes));
 				mutex_exit(&conn->lock);
 				close_conn(conn);
 				return (false);
 			}
-			fprintf(stderr, "Soft send error on connection: %s\n",
+			logMsg("Soft send error on connection: %s",
 			    gnutls_strerror(bytes));
 		}
 	} else if (bytes > 0) {
@@ -1114,10 +1161,8 @@ poll_sockets(void)
 
 	poll_res = poll(pfds, num_pfds, POLL_TIMEOUT);
 	if (poll_res == -1) {
-		if (errno != EINTR) {
-			fprintf(stderr, "Error polling on sockets: %s\n",
-			    strerror(errno));
-		}
+		if (errno != EINTR)
+			logMsg("Error polling on sockets: %s", strerror(errno));
 		free(pfds);
 		return;
 	}
@@ -1240,22 +1285,22 @@ close_blocked_conns(void)
 static bool
 tls_init(void)
 {
-#define	CHECKFILE(__filename) \
+#define	CHECKFILE(__filename, __kind) \
 	do { \
-		struct stat st; \
-		if (stat((__filename), &st) != 0) { \
-			fprintf(stderr, "Can't stat %s: %s\n", \
-			    (__filename), strerror(errno)); \
+		FILE *fp = fopen((__filename), "r"); \
+		if (fp == NULL) { \
+			logMsg("cannot open " __kind " file "\
+			    "%s: %s\n", (__filename), strerror(errno)); \
 			gnutls_global_deinit(); \
 			return (false); \
 		} \
+		fclose(fp); \
 	} while (0)
 #define	TLSCHECK(op) \
 	do { \
 		int error = (op); \
 		if (error != GNUTLS_E_SUCCESS) { \
-			fprintf(stderr, #op " failed: %s\n", \
-			    gnutls_strerror(error)); \
+			logMsg(#op " failed: %s", gnutls_strerror(error)); \
 			gnutls_global_deinit(); \
 			return (false); \
 		} \
@@ -1264,16 +1309,17 @@ tls_init(void)
 	TLSCHECK(gnutls_global_init());
 	TLSCHECK(gnutls_certificate_allocate_credentials(&x509_creds));
 	if (tls_cafile[0] != '\0') {
-		CHECKFILE(tls_cafile);
+		CHECKFILE(tls_cafile, "CA");
 		TLSCHECK(gnutls_certificate_set_x509_trust_file(x509_creds,
 		    tls_cafile, GNUTLS_X509_FMT_PEM));
 	}
 	if (tls_crlfile[0] != '\0') {
+		CHECKFILE(tls_crlfile, "CRL");
 		TLSCHECK(gnutls_certificate_set_x509_crl_file(x509_creds,
 		    tls_crlfile, GNUTLS_X509_FMT_PEM));
 	}
-	CHECKFILE(tls_keyfile);
-	CHECKFILE(tls_certfile);
+	CHECKFILE(tls_keyfile, "private key");
+	CHECKFILE(tls_certfile, "certificate");
 	TLSCHECK(gnutls_certificate_set_x509_key_file2(x509_creds,
 	    tls_certfile, tls_keyfile, GNUTLS_X509_FMT_PEM,
 	    tls_keyfile_pass, tls_keyfile_enctype));
@@ -1324,8 +1370,8 @@ main(int argc, char *argv[])
 		case 'p':
 			default_port = atoi(optarg);
 			if (default_port <= 0 || default_port > UINT16_MAX) {
-				fprintf(stderr, "Invalid port number, must be "
-				    "an integer between 0 and %d", UINT16_MAX);
+				logMsg("Invalid port number, must be an "
+				    "integer between 0 and %d", UINT16_MAX);
 				return (1);
 			}
 			break;

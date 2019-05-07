@@ -106,7 +106,7 @@ blocklist_refresh_impl(void)
 	/* Blocklist updated, refresh */
 	fp = fopen(filename, "r");
 	if (fp == NULL) {
-		fprintf(stderr, "Error refreshing blocklist: open failed: %s\n",
+		logMsg("Error refreshing blocklist: open failed: %s",
 		    strerror(errno));
 		return (false);
 	}
@@ -141,8 +141,8 @@ blocklist_refresh_impl(void)
 		 */
 		error = getaddrinfo(buf, NULL, &hints, &ai_full);
 		if (error != 0) {
-			fprintf(stderr, "Cannot resolve blocklist entry %s: "
-			    "%s\n", buf, gai_strerror(error));
+			logMsg("Cannot resolve blocklist entry %s: %s",
+			    buf, gai_strerror(error));
 			continue;
 		}
 		for (const struct addrinfo *ai = ai_full; ai != NULL;
@@ -158,8 +158,7 @@ blocklist_refresh_impl(void)
 			ba->addr_family = ai->ai_family;
 
 			if (avl_find(&tree, ba, &where) != NULL) {
-				fprintf(stderr, "Duplicate blocklist entry: "
-				    "%s\n", buf);
+				logMsg("Duplicate blocklist entry: %s", buf);
 				free(ba);
 				break;
 			}
@@ -180,8 +179,8 @@ blocklist_refresh(void)
 	if (filename[0] == '\0')
 		return (false);
 	if (stat(filename, &st) != 0) {
-		fprintf(stderr, "Error refreshing blocklist: stat failed: "
-		    "%s\n", strerror(errno));
+		logMsg("Error refreshing blocklist %s: stat failed: %s",
+		    filename, strerror(errno));
 		return (false);
 	}
 	if (st.st_mtime == update_time) {
