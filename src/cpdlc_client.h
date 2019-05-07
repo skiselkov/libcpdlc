@@ -26,6 +26,8 @@
 #ifndef	_LIBCPDLC_CLIENT_H_
 #define	_LIBCPDLC_CLIENT_H_
 
+#include <gnutls/gnutls.h>
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -47,8 +49,10 @@ typedef enum {
 
 typedef struct cpdlc_client_s cpdlc_client_t;
 
-cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
-    int server_port, const char *cafile, bool is_atc);
+cpdlc_client_t *cpdlc_client_init(const char *server_hostname, int server_port,
+    const char *cafile, const char *keyfile, const char *keyfile_pass,
+    gnutls_pkcs_encrypt_flags_t keyfile_enctype, const char *certfile,
+    bool is_atc);
 void cpdlc_client_fini(cpdlc_client *cl);
 
 void cpdlc_client_set_logon_data(cpdlc_client_t *cl, const char *logon_data,

@@ -457,7 +457,7 @@ parse_config(const char *conf_path)
 		tls_keyfile_enctype = str2encflags(value);
 		if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN) {
 			logMsg("Unsupported value for tls_keyfile_enctype "
-			    "(%s). Must be one of: \"3DES\", \"RC3\", "
+			    "(%s). Must be one of: \"3DES\", \"RC4\", "
 			    "\"AES128\", \"AES192\", \"AES256\" or "
 			    "\"PKCS12/3DES\".", value);
 			goto errout;
@@ -1296,41 +1296,41 @@ tls_init(void)
 		} \
 		fclose(fp); \
 	} while (0)
-#define	TLSCHECK(op) \
+#define	TLS_CHK(op) \
 	do { \
 		int error = (op); \
-		if (error != GNUTLS_E_SUCCESS) { \
+		if (error < GNUTLS_E_SUCCESS) { \
 			logMsg(#op " failed: %s", gnutls_strerror(error)); \
 			gnutls_global_deinit(); \
 			return (false); \
 		} \
 	} while (0)
 
-	TLSCHECK(gnutls_global_init());
-	TLSCHECK(gnutls_certificate_allocate_credentials(&x509_creds));
+	TLS_CHK(gnutls_global_init());
+	TLS_CHK(gnutls_certificate_allocate_credentials(&x509_creds));
 	if (tls_cafile[0] != '\0') {
 		CHECKFILE(tls_cafile, "CA");
-		TLSCHECK(gnutls_certificate_set_x509_trust_file(x509_creds,
+		TLS_CHK(gnutls_certificate_set_x509_trust_file(x509_creds,
 		    tls_cafile, GNUTLS_X509_FMT_PEM));
 	}
 	if (tls_crlfile[0] != '\0') {
 		CHECKFILE(tls_crlfile, "CRL");
-		TLSCHECK(gnutls_certificate_set_x509_crl_file(x509_creds,
+		TLS_CHK(gnutls_certificate_set_x509_crl_file(x509_creds,
 		    tls_crlfile, GNUTLS_X509_FMT_PEM));
 	}
 	CHECKFILE(tls_keyfile, "private key");
 	CHECKFILE(tls_certfile, "certificate");
-	TLSCHECK(gnutls_certificate_set_x509_key_file2(x509_creds,
+	TLS_CHK(gnutls_certificate_set_x509_key_file2(x509_creds,
 	    tls_certfile, tls_keyfile, GNUTLS_X509_FMT_PEM,
 	    tls_keyfile_pass, tls_keyfile_enctype));
-        TLSCHECK(gnutls_priority_init(&prio_cache, NULL, NULL));
+        TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
 #if	GNUTLS_VERSION_NUMBER >= 0x030506
 	gnutls_certificate_set_known_dh_params(x509_creds,
 	    GNUTLS_SEC_PARAM_HIGH);
 #endif	/* GNUTLS_VERSION_NUMBER */
 
 	return (true);
-#undef	TLSCHECK
+#undef	TLS_CHK
 #undef	CHECKFILE
 }
 

@@ -44,9 +44,14 @@
 
 struct cpdlc_client_s {
 	char	server_hostname[PATH_MAX];
-	char	cafile[PATH_MAX];
 	int	server_port;
 	bool	is_atc;
+
+	char				*cafile;
+	char				*keyfile;
+	char				*keyfile_pass;
+	gnutls_pkcs_encrypt_flags_t	keyfile_enctype;
+	char				*certfile;
 
 	cpdlc_client_logon_status_t		logon_status;
 	gnutls_session_t			session;
@@ -73,7 +78,9 @@ set_fd_nonblock(int fd)
 
 cpdlc_client_t *
 cpdlc_client_init(const char *server_hostname, int server_port,
-    const char *cafile, bool is_atc)
+    const char *cafile, const char *keyfile, const char *keyfile_pass,
+    gnutls_pkcs_encrypt_flags_t keyfile_enctype, const char *certfile,
+    bool is_atc)
 {
 	cpdlc_client_t *cl = safe_calloc(1, sizeof (*cl));
 
@@ -84,7 +91,14 @@ cpdlc_client_init(const char *server_hostname, int server_port,
 	cpdlc_strlcpy(cl->server_hostname, server_hostname,
 	    sizeof (cl->server_hostname));
 	if (cafile != NULL)
-		cpdlc_strlcpy(cl->cafile, cafile, sizeof (cl->cafile));
+		cl->cafile = strdup(cafile);
+	if (keyfile != NULL)
+		cl->keyfile = strdup(keyfile);
+	if (keyfile_pass != NULL)
+		cl->keyfile_pass = strdup(keyfile_pass);
+	cl->keyfile_enctype = keyfile_enctype;
+	if (certfile != NULL)
+		cl->certfile = strdup(certfile);
 	cl->server_port = server_port;
 	cl->is_atc = is_atc;
 
@@ -99,6 +113,12 @@ cpdlc_client_fini(cpdlc_client *cl)
 	ASSERT(cl != NULL);
 
 	reset_logon(cl);
+
+	free(cl->cafile);
+	free(cl->keyfile);
+	free(cl->keyfile_pass);
+	free(cl->certfile);
+
 	free(cl->logon.data);
 	free(cl->logon.from);
 	free(cl->logon.to);
@@ -145,10 +165,10 @@ reset_logon(cpdlc_client_t *cl)
 static bool
 do_handshake(cpdlc_client_t *cl)
 {
-#define	GNUTLS_TRY(op) \
+#define	TLS_CHK(op) \
 	do { \
 		int error = (op); \
-		if (error != GNUTLS_E_SUCCESS) { \
+		if (error < GNUTLS_E_SUCCESS) { \
 			fprintf(stderr, "GnuTLS error performing " #op \
 			    ": %s\n", gnutls_strerror(error)); \
 			reset_logon(cl); \
@@ -162,19 +182,24 @@ do_handshake(cpdlc_client_t *cl)
 	ASSERT3U(cl->logon_state, ==, CPDLC_LOGON_HANDSHAKING_LINK);
 
 	if (cl->session == NULL) {
-		GNUTLS_TRY(gnutls_certificate_allocate_credentials(&cl->xcred));
-		if (cl->cafile[0] == '\0') {
-			GNUTLS_TRY(gnutls_certificate_set_x509_system_trust(
-			    cl->xcred));
-		} else {
-			GNUTLS_TRY(gnutls_certificate_set_x509_trust_file(
-			    cl->xcred, cl->cafile, GNUTLS_X509_FMT_PEM));
+		TLS_CHK(gnutls_certificate_allocate_credentials(&cl->xcred));
+		if (cl->keyfile != NULL && cl->certfile != NULL) {
+			TLS_CHK(gnutls_certificate_set_x509_key_file2(cl->xcred,
+			    cl->certfile, cl->keyfile, GNUTLS_X509_FMT_PEM,
+			    cl->keyfile_pass, cl->keyfile_enctype));
 		}
-		GNUTLS_TRY(gnutls_init(&cl->session, GNUTLS_CLIENT));
-		GNUTLS_TRY(gnutls_server_name_set(session, GNUTLS_NAME_DNS,
+		if (cl->cafile != NULL) {
+			TLS_CHK(gnutls_certificate_set_x509_trust_file(
+			    cl->xcred, cl->cafile, GNUTLS_X509_FMT_PEM));
+		} else {
+			TLS_CHK(gnutls_certificate_set_x509_system_trust(
+			    cl->xcred));
+		}
+		TLS_CHK(gnutls_init(&cl->session, GNUTLS_CLIENT));
+		TLS_CHK(gnutls_server_name_set(session, GNUTLS_NAME_DNS,
 		    cl->server_hostname, strlen(cl->server_hostname)));
-		GNUTLS_TRY(gnutls_set_default_priority(session));
-		GNUTLS_TRY(gnutls_credentials_set(cl->session,
+		TLS_CHK(gnutls_set_default_priority(session));
+		TLS_CHK(gnutls_credentials_set(cl->session,
 		    GNUTLS_CRD_CERTIFICATE, cl->xcred));
 		gnutls_session_set_verify_cert(session, cl->server_hostname, 0);
 		ASSERT(cl->sock != -1);
@@ -189,7 +214,7 @@ do_handshake(cpdlc_client_t *cl)
 			return (true);
 	}
 
-#undef	GNUTLS_TRY
+#undef	TLS_CHK
 }
 
 static bool
