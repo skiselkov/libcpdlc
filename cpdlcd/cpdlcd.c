@@ -43,7 +43,9 @@
 #include <sys/socket.h>
 
 #include <curl/curl.h>
+
 #include <gnutls/gnutls.h>
+#include <gnutls/x509.h>
 
 #include <acfutils/avl.h>
 #include <acfutils/conf.h>
@@ -141,9 +143,12 @@ static avl_tree_t	listen_socks;
  */
 static int		poll_wakeup_pipe[2] = { -1, -1 };
 
-static char		keyfile[PATH_MAX] = { 0 };
-static char		certfile[PATH_MAX] = { 0 };
-static char		cafile[PATH_MAX] = { 0 };
+static char		tls_keyfile[PATH_MAX] = { 0 };
+static char		tls_certfile[PATH_MAX] = { 0 };
+static char		tls_cafile[PATH_MAX] = { 0 };
+static char		tls_crlfile[PATH_MAX] = { 0 };
+static char		tls_keyfile_pass[PATH_MAX] = { 0 };
+static gnutls_pkcs_encrypt_flags_t tls_keyfile_enctype = GNUTLS_PKCS_PLAIN;
 
 static list_t		queued_msgs;
 static uint64_t		queued_msg_bytes = 0;
@@ -285,6 +290,11 @@ add_listen_sock(const char *name_port)
 	struct addrinfo *ai_full = NULL;
 	char portbuf[8];
 	int error;
+	struct addrinfo hints = {
+	    .ai_family = AF_UNSPEC,
+	    .ai_socktype = SOCK_STREAM,
+	    .ai_protocol = IPPROTO_TCP
+	};
 
 	if (colon != NULL) {
 		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
@@ -300,7 +310,7 @@ add_listen_sock(const char *name_port)
 	}
 	snprintf(portbuf, sizeof (portbuf), "%d", port);
 
-	error = getaddrinfo(hostname, portbuf, NULL, &ai_full);
+	error = getaddrinfo(hostname, portbuf, &hints, &ai_full);
 	if (error != 0) {
 		fprintf(stderr, "Invalid listen directive \"%s\": %s\n",
 		    name_port, gai_strerror(error));
@@ -313,9 +323,7 @@ add_listen_sock(const char *name_port)
 		avl_index_t where;
 		unsigned int one = 1;
 
-		if (ai->ai_protocol != IPPROTO_TCP)
-			continue;
-
+		ASSERT3U(ai->ai_protocol, ==, IPPROTO_TCP);
 		ls = safe_calloc(1, sizeof (*ls));
 		ASSERT3U(ai->ai_addrlen, <=, sizeof (ls->addr));
 		memcpy(ls->addr, ai->ai_addr, ai->ai_addrlen);
@@ -370,6 +378,24 @@ errout:
 	return (false);
 }
 
+static gnutls_pkcs_encrypt_flags_t
+str2encflags(const char *value)
+{
+	if (strcmp(value, "3DES") == 0)
+		return (GNUTLS_PKCS_PBES2_3DES);
+	if (strcmp(value, "RC4") == 0)
+		return (GNUTLS_PKCS_PKCS12_ARCFOUR);
+	if (strcmp(value, "AES128") == 0)
+		return (GNUTLS_PKCS_PBES2_AES_128);
+	if (strcmp(value, "AES192") == 0)
+		return (GNUTLS_PKCS_PBES2_AES_192);
+	if (strcmp(value, "AES256") == 0)
+		return (GNUTLS_PKCS_PBES2_AES_256);
+	if (strcmp(value, "PCKS12/3DES") == 0)
+		return (GNUTLS_PKCS_PKCS12_3DES);
+	return (GNUTLS_PKCS_PLAIN);
+}
+
 static bool
 parse_config(const char *conf_path)
 {
@@ -397,12 +423,29 @@ parse_config(const char *conf_path)
 		if (strncmp(key, "listen/", 7) == 0) {
 			if (!add_listen_sock(value))
 				goto errout;
-		} else if (strcmp(key, "keyfile") == 0) {
-			lacf_strlcpy(keyfile, value, sizeof (keyfile));
-		} else if (strcmp(key, "certfile") == 0) {
-			lacf_strlcpy(certfile, value, sizeof (certfile));
-		} else if (strcmp(key, "cafile") == 0) {
-			lacf_strlcpy(cafile, value, sizeof (cafile));
+		} else if (strcmp(key, "tls_keyfile") == 0) {
+			lacf_strlcpy(tls_keyfile, value, sizeof (tls_keyfile));
+		} else if (strcmp(key, "tls_certfile") == 0) {
+			lacf_strlcpy(tls_certfile, value, sizeof (tls_certfile));
+		} else if (strcmp(key, "tls_cafile") == 0) {
+			lacf_strlcpy(tls_cafile, value, sizeof (tls_cafile));
+		} else if (strcmp(key, "tls_crlfile") == 0) {
+			lacf_strlcpy(tls_crlfile, value, sizeof (tls_crlfile));
+		} else if (strcmp(key, "tls_keyfile_pass") == 0) {
+			lacf_strlcpy(tls_keyfile_pass, value,
+			    sizeof (tls_keyfile_pass));
+			if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN)
+				tls_keyfile_enctype = GNUTLS_PKCS_PBES2_AES_256;
+		} else if (strcmp(key, "tls_keyfile_enctype") == 0) {
+			tls_keyfile_enctype = str2encflags(value);
+			if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN) {
+				fprintf(stderr, "Unsupported value for "
+				    "tls_keyfile_enctype (%s). Must be one "
+				    "of: \"3DES\", \"RC3\", \"AES128\", "
+				    "\"AES192\", \"AES256\" or "
+				    "\"PKCS12/3DES\".\n", value);
+				goto errout;
+			}
 		} else if (strcmp(key, "blocklist") == 0) {
 			blocklist_set_filename(value);
 		} else if (strcmp(key, "auth/url") == 0) {
@@ -1207,7 +1250,7 @@ tls_init(void)
 			return (false); \
 		} \
 	} while (0)
-#define	CHECK(op) \
+#define	TLSCHECK(op) \
 	do { \
 		int error = (op); \
 		if (error != GNUTLS_E_SUCCESS) { \
@@ -1218,25 +1261,30 @@ tls_init(void)
 		} \
 	} while (0)
 
-	CHECK(gnutls_global_init());
-	CHECK(gnutls_certificate_allocate_credentials(&x509_creds));
-	if (cafile[0] != '\0') {
-		CHECKFILE(cafile);
-		CHECK(gnutls_certificate_set_x509_trust_file(x509_creds,
-		    cafile, GNUTLS_X509_FMT_PEM));
+	TLSCHECK(gnutls_global_init());
+	TLSCHECK(gnutls_certificate_allocate_credentials(&x509_creds));
+	if (tls_cafile[0] != '\0') {
+		CHECKFILE(tls_cafile);
+		TLSCHECK(gnutls_certificate_set_x509_trust_file(x509_creds,
+		    tls_cafile, GNUTLS_X509_FMT_PEM));
 	}
-	CHECKFILE(keyfile);
-	CHECKFILE(certfile);
-	CHECK(gnutls_certificate_set_x509_key_file(x509_creds, certfile,
-	    keyfile, GNUTLS_X509_FMT_PEM));
-        CHECK(gnutls_priority_init(&prio_cache, NULL, NULL));
+	if (tls_crlfile[0] != '\0') {
+		TLSCHECK(gnutls_certificate_set_x509_crl_file(x509_creds,
+		    tls_crlfile, GNUTLS_X509_FMT_PEM));
+	}
+	CHECKFILE(tls_keyfile);
+	CHECKFILE(tls_certfile);
+	TLSCHECK(gnutls_certificate_set_x509_key_file2(x509_creds,
+	    tls_certfile, tls_keyfile, GNUTLS_X509_FMT_PEM,
+	    tls_keyfile_pass, tls_keyfile_enctype));
+        TLSCHECK(gnutls_priority_init(&prio_cache, NULL, NULL));
 #if	GNUTLS_VERSION_NUMBER >= 0x030506
 	gnutls_certificate_set_known_dh_params(x509_creds,
 	    GNUTLS_SEC_PARAM_HIGH);
 #endif	/* GNUTLS_VERSION_NUMBER */
 
 	return (true);
-#undef	CHECK
+#undef	TLSCHECK
 #undef	CHECKFILE
 }
 
@@ -1259,8 +1307,8 @@ main(int argc, char *argv[])
 	curl_global_init(CURL_GLOBAL_ALL);
 
 	/* Default certificate names */
-	lacf_strlcpy(keyfile, "cpdlcd_key.pem", sizeof (keyfile));
-	lacf_strlcpy(certfile, "cpdlcd_cert.pem", sizeof (certfile));
+	lacf_strlcpy(tls_keyfile, "cpdlcd_key.pem", sizeof (tls_keyfile));
+	lacf_strlcpy(tls_certfile, "cpdlcd_cert.pem", sizeof (tls_certfile));
 
 	while ((opt = getopt(argc, argv, "hc:dp:")) != -1) {
 		switch (opt) {

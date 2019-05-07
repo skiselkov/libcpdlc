@@ -118,6 +118,11 @@ blocklist_refresh_impl(void)
 		char buf[128];
 		int error;
 		struct addrinfo *ai_full;
+		struct addrinfo hints = {
+		    .ai_family = AF_UNSPEC,
+		    .ai_socktype = SOCK_STREAM,
+		    .ai_protocol = IPPROTO_TCP
+		};
 
 		if (fscanf(fp, "%127s", buf) != 1)
 			continue;
@@ -134,7 +139,7 @@ blocklist_refresh_impl(void)
 		 * This automatically takes care of IPv4 and IPv6 addresses
 		 * for us without having to worry about format.
 		 */
-		error = getaddrinfo(buf, NULL, NULL, &ai_full);
+		error = getaddrinfo(buf, NULL, &hints, &ai_full);
 		if (error != 0) {
 			fprintf(stderr, "Cannot resolve blocklist entry %s: "
 			    "%s\n", buf, gai_strerror(error));
@@ -145,8 +150,7 @@ blocklist_refresh_impl(void)
 			avl_index_t where;
 
 			/* Only care about TCP connections. */
-			if (ai->ai_protocol != IPPROTO_TCP)
-				continue;
+			ASSERT3U(ai->ai_protocol, ==, IPPROTO_TCP);
 			ba = safe_calloc(1, sizeof (*ba));
 			ASSERT3U(ai->ai_addrlen, <=, sizeof (ba->addr));
 			memcpy(ba->addr, ai->ai_addr, ai->ai_addrlen);
