@@ -42,7 +42,7 @@ typedef struct {
 
 static bool		inited = false;
 static avl_tree_t	tree;
-static uint64_t		msgquota_max = 0;
+static uint64_t		msgquota_max = 128 << 10;	/* 128 KiB */
 
 static int
 msgquota_compar(const void *a, const void *b)
