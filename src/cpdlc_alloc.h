@@ -28,6 +28,10 @@
 
 #include <stdlib.h>
 
+#ifdef	CPDLC_HAVE_GCRYPT
+#include <gcrypt.h>
+#endif
+
 #include "cpdlc_assert.h"
 
 #ifdef	__cplusplus
@@ -65,6 +69,31 @@ safe_realloc(void *oldptr, size_t size)
 		    "out of memory", (long unsigned)size);
 	}
 	return (p);
+}
+
+#ifdef	CPDLC_HAVE_GCRYPT
+
+#define	secure_malloc	gcry_xmalloc_secure
+#define	secure_calloc	gcry_xcalloc_secure
+#define	secure_realloc	gcry_xrealloc_secure
+#define	secure_free	gcry_free
+
+#else	/* !CPDLC_HAVE_GCRYPT */
+
+#define	secure_malloc	safe_malloc
+#define	secure_calloc	safe_calloc
+#define	secure_realloc	safe_realloc
+#define	secure_free	free
+
+#endif	/* !CPDLC_HAVE_GCRYPT */
+
+static inline char *
+secure_strdup(const char *s)
+{
+	int l = strlen(s);
+	char *ns = secure_malloc(l + 1);
+	strcpy(ns, s);
+	return (ns);
 }
 
 #ifdef	__cplusplus

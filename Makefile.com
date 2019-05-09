@@ -22,34 +22,12 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-include ../Makefile.vars
-include ../Makefile.com
-
-CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG $(PLATFORM_DEFS) \
-	-D_GNU_SOURCE -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
-	$(shell pkg-config gnutls --cflags)
-LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
-	$(shell pkg-config gnutls --libs) \
-	-lpthread -lm
-
-SRCPREFIX=../src
-
-LIB_OBJS= \
-	$(SRCPREFIX)/cpdlc_msg.o \
-	$(SRCPREFIX)/cpdlc_assert.o \
-	$(SRCPREFIX)/cpdlc_infos.o
-
-DAEMON_OBJS=auth.o blocklist.o cpdlcd.o msgquota.o $(LIB_OBJS)
-
-all : cpdlcd
-
-cpdlcd : $(DAEMON_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-
-%.o : %.c
-	$(CC) $(CFLAGS) -c -o $@ $^
-
-clean :
-	rm -f cpdlcd $(DAEMON_OBJS)
+ifeq ($(shell uname),Linux)
+	PLATFORM_DEFS=-DLIN=1 -DIBM=0 -DAPL=0
+	PLATFORM_NAME=linux-64
+	PLATFORM_LIBNAME=lin64
+else
+	PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=1
+	PLATFORM_NAME=mac-64
+	PLATFORM_LIBNAME=mac64
+endif

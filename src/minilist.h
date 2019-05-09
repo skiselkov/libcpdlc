@@ -23,36 +23,49 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_CPDLCD_AUTH_H_
-#define	_CPDLCD_AUTH_H_
-
-#include <stdbool.h>
-#include <stdint.h>
-
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-
-#include "../src/cpdlc_msg.h"
+#ifndef	_LIBCPDLC_MINILIST_H_
+#define	_LIBCPDLC_MINILIST_H_
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-typedef uint64_t auth_sess_key_t;
-typedef void (*auth_done_cb_t)(bool result, bool is_atc, void *userinfo);
+#define	LIST_INSERT_HEAD(head, tail, new_elem) \
+	do { \
+		if ((head) != NULL) { \
+			(head)->prev = (new_elem); \
+			(new_elem)->next = (head); \
+			(head) = (new_elem); \
+		} else { \
+			(head) = (tail) = (new_elem); \
+		} \
+	} while (0)
 
-void auth_init(const char *url, const char *cainfo, const char *username,
-    const char *password);
-void auth_fini(void);
+#define	LIST_INSERT_TAIL(head, tail, new_elem) \
+	do { \
+		if ((tail) != NULL) { \
+			(tail)->next = (new_elem); \
+			(new_elem)->prev = (tail); \
+			(tail) = (new_elem); \
+		} else { \
+			(head) = (tail) = (new_elem); \
+		} \
+	} while (0)
 
-auth_sess_key_t auth_sess_open(const cpdlc_msg_t *logon_msg,
-    const void *addr, int addr_family, auth_done_cb_t done_cb,
-    void *userinfo);
-void auth_sess_kill(auth_sess_key_t key);
+#define	LIST_REMOVE(head, tail, rem_elem) \
+	do { \
+		if ((head) == (rem_elem)) \
+			(head) = (rem_elem)->next; \
+		if ((tail) == (rem_elem)) \
+			(tail) = (rem_elem)->prev; \
+		if ((rem_elem)->next != NULL) \
+			(rem_elem)->next->prev = (rem_elem)->prev; \
+		if ((rem_elem)->prev != NULL) \
+			(rem_elem)->prev->next = (rem_elem)->next; \
+	} while (0)
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _CPDLCD_AUTH_H_ */
+#endif	/* _LIBCPDLC_MINILIST_H_ */

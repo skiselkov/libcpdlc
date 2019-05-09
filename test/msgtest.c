@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../src/cpdlc.h"
+#include "../src/cpdlc_msg.h"
 
 static void
 handle_buf(const char *buf)

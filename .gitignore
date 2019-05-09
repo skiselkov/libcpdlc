@@ -1,5 +1,6 @@
 *.o
 Makefile.vars
 test/msgtest
+test/client_test
 cpdlcd/cpdlcd
 cpdlcd/cpdlcd_*.pem

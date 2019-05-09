@@ -32,7 +32,7 @@
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
 #include "cpdlc_string.h"
-#include "cpdlc.h"
+#include "cpdlc_msg.h"
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
 	do { \

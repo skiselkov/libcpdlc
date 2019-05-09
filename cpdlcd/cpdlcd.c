@@ -57,7 +57,7 @@
 #include <acfutils/safe_alloc.h>
 #include <acfutils/thread.h>
 
-#include "../src/cpdlc.h"
+#include "../src/cpdlc_msg.h"
 
 #include "auth.h"
 #include "blocklist.h"
@@ -955,7 +955,7 @@ conn_process_input(conn_t *conn)
 	ASSERT(conn != NULL);
 	ASSERT(conn->inbuf_sz != 0);
 
-	for (;;) {
+	while (consumed_total < (int)conn->inbuf_sz) {
 		int consumed;
 		cpdlc_msg_t *msg;
 
@@ -977,6 +977,7 @@ conn_process_input(conn_t *conn)
 		 */
 		cpdlc_msg_free(msg);
 		consumed_total += consumed;
+		ASSERT3S(consumed_total, <=, conn->inbuf_sz);
 	}
 	if (consumed_total != 0) {
 		ASSERT3S(consumed_total, <=, conn->inbuf_sz);

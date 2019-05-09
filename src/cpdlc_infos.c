@@ -25,7 +25,7 @@
 
 #include <stdbool.h>
 
-#include "cpdlc.h"
+#include "cpdlc_msg.h"
 
 #define	NUM_UL_DENY_REASONS	3
 #define	UL_DENY_REASONS \

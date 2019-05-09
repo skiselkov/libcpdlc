@@ -22,23 +22,36 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG
-LIBS += -lm
+include ../Makefile.com
+
+CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG $(PLATFORM_DEFS) \
+    $(shell pkg-config gnutls --cflags)
+LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
 
 SRCPREFIX=../src
 
-LIB_OBJS= \
-	$(SRCPREFIX)/cpdlc.o \
+MSGTEST_OBJS = \
+	msgtest.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
-	$(SRCPREFIX)/cpdlc_infos.o
+	$(SRCPREFIX)/cpdlc_infos.o \
+	$(SRCPREFIX)/cpdlc_msg.o
 
-MSGTEST_OBJS=msgtest.o $(LIB_OBJS)
+CLIENT_TEST_OBJS = msgtest.o \
+	$(SRCPREFIX)/cpdlc_assert.o \
+	$(SRCPREFIX)/cpdlc_client.o \
+	$(SRCPREFIX)/cpdlc_infos.o \
+	$(SRCPREFIX)/cpdlc_msg.o
+
+all : msgtest client_test
 
 msgtest : $(MSGTEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+client_test : $(CLIENT_TEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 %.o : %.c
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 clean :
-	rm -f msgtest $(MSGTEST_OBJS)
+	rm -f msgtest $(MSGTEST_OBJS) client_test $(CLIENT_TEST_OBJS)

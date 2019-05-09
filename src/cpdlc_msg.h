@@ -23,8 +23,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_CPDLC_H_
-#define	_LIBCPDLC_CPDLC_H_
+#ifndef	_LIBCPDLC_MSG_H_
+#define	_LIBCPDLC_MSG_H_
 
 #include <stdbool.h>
 
@@ -468,4 +468,4 @@ CPDLC_API int cpdlc_unescape_percent(const char *in_buf, char *out_buf,
 }
 #endif
 
-#endif	/* _LIBCPDLC_CPDLC_H_ */
+#endif	/* _LIBCPDLC_MSG_H_ */

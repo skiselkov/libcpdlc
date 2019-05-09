@@ -23,36 +23,12 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_CPDLCD_AUTH_H_
-#define	_CPDLCD_AUTH_H_
+#include "../src/cpdlc_client.h"
 
-#include <stdbool.h>
-#include <stdint.h>
+int
+main(void)
+{
+	
 
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-
-#include "../src/cpdlc_msg.h"
-
-#ifdef	__cplusplus
-extern "C" {
-#endif
-
-typedef uint64_t auth_sess_key_t;
-typedef void (*auth_done_cb_t)(bool result, bool is_atc, void *userinfo);
-
-void auth_init(const char *url, const char *cainfo, const char *username,
-    const char *password);
-void auth_fini(void);
-
-auth_sess_key_t auth_sess_open(const cpdlc_msg_t *logon_msg,
-    const void *addr, int addr_family, auth_done_cb_t done_cb,
-    void *userinfo);
-void auth_sess_kill(auth_sess_key_t key);
-
-#ifdef	__cplusplus
+	return (0);
 }
-#endif
-
-#endif	/* _CPDLCD_AUTH_H_ */

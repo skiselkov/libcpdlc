@@ -26,7 +26,13 @@
 #ifndef	_LIBCPDLC_CLIENT_H_
 #define	_LIBCPDLC_CLIENT_H_
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <gnutls/gnutls.h>
+#include <gnutls/x509.h>
+
+#include "cpdlc_msg.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -47,20 +53,41 @@ typedef enum {
 	CPDLC_LOGON_COMPLETE
 } cpdlc_client_logon_status_t;
 
+typedef enum {
+	CPDLC_MSG_STATUS_SENDING,
+	CPDLC_MSG_STATUS_SENT,
+	CPDLC_MSG_STATUS_SEND_FAILED,
+	CPDLC_MSG_STATUS_INVALID_TOKEN
+} cpdlc_msg_status_t;
+
 typedef struct cpdlc_client_s cpdlc_client_t;
+typedef uint64_t cpdlc_msg_token_t;
+#define	CPDLC_INVALID_MSG_TOKEN	((cpdlc_msg_token_t)-1)
 
-cpdlc_client_t *cpdlc_client_init(const char *server_hostname, int server_port,
-    const char *cafile, const char *keyfile, const char *keyfile_pass,
-    gnutls_pkcs_encrypt_flags_t keyfile_enctype, const char *certfile,
-    bool is_atc);
-void cpdlc_client_fini(cpdlc_client *cl);
+cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
+    int server_port, const char *cafile, bool is_atc);
+void cpdlc_client_fini(cpdlc_client_t *cl);
 
-void cpdlc_client_set_logon_data(cpdlc_client_t *cl, const char *logon_data,
+void cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *keyfile,
+    const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
+    const char *certfile);
+void cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
+    const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
+    const char *cert_pem_data);
+
+void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to);
+void cpdlc_client_logoff(cpdlc_client_t *cl);
 
-bool cpdlc_client_do_connect_link(cpdlc_client_t *cl);
-void cpdlc_client_do_disconnect_link(cpdlc_client_t *cl);
-bool cpdlc_client_do_logon(cpdlc_client_t *cl);
+cpdlc_client_logon_status_t cpdlc_client_get_logon_status(
+    const cpdlc_client_t *cl);
+
+cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,
+    const cpdlc_msg_t *msg);
+cpdlc_msg_status_t cpdlc_client_get_msg_status(cpdlc_client_t *cl,
+    cpdlc_msg_token_t token);
+
+cpdlc_msg_t *cpdlc_client_recv_msg(cpdlc_client_t *cl);
 
 #ifdef	__cplusplus
 }
