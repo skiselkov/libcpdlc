@@ -65,12 +65,12 @@ typedef uint64_t cpdlc_msg_token_t;
 #define	CPDLC_INVALID_MSG_TOKEN	((cpdlc_msg_token_t)-1)
 
 cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
-    int server_port, const char *cafile, bool is_atc);
+    int server_port, const char *ca_file, bool is_atc);
 void cpdlc_client_fini(cpdlc_client_t *cl);
 
-void cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *keyfile,
+void cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
-    const char *certfile);
+    const char *cert_file);
 void cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
     const char *cert_pem_data);

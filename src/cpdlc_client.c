@@ -89,10 +89,10 @@ struct cpdlc_client_s {
 	int				server_port;
 	bool				is_atc;
 	char				*cafile;
-	char				*keyfile;
+	char				*key_file;
 	char				*key_pass;
 	gnutls_pkcs_encrypt_flags_t	key_enctype;
-	char				*certfile;
+	char				*cert_file;
 	char				*key_pem_data;
 	char				*cert_pem_data;
 
@@ -218,16 +218,16 @@ cpdlc_client_init(const char *server_hostname, int server_port,
 static void
 clear_key_data(cpdlc_client_t *cl)
 {
-	secure_free(cl->keyfile);
+	secure_free(cl->key_file);
 	secure_free(cl->key_pass);
-	secure_free(cl->certfile);
+	secure_free(cl->cert_file);
 	secure_free(cl->key_pem_data);
 	secure_free(cl->cert_pem_data);
 
-	cl->keyfile = NULL;
+	cl->key_file = NULL;
 	cl->key_pass = NULL;
 	cl->key_enctype = GNUTLS_PKCS_PLAIN;
-	cl->certfile = NULL;
+	cl->cert_file = NULL;
 	cl->key_pem_data = NULL;
 	cl->cert_pem_data = NULL;
 }
@@ -264,22 +264,22 @@ cpdlc_client_fini(cpdlc_client_t *cl)
 }
 
 void
-cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *keyfile,
+cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
-    const char *certfile)
+    const char *cert_file)
 {
 	ASSERT(cl != NULL);
-	ASSERT(keyfile != NULL || certfile == NULL);
+	ASSERT(key_file != NULL || cert_file == NULL);
 	ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
 
 	mutex_enter(&cl->lock);
 
 	clear_key_data(cl);
 
-	if (keyfile != NULL)
-		cl->keyfile = secure_strdup(keyfile);
-	if (certfile != NULL)
-		cl->certfile = secure_strdup(certfile);
+	if (key_file != NULL)
+		cl->key_file = secure_strdup(key_file);
+	if (cert_file != NULL)
+		cl->cert_file = secure_strdup(cert_file);
 	if (key_pass != NULL)
 		cl->key_pass = secure_strdup(key_pass);
 	cl->key_enctype = key_enctype;
@@ -465,10 +465,10 @@ tls_handshake(cpdlc_client_t *cl)
 
 	if (cl->session == NULL) {
 		TLS_CHK(gnutls_certificate_allocate_credentials(&cl->xcred));
-		if (cl->keyfile != NULL) {
-			ASSERT(cl->certfile != NULL);
+		if (cl->key_file != NULL) {
+			ASSERT(cl->cert_file != NULL);
 			TLS_CHK(gnutls_certificate_set_x509_key_file2(cl->xcred,
-			    cl->certfile, cl->keyfile, GNUTLS_X509_FMT_PEM,
+			    cl->cert_file, cl->key_file, GNUTLS_X509_FMT_PEM,
 			    cl->key_pass, cl->key_enctype));
 		} else if (cl->key_pem_data != NULL) {
 			gnutls_datum_t key_datum = {
