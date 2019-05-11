@@ -522,7 +522,7 @@ daemonize(bool do_chdir, bool do_close)
 		return (false);
 	}
 	if (do_chdir)
-		chdir("/");
+		VERIFY0(chdir("/"));
 	if (do_close) {
 		close(STDIN_FILENO);
 		if (open("/dev/null", O_RDONLY) < 0) {
@@ -680,7 +680,8 @@ complete_logon(conn_t *conn)
 		mutex_exit(&conn->lock);
 		return;
 	}
-	msg = cpdlc_msg_alloc(0, conn->logon_min);
+	msg = cpdlc_msg_alloc();
+	cpdlc_msg_set_mrn(msg, conn->logon_min);
 	if (conn->logon_success && !conn->is_atc &&
 	    conn->logon_to[0] == '\0') {
 		conn->logon_status = LOGON_NONE;
@@ -814,7 +815,8 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 	va_end(ap);
 
 	if (orig_msg != NULL) {
-		msg = cpdlc_msg_alloc(0, cpdlc_msg_get_min(orig_msg));
+		msg = cpdlc_msg_alloc();
+		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(orig_msg));
 		if (cpdlc_msg_get_dl(orig_msg)) {
 			cpdlc_msg_add_seg(msg, false,
 			    CPDLC_UM159_ERROR_description, 0);
@@ -823,7 +825,7 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 			    CPDLC_DM62_ERROR_errorinfo, 0);
 		}
 	} else {
-		msg = cpdlc_msg_alloc(0, 0);
+		msg = cpdlc_msg_alloc();
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
 	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
@@ -837,8 +839,9 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 static void
 send_svc_unavail_msg(conn_t *conn, unsigned orig_min)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc(0, orig_min);
+	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 	ASSERT(conn != NULL);
+	cpdlc_msg_set_mrn(msg, orig_min);
 	cpdlc_msg_add_seg(msg, false, CPDLC_UM162_SVC_UNAVAIL, 0);
 	conn_send_msg(conn, msg);
 	cpdlc_msg_free(msg);

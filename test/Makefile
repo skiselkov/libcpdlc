@@ -24,7 +24,7 @@
 
 include ../Makefile.com
 
-CFLAGS += -W -Wall -Wextra -Werror -g -DDEBUG $(PLATFORM_DEFS) \
+CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG $(PLATFORM_DEFS) \
     $(shell pkg-config gnutls --cflags)
 LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
 

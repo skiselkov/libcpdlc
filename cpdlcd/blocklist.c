@@ -204,10 +204,13 @@ blocklist_check(const void *addr, socklen_t addr_len, int addr_family)
 	 * Before we search, we need to sanitize the lookup to have a
 	 * zero port number, otherwise we won't generate an exact match.
 	 */
-	if (addr_family == AF_INET)
-		((struct sockaddr_in *)ba.addr)->sin_port = 0;
-	else
-		((struct sockaddr_in6 *)ba.addr)->sin6_port = 0;
+	if (addr_family == AF_INET) {
+		struct sockaddr_in *in_addr = (struct sockaddr_in *)ba.addr;
+		in_addr->sin_port = 0;
+	} else {
+		struct sockaddr_in6 *in6_addr = (struct sockaddr_in6 *)ba.addr;
+		in6_addr->sin6_port = 0;
+	}
 	return (avl_find(&tree, &ba, NULL) == NULL);
 }
 

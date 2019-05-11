@@ -57,6 +57,8 @@
 			(__start)++; \
 	} while (0)
 
+#define	INVALID_MSG_SEQ_NR	UINT32_MAX
+
 static const cpdlc_msg_info_t *
 msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 {
@@ -378,17 +380,9 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 }
 
 cpdlc_msg_t *
-cpdlc_msg_alloc(unsigned min, unsigned mrn)
+cpdlc_msg_alloc(void)
 {
-	cpdlc_msg_t *msg = safe_calloc(1, sizeof (*msg));
-
-	ASSERT3U(min, <=, CPDLC_MAX_MSG_SEQ_NR);
-	ASSERT3U(mrn, <=, CPDLC_MAX_MSG_SEQ_NR);
-
-	msg->min = min;
-	msg->mrn = mrn;
-
-	return (msg);
+	return (safe_calloc(1, sizeof (cpdlc_msg_t)));
 }
 
 void
@@ -529,12 +523,12 @@ validate_message(const cpdlc_msg_t *msg)
 		fprintf(stderr, "Message malformed: no message segments found\n");
 		return (false);
 	}
-	if (msg->min > CPDLC_MAX_MSG_SEQ_NR) {
+	if (msg->min == INVALID_MSG_SEQ_NR) {
 		fprintf(stderr, "Message malformed: missing or invalid "
 		    "MIN header\n");
 		return (false);
 	}
-	if (msg->mrn > CPDLC_MAX_MSG_SEQ_NR) {
+	if (msg->mrn == INVALID_MSG_SEQ_NR) {
 		fprintf(stderr, "Message malformed: missing or invalid "
 		    "MRN header\n");
 		return (false);
@@ -988,8 +982,8 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 	}
 
 	msg = safe_calloc(1, sizeof (*msg));
-	msg->min = -1u;
-	msg->mrn = -1u;
+	msg->min = INVALID_MSG_SEQ_NR;
+	msg->mrn = INVALID_MSG_SEQ_NR;
 
 	start = in_buf;
 	while (in_buf < term) {
@@ -1005,9 +999,17 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			}
 			pkt_is_cpdlc = true;
 		} else if (strncmp(in_buf, "MIN=", 4) == 0) {
-			msg->min = atoi(&in_buf[4]);
+			if (sscanf(&in_buf[4], "%u", &msg->min) != 1) {
+				fprintf(stderr, "Message malformed: invalid "
+				    "MIN value\n");
+				goto errout;
+			}
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
-			msg->mrn = atoi(&in_buf[4]);
+			if (sscanf(&in_buf[4], "%u", &msg->mrn) != 1) {
+				fprintf(stderr, "Message malformed: invalid "
+				    "MRN value\n");
+				goto errout;
+			}
 		} else if (strncmp(in_buf, "LOGON=", 6) == 0) {
 			int l = (sep - &in_buf[6]);
 			char textbuf[l + 1];
@@ -1106,11 +1108,27 @@ cpdlc_msg_get_dl(const cpdlc_msg_t *msg)
 	return (msg->segs[0].info->is_dl);
 }
 
+void
+cpdlc_msg_set_min(cpdlc_msg_t *msg, unsigned min)
+{
+	ASSERT(msg != NULL);
+	ASSERT(min != INVALID_MSG_SEQ_NR);
+	msg->min = min;
+}
+
 unsigned
 cpdlc_msg_get_min(const cpdlc_msg_t *msg)
 {
 	ASSERT(msg != NULL);
 	return (msg->min);
+}
+
+void
+cpdlc_msg_set_mrn(cpdlc_msg_t *msg, unsigned mrn)
+{
+	ASSERT(msg != NULL);
+	ASSERT(mrn != INVALID_MSG_SEQ_NR);
+	msg->mrn = mrn;
 }
 
 unsigned

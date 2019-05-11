@@ -83,6 +83,9 @@ typedef struct inmsgbuf_s {
 	struct inmsgbuf_s	*prev;
 } inmsgbuf_t;
 
+/**
+ * This object provides a generic
+ */
 struct cpdlc_client_s {
 	/* immutable */
 	char				server_hostname[PATH_MAX];
@@ -106,6 +109,9 @@ struct cpdlc_client_s {
 	gnutls_session_t		session;
 	gnutls_certificate_credentials_t xcred;
 
+	cpdlc_msg_recv_cb_t		msg_recv_cb;
+	void				*cb_userinfo;
+
 	struct {
 		/* protected by `lock' */
 		cpdlc_msg_token_t	next_tok;
@@ -115,7 +121,7 @@ struct cpdlc_client_s {
 		outmsgbuf_t		*sent_tail;
 	} outmsgbufs;
 
-	/* Only accessed from worker thread */
+	/* protected by `lock' */
 	char			*inbuf;
 	unsigned		inbuf_sz;
 	struct {
@@ -137,7 +143,7 @@ static void init_conn(cpdlc_client_t *cl);
 static void complete_conn(cpdlc_client_t *cl);
 static void tls_handshake(cpdlc_client_t *cl);
 static void send_logon(cpdlc_client_t *cl);
-static void poll_for_msgs(cpdlc_client_t *cl);
+static bool poll_for_msgs(cpdlc_client_t *cl);
 static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg, bool track_sent);
 
@@ -161,6 +167,8 @@ logon_worker(void *userinfo)
 	init_conn(cl);
 
 	while (cl->logon_status != CPDLC_LOGON_NONE) {
+		bool new_msgs = false;
+
 		switch (cl->logon_status) {
 		case CPDLC_LOGON_CONNECTING_LINK:
 			ASSERT(cl->sock != -1);
@@ -174,15 +182,22 @@ logon_worker(void *userinfo)
 			if (cl->logon.do_logon)
 				send_logon(cl);
 			else
-				poll_for_msgs(cl);
+				new_msgs = poll_for_msgs(cl);
 			break;
 		case CPDLC_LOGON_IN_PROG:
 		case CPDLC_LOGON_COMPLETE:
-			poll_for_msgs(cl);
+			new_msgs = poll_for_msgs(cl);
 			break;
 		default:
 			VERIFY_MSG(0, "client reached impossible "
 			    "logon_status = %x", cl->logon_status);
+		}
+
+		if (new_msgs && cl->msg_recv_cb != NULL) {
+			cpdlc_msg_recv_cb_t cb = cl->msg_recv_cb;
+			mutex_exit(&cl->lock);
+			cb(cl);
+			mutex_enter(&cl->lock);
 		}
 	}
 	reset_link_state(cl);
@@ -455,6 +470,9 @@ errout:
 	cl->logon_status = CPDLC_LOGON_NONE;
 }
 
+/*
+ * Initiates or completes the TLS handshake procedure.
+ */
 static void
 tls_handshake(cpdlc_client_t *cl)
 {
@@ -518,7 +536,7 @@ tls_handshake(cpdlc_client_t *cl)
 static void
 send_logon(cpdlc_client_t *cl)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc(0, 0);
+	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
 	ASSERT(cl != NULL);
 	ASSERT(cl->logon.data != NULL);
@@ -532,6 +550,7 @@ send_logon(cpdlc_client_t *cl)
 	send_msg_impl(cl, msg, false);
 	cpdlc_msg_free(msg);
 
+	cl->mrn = cl->min = 0;
 	cl->logon_status = CPDLC_LOGON_IN_PROG;
 }
 
@@ -556,9 +575,11 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	LIST_INSERT_TAIL(cl->inmsgbufs.head, cl->inmsgbufs.tail, inmsgbuf);
 }
 
-static void
+static bool
 process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
+	bool new_msgs = false;
+
 	ASSERT(cl != NULL);
 	ASSERT(msg != NULL);
 
@@ -582,22 +603,25 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		}
 		break;
 	case CPDLC_LOGON_COMPLETE:
-
 		if (msg->is_logon) {
 			/* Spurious logon message? Why? */
 			cpdlc_msg_free(msg);
 		} else {
 			queue_incoming_msg(cl, msg);
+			new_msgs = true;
 		}
 		break;
 	default:
 		VERIFY_MSG(0, "Invalid client state %x", cl->logon_status);
 	}
+
+	return (new_msgs);
 }
 
-static void
+static bool
 process_input(cpdlc_client_t *cl)
 {
+	bool new_msgs = false;
 	size_t consumed_total = 0;
 
 	ASSERT(cl != NULL);
@@ -619,7 +643,7 @@ process_input(cpdlc_client_t *cl)
 		if (msg == NULL)
 			break;
 		ASSERT(consumed != 0);
-		process_msg(cl, msg);
+		new_msgs |= process_msg(cl, msg);
 		/* Do not free the message, `process_msg' consumes it */
 		consumed_total += consumed;
 		ASSERT3S(consumed_total, <=, cl->inbuf_sz);
@@ -631,6 +655,8 @@ process_input(cpdlc_client_t *cl)
 		    cl->inbuf_sz + 1);
 		cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz);
 	}
+
+	return (new_msgs);
 }
 
 static bool
@@ -646,9 +672,11 @@ validate_input(const uint8_t *buf, int l)
 	return (true);
 }
 
-static void
+static bool
 do_msg_input(cpdlc_client_t *cl)
 {
+	bool new_msgs = false;
+
 	ASSERT(cl != NULL);
 
 	for (;;) {
@@ -677,8 +705,10 @@ do_msg_input(cpdlc_client_t *cl)
 		    bytes + 1);
 		cl->inbuf_sz += bytes;
 
-		process_input(cl);
+		new_msgs |= process_input(cl);
 	}
+
+	return (new_msgs);
 }
 
 static void
@@ -721,11 +751,12 @@ do_msg_output(cpdlc_client_t *cl)
 	}
 }
 
-static void
+static bool
 poll_for_msgs(cpdlc_client_t *cl)
 {
 	struct pollfd pfd;
 	int ret;
+	bool new_msgs = false;
 
 	ASSERT(cl != NULL);
 	ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
@@ -741,14 +772,16 @@ poll_for_msgs(cpdlc_client_t *cl)
 	/* Poll error */
 	if (ret < 0) {
 		cl->logon_status = CPDLC_LOGON_NONE;
-		return;
+		return (false);
 	}
 
 	if (pfd.revents & POLLIN)
-		do_msg_input(cl);
+		new_msgs = do_msg_input(cl);
 	/* In case input killed the connection, recheck logon_status */
 	if (cl->logon_status != CPDLC_LOGON_NONE && (pfd.revents & POLLOUT))
 		do_msg_output(cl);
+
+	return (new_msgs);
 }
 
 void
@@ -818,7 +851,7 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 }
 
 cpdlc_msg_token_t
-cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
+cpdlc_client_send_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
 	cpdlc_msg_token_t tok;
 
@@ -832,6 +865,9 @@ cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 	}
 	tok = send_msg_impl(cl, msg, true);
 	mutex_exit(&cl->lock);
+
+	/* consume the message */
+	cpdlc_msg_free(msg);
 
 	return (tok);
 }
@@ -889,4 +925,36 @@ cpdlc_client_recv_msg(cpdlc_client_t *cl)
 	mutex_exit(&cl->lock);
 
 	return (msg);
+}
+
+void
+cpdlc_client_set_cb_userinfo(cpdlc_client_t *cl, void *userinfo)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->cb_userinfo = userinfo;
+	mutex_exit(&cl->lock);
+}
+
+void *
+cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl)
+{
+	void *userinfo;
+
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	userinfo = cl->cb_userinfo;
+	mutex_exit(&cl->lock);
+
+	return (userinfo);
+}
+
+void
+cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl, cpdlc_msg_recv_cb_t cb)
+{
+	ASSERT(cl != NULL);
+
+	mutex_enter(&cl->lock);
+	cl->msg_recv_cb = cb;
+	mutex_exit(&cl->lock);
 }
