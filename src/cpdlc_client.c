@@ -851,7 +851,7 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 }
 
 cpdlc_msg_token_t
-cpdlc_client_send_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
+cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 {
 	cpdlc_msg_token_t tok;
 
@@ -865,9 +865,6 @@ cpdlc_client_send_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	}
 	tok = send_msg_impl(cl, msg, true);
 	mutex_exit(&cl->lock);
-
-	/* consume the message */
-	cpdlc_msg_free(msg);
 
 	return (tok);
 }

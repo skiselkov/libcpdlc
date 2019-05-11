@@ -35,8 +35,8 @@
 extern "C" {
 #endif
 
-#define	CPDLC_NO_MSG_THR	UINT32_MAX
-typedef uint32_t cpdlc_msg_thr_t;
+#define	CPDLC_NO_MSG_THR_ID	UINT32_MAX
+typedef uint32_t cpdlc_msg_thr_id_t;
 
 typedef enum {
 	CPDLC_MSG_THR_OPEN,
@@ -46,15 +46,18 @@ typedef enum {
 cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);
 void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
 
-cpdlc_msg_thr_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
-    cpdlc_msg_t *msg, cpdlc_msg_thr_t mthr);
+cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
+    cpdlc_msg_thr_id_t mthr);
+void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 
 cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_t mthr);
-const cpdlc_msg_t *cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_t mthr, unsigned nr);
+    cpdlc_msg_thr_id_t thr_id);
 unsigned cpdlc_msglist_get_thr_count(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_t mthr);
+    cpdlc_msg_thr_id_t thr_id);
+void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id, unsigned msg_nr, const cpdlc_msg_t **msg_p,
+    cpdlc_msg_token_t *token_p);
 
 #ifdef	__cplusplus
 }

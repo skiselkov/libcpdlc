@@ -84,7 +84,8 @@ void cpdlc_client_logoff(cpdlc_client_t *cl);
 cpdlc_client_logon_status_t cpdlc_client_get_logon_status(
     const cpdlc_client_t *cl);
 
-cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg);
+cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,
+    const cpdlc_msg_t *msg);
 cpdlc_msg_status_t cpdlc_client_get_msg_status(cpdlc_client_t *cl,
     cpdlc_msg_token_t token);
 
