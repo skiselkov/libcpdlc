@@ -26,43 +26,41 @@
 #ifndef	_LIBCPDLC_MINILIST_H_
 #define	_LIBCPDLC_MINILIST_H_
 
+#include <stdlib.h>
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-#define	LIST_INSERT_HEAD(head, tail, new_elem) \
-	do { \
-		if ((head) != NULL) { \
-			(head)->prev = (new_elem); \
-			(new_elem)->next = (head); \
-			(head) = (new_elem); \
-		} else { \
-			(head) = (tail) = (new_elem); \
-		} \
-	} while (0)
+typedef struct {
+	void	*next;
+	void	*prev;
+} list_node_t;
 
-#define	LIST_INSERT_TAIL(head, tail, new_elem) \
-	do { \
-		if ((tail) != NULL) { \
-			(tail)->next = (new_elem); \
-			(new_elem)->prev = (tail); \
-			(tail) = (new_elem); \
-		} else { \
-			(head) = (tail) = (new_elem); \
-		} \
-	} while (0)
+typedef struct {
+	void	*head;
+	void	*tail;
+	size_t	size;
+	size_t	offset;
+	size_t	count;
+} list_t;
 
-#define	LIST_REMOVE(head, tail, rem_elem) \
-	do { \
-		if ((head) == (rem_elem)) \
-			(head) = (rem_elem)->next; \
-		if ((tail) == (rem_elem)) \
-			(tail) = (rem_elem)->prev; \
-		if ((rem_elem)->next != NULL) \
-			(rem_elem)->next->prev = (rem_elem)->prev; \
-		if ((rem_elem)->prev != NULL) \
-			(rem_elem)->prev->next = (rem_elem)->next; \
-	} while (0)
+void list_create(list_t *list, size_t size, size_t offset);
+void list_destroy(list_t *list);
+void *list_head(const list_t *list);
+void *list_tail(const list_t *list);
+void *list_next(const list_t *list, void *elem);
+void *list_prev(const list_t *list, void *elem);
+size_t list_count(const list_t *list);
+
+void list_insert_head(list_t *list, void *elem);
+void list_insert_tail(list_t *list, void *elem);
+void list_remove(list_t *list, void *elem);
+void list_insert_before(list_t *list, void *new_elem, void *old_elem);
+void list_insert_after(list_t *list, void *new_elem, void *old_elem);
+
+void *list_remove_head(list_t *list);
+void *list_remove_tail(list_t *list);
 
 #ifdef	__cplusplus
 }

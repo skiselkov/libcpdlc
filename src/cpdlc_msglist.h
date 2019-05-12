@@ -35,29 +35,41 @@
 extern "C" {
 #endif
 
+typedef struct cpdlc_msglist_s cpdlc_msglist_t;
+
 #define	CPDLC_NO_MSG_THR_ID	UINT32_MAX
 typedef uint32_t cpdlc_msg_thr_id_t;
+
+typedef void (*cpdlc_msglist_update_cb_t)(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads);
 
 typedef enum {
 	CPDLC_MSG_THR_OPEN,
 	CPDLC_MSG_THR_CLOSED
 } cpdlc_msg_thr_status_t;
 
-cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);
-void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
+CPDLC_API cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
 
-cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
-    cpdlc_msg_thr_id_t mthr);
-void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
+CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
+    cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 
-cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
+CPDLC_API cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(
+    cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id);
+CPDLC_API unsigned cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
-unsigned cpdlc_msglist_get_thr_count(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_id_t thr_id);
-void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
+CPDLC_API void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id, unsigned msg_nr, const cpdlc_msg_t **msg_p,
     cpdlc_msg_token_t *token_p);
+
+CPDLC_API void cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist,
+    void *userinfo);
+CPDLC_API void *cpdlc_msglist_get_userinfo(cpdlc_msglist_t *msglist);
+
+CPDLC_API void cpdlc_msglist_set_update_cb(cpdlc_msglist_t *msglist,
+    cpdlc_msglist_update_cb_t update_cb);
 
 #ifdef	__cplusplus
 }

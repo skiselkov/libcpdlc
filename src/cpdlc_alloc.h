@@ -27,6 +27,7 @@
 #define	_LIBCPDLC_CPDLC_ALLOC_H_
 
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef	CPDLC_HAVE_GCRYPT
 #include <gcrypt.h>

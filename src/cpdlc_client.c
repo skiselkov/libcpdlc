@@ -73,14 +73,12 @@ typedef struct outmsgbuf_s {
 	size_t			bufsz;
 	size_t			bytes_sent;
 	bool			track_sent;
-	struct outmsgbuf_s	*next;
-	struct outmsgbuf_s	*prev;
+	list_node_t		node;
 } outmsgbuf_t;
 
 typedef struct inmsgbuf_s {
 	cpdlc_msg_t		*msg;
-	struct inmsgbuf_s	*next;
-	struct inmsgbuf_s	*prev;
+	list_node_t		node;
 } inmsgbuf_t;
 
 /**
@@ -109,25 +107,21 @@ struct cpdlc_client_s {
 	gnutls_session_t		session;
 	gnutls_certificate_credentials_t xcred;
 
+	cpdlc_msg_sent_cb_t		msg_sent_cb;
 	cpdlc_msg_recv_cb_t		msg_recv_cb;
 	void				*cb_userinfo;
 
 	struct {
 		/* protected by `lock' */
 		cpdlc_msg_token_t	next_tok;
-		outmsgbuf_t		*sending_head;
-		outmsgbuf_t		*sending_tail;
-		outmsgbuf_t		*sent_head;
-		outmsgbuf_t		*sent_tail;
+		list_t		sending;
+		list_t		sent;
 	} outmsgbufs;
 
 	/* protected by `lock' */
 	char			*inbuf;
 	unsigned		inbuf_sz;
-	struct {
-		inmsgbuf_t	*head;
-		inmsgbuf_t	*tail;
-	} inmsgbufs;
+	list_t		inmsgbufs;
 
 	struct {
 		/* protected by `lock' */
@@ -143,7 +137,8 @@ static void init_conn(cpdlc_client_t *cl);
 static void complete_conn(cpdlc_client_t *cl);
 static void tls_handshake(cpdlc_client_t *cl);
 static void send_logon(cpdlc_client_t *cl);
-static bool poll_for_msgs(cpdlc_client_t *cl);
+static bool poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
+    unsigned *num_out_tokens);
 static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg, bool track_sent);
 
@@ -168,6 +163,8 @@ logon_worker(void *userinfo)
 
 	while (cl->logon_status != CPDLC_LOGON_NONE) {
 		bool new_msgs = false;
+		cpdlc_msg_token_t *out_tokens;
+		unsigned num_out_tokens;
 
 		switch (cl->logon_status) {
 		case CPDLC_LOGON_CONNECTING_LINK:
@@ -179,14 +176,17 @@ logon_worker(void *userinfo)
 			tls_handshake(cl);
 			break;
 		case CPDLC_LOGON_LINK_AVAIL:
-			if (cl->logon.do_logon)
+			if (cl->logon.do_logon) {
 				send_logon(cl);
-			else
-				new_msgs = poll_for_msgs(cl);
+			} else {
+				new_msgs = poll_for_msgs(cl, &out_tokens,
+				    &num_out_tokens);
+			}
 			break;
 		case CPDLC_LOGON_IN_PROG:
 		case CPDLC_LOGON_COMPLETE:
-			new_msgs = poll_for_msgs(cl);
+			new_msgs = poll_for_msgs(cl, &out_tokens,
+			    &num_out_tokens);
 			break;
 		default:
 			VERIFY_MSG(0, "client reached impossible "
@@ -194,10 +194,24 @@ logon_worker(void *userinfo)
 		}
 
 		if (new_msgs && cl->msg_recv_cb != NULL) {
+			/*
+			 * To prevent locking inversions, we need to drop
+			 * our lock here.
+			 */
 			cpdlc_msg_recv_cb_t cb = cl->msg_recv_cb;
 			mutex_exit(&cl->lock);
 			cb(cl);
 			mutex_enter(&cl->lock);
+		}
+		if (num_out_tokens != 0) {
+			cpdlc_msg_sent_cb_t cb = cl->msg_sent_cb;
+
+			if (cb != NULL) {
+				mutex_exit(&cl->lock);
+				cb(cl, out_tokens, num_out_tokens);
+				mutex_enter(&cl->lock);
+			}
+			free(out_tokens);
 		}
 	}
 	reset_link_state(cl);
@@ -226,6 +240,13 @@ cpdlc_client_init(const char *server_hostname, int server_port,
 	cl->is_atc = is_atc;
 
 	cl->sock = -1;
+
+	list_create(&cl->outmsgbufs.sending, sizeof (outmsgbuf_t),
+	    offsetof(outmsgbuf_t, node));
+	list_create(&cl->outmsgbufs.sent, sizeof (outmsgbuf_t),
+	    offsetof(outmsgbuf_t, node));
+	list_create(&cl->inmsgbufs, sizeof (inmsgbuf_t),
+	    offsetof(inmsgbuf_t, node));
 
 	return (cl);
 }
@@ -263,8 +284,10 @@ cpdlc_client_fini(cpdlc_client_t *cl)
 
 	ASSERT3P(cl->inbuf, ==, NULL);
 	ASSERT0(cl->inbuf_sz);
-	ASSERT3P(cl->outmsgbufs.sending_head, ==, NULL);
-	ASSERT3P(cl->outmsgbufs.sent_head, ==, NULL);
+
+	list_destroy(&cl->outmsgbufs.sending);
+	list_destroy(&cl->outmsgbufs.sent);
+	list_destroy(&cl->inmsgbufs);
 
 	free(cl->cafile);
 
@@ -329,6 +352,9 @@ cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
 static void
 reset_link_state(cpdlc_client_t *cl)
 {
+	inmsgbuf_t *inbuf;
+	outmsgbuf_t *outbuf;
+
 	ASSERT(cl != NULL);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 	if (cl->session != NULL) {
@@ -346,30 +372,23 @@ reset_link_state(cpdlc_client_t *cl)
 		cl->sock = -1;
 	}
 
-	while (cl->outmsgbufs.sending_head != NULL) {
-		outmsgbuf_t *outmsgbuf = cl->outmsgbufs.sending_head;
-		LIST_REMOVE(cl->outmsgbufs.sending_head, cl->outmsgbufs.sending_tail,
-		    outmsgbuf);
-		free(outmsgbuf->buf);
-		free(outmsgbuf);
+	while ((outbuf = list_remove_head(&cl->outmsgbufs.sending)) !=
+	    NULL) {
+		free(outbuf->buf);
+		free(outbuf);
 	}
-	while (cl->outmsgbufs.sent_head != NULL) {
-		outmsgbuf_t *outmsgbuf = cl->outmsgbufs.sent_head;
-		LIST_REMOVE(cl->outmsgbufs.sent_head, cl->outmsgbufs.sent_tail,
-		    outmsgbuf);
-		free(outmsgbuf->buf);
-		free(outmsgbuf);
+	while ((outbuf = list_remove_head(&cl->outmsgbufs.sent)) != NULL) {
+		ASSERT3P(outbuf->buf, ==, NULL);
+		free(outbuf);
 	}
 
 	free(cl->inbuf);
 	cl->inbuf = NULL;
 	cl->inbuf_sz = 0;
 
-	while (cl->inmsgbufs.head != NULL) {
-		inmsgbuf_t *inmsgbuf = cl->inmsgbufs.head;
-		LIST_REMOVE(cl->inmsgbufs.head, cl->inmsgbufs.tail, inmsgbuf);
-		cpdlc_msg_free(inmsgbuf->msg);
-		free(inmsgbuf);
+	while ((inbuf = list_remove_head(&cl->inmsgbufs)) != NULL) {
+		cpdlc_msg_free(inbuf->msg);
+		free(inbuf);
 	}
 }
 
@@ -550,7 +569,6 @@ send_logon(cpdlc_client_t *cl)
 	send_msg_impl(cl, msg, false);
 	cpdlc_msg_free(msg);
 
-	cl->mrn = cl->min = 0;
 	cl->logon_status = CPDLC_LOGON_IN_PROG;
 }
 
@@ -572,7 +590,7 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 	inmsgbuf = safe_calloc(1, sizeof (*inmsgbuf));
 	inmsgbuf->msg = msg;
-	LIST_INSERT_TAIL(cl->inmsgbufs.head, cl->inmsgbufs.tail, inmsgbuf);
+	list_insert_tail(&cl->inmsgbufs, inmsgbuf);
 }
 
 static bool
@@ -711,13 +729,17 @@ do_msg_input(cpdlc_client_t *cl)
 	return (new_msgs);
 }
 
-static void
-do_msg_output(cpdlc_client_t *cl)
+static cpdlc_msg_token_t *
+do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 {
-	ASSERT(cl != NULL);
+	unsigned num_tokens = 0;
+	cpdlc_msg_token_t *tokens = NULL;
 
-	for (outmsgbuf_t *outmsgbuf = cl->outmsgbufs.sending_head;
-	    outmsgbuf != NULL; outmsgbuf = cl->outmsgbufs.sending_head) {
+	ASSERT(cl != NULL);
+	ASSERT(num_tokens_p != NULL);
+
+	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
+	    outmsgbuf != NULL; outmsgbuf = list_head(&cl->outmsgbufs.sending)) {
 		int bytes = gnutls_record_send(cl->session,
 		    &outmsgbuf->buf[outmsgbuf->bytes_sent],
 		    outmsgbuf->bufsz - outmsgbuf->bytes_sent);
@@ -736,23 +758,28 @@ do_msg_output(cpdlc_client_t *cl)
 		}
 		outmsgbuf->bytes_sent += bytes;
 		ASSERT3S(outmsgbuf->bytes_sent, <=, outmsgbuf->bufsz);
-		LIST_REMOVE(cl->outmsgbufs.sending_head,
-		    cl->outmsgbufs.sending_tail, outmsgbuf);
+		list_remove(&cl->outmsgbufs.sending, outmsgbuf);
 		/* Don't need the buffer inside anymore */
 		free(outmsgbuf->buf);
 		outmsgbuf->buf = NULL;
 		outmsgbuf->bufsz = 0;
 		if (outmsgbuf->track_sent) {
-			LIST_INSERT_TAIL(cl->outmsgbufs.sent_head,
-			    cl->outmsgbufs.sent_tail, outmsgbuf);
+			list_insert_tail(&cl->outmsgbufs.sent, outmsgbuf);
+			tokens = safe_realloc(tokens, (num_tokens + 1) *
+			    sizeof (*tokens));
+			tokens[num_tokens] = outmsgbuf->token;
 		} else {
 			free(outmsgbuf);
 		}
 	}
+
+	*num_tokens_p = num_tokens;
+	return (tokens);
 }
 
 static bool
-poll_for_msgs(cpdlc_client_t *cl)
+poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
+    unsigned *num_out_tokens)
 {
 	struct pollfd pfd;
 	int ret;
@@ -762,10 +789,12 @@ poll_for_msgs(cpdlc_client_t *cl)
 	ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
 	ASSERT(cl->session != NULL);
 	ASSERT(cl->sock != -1);
+	ASSERT(out_tokens != NULL);
+	ASSERT(num_out_tokens != NULL);
 
 	pfd.fd = cl->sock;
 	pfd.events = POLLIN;
-	if (cl->outmsgbufs.sending_head != NULL)
+	if (list_head(&cl->outmsgbufs.sending) != NULL)
 		pfd.events |= POLLOUT;
 
 	ret = poll(&pfd, 1, WORKER_POLL_INTVAL);
@@ -779,7 +808,7 @@ poll_for_msgs(cpdlc_client_t *cl)
 		new_msgs = do_msg_input(cl);
 	/* In case input killed the connection, recheck logon_status */
 	if (cl->logon_status != CPDLC_LOGON_NONE && (pfd.revents & POLLOUT))
-		do_msg_output(cl);
+		*out_tokens = do_msg_output(cl, num_out_tokens);
 
 	return (new_msgs);
 }
@@ -844,8 +873,7 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 	cpdlc_msg_encode(msg, outmsgbuf->buf, outmsgbuf->bufsz + 1);
 	outmsgbuf->track_sent = track_sent;
 
-	LIST_INSERT_TAIL(cl->outmsgbufs.sending_head,
-	    cl->outmsgbufs.sending_tail, outmsgbuf);
+	list_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);
 
 	return (outmsgbuf->token);
 }
@@ -879,19 +907,20 @@ cpdlc_client_get_msg_status(cpdlc_client_t *cl, cpdlc_msg_token_t token)
 
 	mutex_enter(&cl->lock);
 
-	for (outmsgbuf_t *outmsgbuf = cl->outmsgbufs.sent_head; outmsgbuf != NULL;
-	    outmsgbuf = outmsgbuf->next) {
+	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sent);
+	    outmsgbuf != NULL;
+	    outmsgbuf = list_next(&cl->outmsgbufs.sent, outmsgbuf)) {
 		if (outmsgbuf->token == token) {
 			status = outmsgbuf->status;
-			LIST_REMOVE(cl->outmsgbufs.sent_head,
-			    cl->outmsgbufs.sent_tail, outmsgbuf);
+			list_remove(&cl->outmsgbufs.sent, outmsgbuf);
 			free(outmsgbuf->buf);
 			free(outmsgbuf);
 			goto out;
 		}
 	}
-	for (outmsgbuf_t *outmsgbuf = cl->outmsgbufs.sending_head;
-	    outmsgbuf != NULL; outmsgbuf = outmsgbuf->next) {
+	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
+	    outmsgbuf != NULL;
+	    outmsgbuf = list_next(&cl->outmsgbufs.sending, outmsgbuf)) {
 		if (outmsgbuf->token == token) {
 			status = outmsgbuf->status;
 			goto out;
@@ -913,7 +942,7 @@ cpdlc_client_recv_msg(cpdlc_client_t *cl)
 
 	inmsgbuf = cl->inmsgbufs.head;
 	if (inmsgbuf != NULL) {
-		LIST_REMOVE(cl->inmsgbufs.head, cl->inmsgbufs.tail, inmsgbuf);
+		list_remove(&cl->inmsgbufs, inmsgbuf);
 		ASSERT(inmsgbuf->msg != NULL);
 		msg = inmsgbuf->msg;
 		free(inmsgbuf);
@@ -947,10 +976,18 @@ cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl)
 }
 
 void
+cpdlc_client_set_msg_sent_cb(cpdlc_client_t *cl, cpdlc_msg_sent_cb_t cb)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->msg_sent_cb = cb;
+	mutex_exit(&cl->lock);
+}
+
+void
 cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl, cpdlc_msg_recv_cb_t cb)
 {
 	ASSERT(cl != NULL);
-
 	mutex_enter(&cl->lock);
 	cl->msg_recv_cb = cb;
 	mutex_exit(&cl->lock);

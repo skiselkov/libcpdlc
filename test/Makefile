@@ -34,13 +34,17 @@ MSGTEST_OBJS = \
 	msgtest.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o
+	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/minilist.o
 
-CLIENT_TEST_OBJS = msgtest.o \
+CLIENT_TEST_OBJS = \
+	client_test.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_client.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o
+	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/cpdlc_msglist.o \
+	$(SRCPREFIX)/minilist.o
 
 all : msgtest client_test
 

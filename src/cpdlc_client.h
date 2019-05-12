@@ -65,36 +65,42 @@ typedef uint64_t cpdlc_msg_token_t;
 #define	CPDLC_INVALID_MSG_TOKEN	((cpdlc_msg_token_t)-1)
 
 typedef void (*cpdlc_msg_recv_cb_t)(cpdlc_client_t *client);
+typedef void (*cpdlc_msg_sent_cb_t)(cpdlc_client_t *client,
+    const cpdlc_msg_token_t *token, unsigned num_tokens);
 
-cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
+CPDLC_API cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
     int server_port, const char *ca_file, bool is_atc);
-void cpdlc_client_fini(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_fini(cpdlc_client_t *cl);
 
-void cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
-    const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
-    const char *cert_file);
-void cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
-    const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
-    const char *cert_pem_data);
+CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
+    const char *key_file, const char *key_pass,
+    gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_file);
+CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
+    const char *key_pem_data, const char *key_pass,
+    gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_pem_data);
 
-void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
+CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to);
-void cpdlc_client_logoff(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
 
-cpdlc_client_logon_status_t cpdlc_client_get_logon_status(
+CPDLC_API cpdlc_client_logon_status_t cpdlc_client_get_logon_status(
     const cpdlc_client_t *cl);
 
-cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,
+CPDLC_API cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg);
-cpdlc_msg_status_t cpdlc_client_get_msg_status(cpdlc_client_t *cl,
+CPDLC_API cpdlc_msg_status_t cpdlc_client_get_msg_status(cpdlc_client_t *cl,
     cpdlc_msg_token_t token);
 
-cpdlc_msg_t *cpdlc_client_recv_msg(cpdlc_client_t *cl);
+CPDLC_API cpdlc_msg_t *cpdlc_client_recv_msg(cpdlc_client_t *cl);
 
-void cpdlc_client_set_cb_userinfo(cpdlc_client_t *cl, void *userinfo);
-void *cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_set_cb_userinfo(cpdlc_client_t *cl,
+    void *userinfo);
+CPDLC_API void *cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl);
 
-void cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl, cpdlc_msg_recv_cb_t cb);
+CPDLC_API void cpdlc_client_set_msg_sent_cb(cpdlc_client_t *cl,
+    cpdlc_msg_sent_cb_t cb);
+CPDLC_API void cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl,
+    cpdlc_msg_recv_cb_t cb);
 
 #ifdef	__cplusplus
 }
