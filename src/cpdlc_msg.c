@@ -105,7 +105,7 @@ cpdlc_escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 			/* Terminate the output in case of short outbuf */
 			out_buf[j] = '\0';
 		}
-		if (isalnum(c) || c == ' ' || c == '.' || c == ',') {
+		if (isalnum(c) || c == '.' || c == ',') {
 			out_buf[j] = in_buf[i];
 		} else {
 			if (j + 4 < cap)
@@ -301,10 +301,14 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_ICAONAME:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
-			    arg->icaoname);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s %s",
+			    arg->icaoname.icao, arg->icaoname.name);
 		} else {
-			cpdlc_escape_percent(arg->icaoname, textbuf,
+			cpdlc_escape_percent(arg->icaoname.icao, textbuf,
+			    sizeof (textbuf));
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+			    textbuf);
+			cpdlc_escape_percent(arg->icaoname.name, textbuf,
 			    sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
@@ -504,9 +508,14 @@ validate_logon_message(const cpdlc_msg_t *msg)
 		    "may not contain MSG segments\n");
 		return (false);
 	}
-	if (msg->from[0] == '\0') {
+	if (msg->from[0] == '\0' && strcmp(msg->logon_data, "FAILURE") != 0) {
 		fprintf(stderr, "Message malformed: LOGON messages "
 		    "MUST contain a FROM header\n");
+		return (false);
+	}
+	if (msg->min == INVALID_MSG_SEQ_NR) {
+		fprintf(stderr, "Message malformed: missing or invalid "
+		    "MIN header\n");
 		return (false);
 	}
 	return (true);
@@ -857,18 +866,37 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			}
 			break;
 		case CPDLC_ARG_ICAONAME:
+			/* The ICAO identifier goes first */
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (cpdlc_unescape_percent(textbuf, arg->icaoname,
-			    sizeof (arg->icaoname)) == -1) {
+			if (cpdlc_unescape_percent(textbuf, arg->icaoname.icao,
+			    sizeof (arg->icaoname.icao)) == -1) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid percent escapes\n");
 				return (false);
 			}
-			if (contains_spaces(arg->pos)) {
+			if (contains_spaces(arg->icaoname.icao)) {
 				fprintf(stderr, "Malformed message: icaoname "
 				    "cannot contain whitespace\n");
+				return (false);
+			}
+			/* Followed by whitespace */
+			SKIP_NONSPACE(start, end);
+			SKIP_SPACE(start, end);
+			if (start == end) {
+				fprintf(stderr, "Malformed message: icaoname "
+				    "must be followed by descriptive name\n");
+				return (false);
+			}
+			/* And finally a percent-escaped descriptive name */
+			arg_end = find_arg_end(start, end);
+			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
+			    (uintptr_t)(arg_end - start) + 1));
+			if (cpdlc_unescape_percent(textbuf, arg->icaoname.name,
+			    sizeof (arg->icaoname.name)) == -1) {
+				fprintf(stderr, "Malformed message: "
+				    "invalid percent escapes\n");
 				return (false);
 			}
 			break;
@@ -1281,7 +1309,11 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->squawk = *(unsigned *)arg_val1;
 		break;
 	case CPDLC_ARG_ICAONAME:
-		cpdlc_strlcpy(arg->icaoname, arg_val1, sizeof (arg->icaoname));
+		ASSERT(arg_val2 != NULL);
+		cpdlc_strlcpy(arg->icaoname.icao, arg_val1,
+		    sizeof (arg->icaoname.icao));
+		cpdlc_strlcpy(arg->icaoname.name, arg_val2,
+		    sizeof (arg->icaoname.name));
 		break;
 	case CPDLC_ARG_FREQUENCY:
 		arg->freq = *(double *)arg_val1;
@@ -1381,8 +1413,9 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (sizeof (arg->squawk));
 	case CPDLC_ARG_ICAONAME:
 		ASSERT(arg_val1 != NULL || str_cap == 0);
-		cpdlc_strlcpy(arg_val1, arg->icaoname, str_cap);
-		return (strlen(arg->icaoname));
+		cpdlc_strlcpy(arg_val1, arg->icaoname.icao, str_cap);
+		cpdlc_strlcpy(arg_val2, arg->icaoname.name, str_cap);
+		return (strlen(arg->icaoname.name));
 	case CPDLC_ARG_FREQUENCY:
 		ASSERT(arg_val1 != NULL);
 		*(double *)arg_val1 = arg->freq;

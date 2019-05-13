@@ -4,3 +4,5 @@ test/msgtest
 test/client_test
 cpdlcd/cpdlcd
 cpdlcd/cpdlcd_*.pem
+cpdlcd/test.conf
+test/cpdlc_cert.pem

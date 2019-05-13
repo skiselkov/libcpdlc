@@ -42,27 +42,43 @@ typedef uint32_t cpdlc_msg_thr_id_t;
 
 typedef void (*cpdlc_msglist_update_cb_t)(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads);
+typedef void (*cpdlc_get_time_func_t)(unsigned *hours, unsigned *mins);
 
 typedef enum {
+	CPDLC_MSG_THR_NEW,
 	CPDLC_MSG_THR_OPEN,
-	CPDLC_MSG_THR_CLOSED
+	CPDLC_MSG_THR_CLOSED,
+	CPDLC_MSG_THR_ACCEPTED,
+	CPDLC_MSG_THR_REJECTED,
+	CPDLC_MSG_THR_TIMEDOUT,
+	CPDLC_MSG_THR_FAILED,
+	CPDLC_MSG_THR_PENDING,
+	CPDLC_MSG_THR_ERROR
 } cpdlc_msg_thr_status_t;
 
 CPDLC_API cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);
 CPDLC_API void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
 
+CPDLC_API void cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
+    cpdlc_get_time_func_t func);
+
 CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
     cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t *thr_ids, unsigned *cap);
 CPDLC_API void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 
 CPDLC_API cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(
     cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 CPDLC_API unsigned cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id, unsigned msg_nr, const cpdlc_msg_t **msg_p,
-    cpdlc_msg_token_t *token_p);
+    cpdlc_msg_token_t *token_p, unsigned *hours_p, unsigned *mins_p,
+    bool *is_sent_p);
 
 CPDLC_API void cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist,
     void *userinfo);

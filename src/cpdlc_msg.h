@@ -371,7 +371,10 @@ typedef union {
 	char		*route;
 	char		proc[16];
 	unsigned	squawk;
-	char		icaoname[8];
+	struct {
+		char	icao[8];
+		char	name[32];
+	} icaoname;
 	double		freq;
 	unsigned	deg;
 	struct {

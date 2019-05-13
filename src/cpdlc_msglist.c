@@ -36,6 +36,8 @@ typedef struct msg_bucket_s {
 	cpdlc_msg_token_t	tok;
 	bool			sent;
 	list_node_t		node;
+	unsigned		hours;
+	unsigned		mins;
 } msg_bucket_t;
 
 typedef struct msg_thr_s {
@@ -57,7 +59,20 @@ struct cpdlc_msglist_s {
 
 	cpdlc_msglist_update_cb_t	update_cb;
 	void				*userinfo;
+
+	cpdlc_get_time_func_t		get_time_func;
 };
+
+static void
+dfl_get_time_func(unsigned *hours, unsigned *mins)
+{
+	time_t now = time(NULL);
+	const struct tm *tm = localtime(&now);
+	ASSERT(hours != NULL);
+	ASSERT(mins != NULL);
+	*hours = tm->tm_hour;
+	*mins = tm->tm_min;
+}
 
 static msg_thr_t *
 find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
@@ -106,7 +121,7 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, unsigned mrn)
 		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
 		    bucket != NULL; bucket = list_prev(&thr->buckets, bucket)) {
 			ASSERT(bucket->msg != NULL);
-			if (!bucket->sent &&
+			if (bucket->sent &&
 			    cpdlc_msg_get_min(bucket->msg) == mrn) {
 				return (thr);
 			}
@@ -142,6 +157,8 @@ msg_recv_cb(cpdlc_client_t *cl)
 		bucket = safe_calloc(1, sizeof (*bucket));
 		bucket->msg = msg;
 		bucket->tok = CPDLC_INVALID_MSG_TOKEN;
+		ASSERT(msglist->get_time_func != NULL);
+		msglist->get_time_func(&bucket->hours, &bucket->mins);
 
 		list_insert_tail(&thr->buckets, bucket);
 
@@ -176,6 +193,7 @@ cpdlc_msglist_alloc(cpdlc_client_t *cl)
 	list_create(&msglist->thr, sizeof (msg_thr_t),
 	    offsetof(msg_thr_t, node));
 	msglist->cl = cl;
+	msglist->get_time_func = dfl_get_time_func;
 
 	return (msglist);
 }
@@ -193,6 +211,17 @@ cpdlc_msglist_free(cpdlc_msglist_t *msglist)
 	free(msglist);
 }
 
+void
+cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
+    cpdlc_get_time_func_t func)
+{
+	ASSERT(msglist != NULL);
+	ASSERT(func != NULL);
+	mutex_enter(&msglist->lock);
+	msglist->get_time_func = func;
+	mutex_exit(&msglist->lock);
+}
+
 cpdlc_msg_thr_id_t
 cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
     cpdlc_msg_thr_id_t thr_id)
@@ -206,6 +235,8 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	mutex_enter(&msglist->lock);
 
 	thr = find_msg_thr(msglist, thr_id);
+	if (thr_id == CPDLC_NO_MSG_THR_ID)
+		thr->status = CPDLC_MSG_THR_OPEN;
 	thr_id = thr->thr_id;
 
 	/* Assign the appropriate MIN and MRN flags */
@@ -222,11 +253,38 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	bucket->msg = msg;
 	bucket->tok = cpdlc_client_send_msg(msglist->cl, msg);
 	bucket->sent = true;
+	ASSERT(msglist->get_time_func != NULL);
+	msglist->get_time_func(&bucket->hours, &bucket->mins);
 	list_insert_tail(&thr->buckets, bucket);
 
 	mutex_exit(&msglist->lock);
 
 	return (thr_id);
+}
+
+void
+cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t *thr_ids, unsigned *cap)
+{
+	unsigned thr_i = 0;
+
+	ASSERT(msglist != NULL);
+	ASSERT(cap != NULL);
+
+	mutex_enter(&msglist->lock);
+	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
+	    thr = list_next(&msglist->thr, thr), thr_i++) {
+		if (thr_i < *cap) {
+			ASSERT(thr_ids != NULL);
+			thr_ids[thr_i] = thr->thr_id;
+		}
+	}
+	mutex_exit(&msglist->lock);
+
+	if (thr_ids == NULL)
+		*cap = thr_i;
+	else
+		*cap = MIN(*cap, thr_i);
 }
 
 cpdlc_msg_thr_status_t
@@ -245,6 +303,21 @@ cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
 	mutex_exit(&msglist->lock);
 
 	return (status);
+}
+
+void
+cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
+{
+	msg_thr_t *thr;
+
+	ASSERT(msglist != NULL);
+	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	thr = find_msg_thr(msglist, thr_id);
+	if (thr->status == CPDLC_MSG_THR_NEW)
+		thr->status = CPDLC_MSG_THR_OPEN;
+	mutex_exit(&msglist->lock);
 }
 
 unsigned
@@ -267,7 +340,8 @@ cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
 
 void
 cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
-    unsigned msg_nr, const cpdlc_msg_t **msg_p, cpdlc_msg_token_t *token_p)
+    unsigned msg_nr, const cpdlc_msg_t **msg_p, cpdlc_msg_token_t *token_p,
+    unsigned *hours_p, unsigned *mins_p, bool *is_sent_p)
 {
 	msg_thr_t *thr;
 	msg_bucket_t *bucket;
@@ -287,6 +361,12 @@ cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 		*msg_p = bucket->msg;
 	if (token_p != NULL)
 		*token_p = bucket->tok;
+	if (hours_p != NULL)
+		*hours_p = bucket->hours;
+	if (mins_p != NULL)
+		*mins_p = bucket->mins;
+	if (is_sent_p != NULL)
+		*is_sent_p = bucket->sent;
 
 	mutex_exit(&msglist->lock);
 }

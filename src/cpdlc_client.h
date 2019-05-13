@@ -51,7 +51,7 @@ typedef enum {
 	CPDLC_LOGON_IN_PROG,
 	/* LOGON complete, ready for operation */
 	CPDLC_LOGON_COMPLETE
-} cpdlc_client_logon_status_t;
+} cpdlc_logon_status_t;
 
 typedef enum {
 	CPDLC_MSG_STATUS_SENDING,
@@ -68,9 +68,9 @@ typedef void (*cpdlc_msg_recv_cb_t)(cpdlc_client_t *client);
 typedef void (*cpdlc_msg_sent_cb_t)(cpdlc_client_t *client,
     const cpdlc_msg_token_t *token, unsigned num_tokens);
 
-CPDLC_API cpdlc_client_t *cpdlc_client_init(const char *server_hostname,
-    int server_port, const char *ca_file, bool is_atc);
-CPDLC_API void cpdlc_client_fini(cpdlc_client_t *cl);
+CPDLC_API cpdlc_client_t *cpdlc_client_alloc(const char *server_hostname,
+    unsigned server_port, const char *ca_file, bool is_atc);
+CPDLC_API void cpdlc_client_free(cpdlc_client_t *cl);
 
 CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
     const char *key_file, const char *key_pass,
@@ -83,7 +83,7 @@ CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to);
 CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
 
-CPDLC_API cpdlc_client_logon_status_t cpdlc_client_get_logon_status(
+CPDLC_API cpdlc_logon_status_t cpdlc_client_get_logon_status(
     const cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,

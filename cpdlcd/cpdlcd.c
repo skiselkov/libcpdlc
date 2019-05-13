@@ -694,9 +694,11 @@ complete_logon(conn_t *conn)
 		lacf_strlcpy(conn->from, conn->logon_from, sizeof (conn->from));
 		htbl_set(&conns_by_from, conn->from, conn);
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
+		cpdlc_msg_set_from(msg, "ATN");
 	} else {
 		conn->logon_status = LOGON_NONE;
 		cpdlc_msg_set_logon_data(msg, "FAILURE");
+		cpdlc_msg_set_from(msg, "ATN");
 	}
 	conn_send_msg(conn, msg);
 	cpdlc_msg_free(msg);

@@ -102,9 +102,10 @@ struct cpdlc_client_s {
 	/* protected by `lock' */
 	thread_t			worker;
 	bool				worker_started;
-	cpdlc_client_logon_status_t	logon_status;
+	cpdlc_logon_status_t	logon_status;
 	int				sock;
 	gnutls_session_t		session;
+	bool				handshake_completed;
 	gnutls_certificate_credentials_t xcred;
 
 	cpdlc_msg_sent_cb_t		msg_sent_cb;
@@ -221,7 +222,7 @@ logon_worker(void *userinfo)
 }
 
 cpdlc_client_t *
-cpdlc_client_init(const char *server_hostname, int server_port,
+cpdlc_client_alloc(const char *server_hostname, unsigned server_port,
     const char *cafile, bool is_atc)
 {
 	cpdlc_client_t *cl = safe_calloc(1, sizeof (*cl));
@@ -231,6 +232,8 @@ cpdlc_client_init(const char *server_hostname, int server_port,
 	ASSERT(server_hostname != NULL);
 	if (server_port == 0)
 		server_port = 17622;
+	else
+		ASSERT3U(server_port, <, UINT16_MAX);
 
 	cpdlc_strlcpy(cl->server_hostname, server_hostname,
 	    sizeof (cl->server_hostname));
@@ -269,7 +272,7 @@ clear_key_data(cpdlc_client_t *cl)
 }
 
 void
-cpdlc_client_fini(cpdlc_client_t *cl)
+cpdlc_client_free(cpdlc_client_t *cl)
 {
 	ASSERT(cl != NULL);
 
@@ -358,17 +361,21 @@ reset_link_state(cpdlc_client_t *cl)
 	ASSERT(cl != NULL);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 	if (cl->session != NULL) {
-		if (cl->logon_status >= CPDLC_LOGON_LINK_AVAIL)
-			gnutls_bye(cl->session, GNUTLS_SHUT_WR);
+		if (cl->handshake_completed) {
+			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
+			cl->handshake_completed = true;
+		}
 		gnutls_deinit(cl->session);
 		cl->session = NULL;
+	} else {
+		ASSERT0(cl->handshake_completed);
 	}
 	if (cl->xcred != NULL) {
 		gnutls_certificate_free_credentials(cl->xcred);
 		cl->xcred = NULL;
 	}
 	if (cl->sock != -1) {
-		close(cl->sock);
+		shutdown(cl->sock, SHUT_RDWR);
 		cl->sock = -1;
 	}
 
@@ -403,7 +410,7 @@ init_conn(cpdlc_client_t *cl)
 	    .ai_socktype = SOCK_STREAM,
 	    .ai_protocol = IPPROTO_TCP
 	};
-	cpdlc_client_logon_status_t new_status;
+	cpdlc_logon_status_t new_status;
 
 	ASSERT(cl != NULL);
 	ASSERT3S(cl->sock, ==, -1);
@@ -548,6 +555,8 @@ tls_handshake(cpdlc_client_t *cl)
 		if (ret != GNUTLS_E_AGAIN)
 			cl->logon_status = CPDLC_LOGON_NONE;
 		return;
+	} else {
+		cl->handshake_completed = true;
 	}
 	cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
 }
@@ -797,9 +806,12 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	if (list_head(&cl->outmsgbufs.sending) != NULL)
 		pfd.events |= POLLOUT;
 
+	/* Release the lock to allow for state updates while running */
+	mutex_exit(&cl->lock);
 	ret = poll(&pfd, 1, WORKER_POLL_INTVAL);
-	/* Poll error */
-	if (ret < 0) {
+	mutex_enter(&cl->lock);
+	/* Poll error or external shutdown request */
+	if (ret < 0 || cl->logon_status == CPDLC_LOGON_NONE) {
 		cl->logon_status = CPDLC_LOGON_NONE;
 		return (false);
 	}
@@ -851,7 +863,7 @@ cpdlc_client_logoff(cpdlc_client_t *cl)
 	mutex_exit(&cl->lock);
 }
 
-cpdlc_client_logon_status_t
+cpdlc_logon_status_t
 cpdlc_client_get_logon_status(const cpdlc_client_t *cl)
 {
 	ASSERT(cl != NULL);

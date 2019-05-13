@@ -27,8 +27,10 @@ include ../Makefile.com
 CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG $(PLATFORM_DEFS) \
     $(shell pkg-config gnutls --cflags)
 LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
+CLIENT_TEST_LIBS += -lncurses
 
 SRCPREFIX=../src
+FMSBOX=../fmsbox
 
 MSGTEST_OBJS = \
 	msgtest.o \
@@ -44,7 +46,8 @@ CLIENT_TEST_OBJS = \
 	$(SRCPREFIX)/cpdlc_infos.o \
 	$(SRCPREFIX)/cpdlc_msg.o \
 	$(SRCPREFIX)/cpdlc_msglist.o \
-	$(SRCPREFIX)/minilist.o
+	$(SRCPREFIX)/minilist.o \
+	$(FMSBOX)/fmsbox.o
 
 all : msgtest client_test
 
@@ -52,7 +55,7 @@ msgtest : $(MSGTEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 client_test : $(CLIENT_TEST_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(CLIENT_TEST_LIBS) $(LIBS)
 
 %.o : %.c
 	$(CC) $(CFLAGS) -c -o $@ $^
