@@ -47,7 +47,9 @@ CLIENT_TEST_OBJS = \
 	$(SRCPREFIX)/cpdlc_msg.o \
 	$(SRCPREFIX)/cpdlc_msglist.o \
 	$(SRCPREFIX)/minilist.o \
-	$(FMSBOX)/fmsbox.o
+	$(FMSBOX)/fmsbox.o \
+	$(FMSBOX)/fmsbox_parsing.o \
+	$(FMSBOX)/fmsbox_scratchpad.o
 
 all : msgtest client_test
 

@@ -37,192 +37,95 @@
 #include "../src/cpdlc_string.h"
 
 #include "fmsbox.h"
+#include "fmsbox_impl.h"
+#include "fmsbox_parsing.h"
+#include "fmsbox_scratchpad.h"
 
-#define	SCRATCHPAD_MAX	22
-#define	SCRATCHPAD_ROW	13
-#define	ERROR_MSG_MAX	19
-#define	ERROR_MSG_ROW	14
-#define	LSK1_ROW	2
-#define	LSK2_ROW	4
-#define	LSK3_ROW	6
-#define	LSK4_ROW	8
-#define	LSK5_ROW	10
-#define	LSK6_ROW	12
-#define	LSKi_ROW(_idx)	((_idx) * 2 + 2)
-#define	LSK_HEADER_ROW(x)	((x) - 1)
-#define	MAX_FREETEXT_LINES	8
-
-typedef struct {
-	void	(*draw_cb)(fmsbox_t *box);
-	bool	(*key_cb)(fmsbox_t *box, fms_key_t key);
-	bool	has_return;
-} fms_page_t;
-
-struct fmsbox_s {
-	fmsbox_char_t	scr[FMSBOX_ROWS][FMSBOX_COLS];
-	fms_page_t	*page;
-	unsigned	subpage;
-	unsigned	num_subpages;
-	char		scratchpad[SCRATCHPAD_MAX + 1];
-	char		error_msg[ERROR_MSG_MAX + 1];
-
-	char			flt_id[12];
-	char			to[8];
-
-	cpdlc_msg_thr_id_t	thr_id;
-	bool			msg_log_open;
-	char			freetext[MAX_FREETEXT_LINES][FMSBOX_COLS + 1];
-
-	struct {
-		cpdlc_arg_t	alt[2];
-		bool		due_wx;
-		bool		due_ac;
-		char		step_at[8];
-		bool		step_at_time;
-		int		step_hrs;
-		int		step_mins;
-		bool		plt_discret;
-		bool		maint_sep_vmc;
-	} alt_req;
-
-	struct {
-		cpdlc_msg_t	*msg;
-		char		title[8];
-		int		ret_page;
-	} verify;
-
-	cpdlc_client_t	*cl;
-	cpdlc_msglist_t	*msglist;
-};
-
-enum {
-	FMS_PAGE_MAIN_MENU,
-	FMS_PAGE_LOGON_STATUS,
-	FMS_PAGE_MSG_LOG,
-	FMS_PAGE_MSG_THR,
-	FMS_PAGE_FREETEXT,
-	FMS_PAGE_REQUESTS,
-	FMS_PAGE_REQ_ALT,
+static fms_page_t fms_pages[FMS_NUM_PAGES] = {
+	{	/* FMS_PAGE_MAIN_MENU */
+		.draw_cb = fmsbox_main_menu_draw_cb,
+		.key_cb = fmsbox_main_menu_key_cb
+	},
+	{	/* FMS_PAGE_LOGON_STATUS */
+		.draw_cb = fmsbox_logon_status_draw_cb,
+		.key_cb = fmsbox_logon_status_key_cb,
+		.has_return = true
+	},
+	{	/* FMS_PAGE_MSG_LOG */
+		.draw_cb = fmsbox_msg_log_draw_cb,
+		.key_cb = fmsbox_msg_log_key_cb,
+		.has_return = true
+	},
+	{	/* FMS_PAGE_MSG_THR */
+		.draw_cb = fmsbox_msg_thr_draw_cb,
+		.key_cb = fmsbox_msg_thr_key_cb,
+		.has_return = true
+	},
+	{	/* FMS_PAGE_MSG_THR */
+		.draw_cb = fmsbox_freetext_draw_cb,
+		.key_cb = fmsbox_freetext_key_cb,
+		.has_return = true
+	},
+	{	/* FMS_PAGE_REQUESTS */
+		.draw_cb = fmsbox_requests_draw_cb,
+		.key_cb = fmsbox_requests_key_cb,
+		.has_return = true
+	},
+	{	/* FMS_PAGE_REQ_ALT */
+		.draw_cb = fmsbox_req_alt_draw_cb,
+		.key_cb = fmsbox_req_alt_key_cb
+	},
 #if 0
-	FMS_PAGE_REQ_OFF,
-	FMS_PAGE_REQ_SPD,
-	FMS_PAGE_REQ_RTE,
+	{	/* FMS_PAGE_REQ_OFF */
+		.draw_cb = fmsbox_req_off_draw_cb,
+		.key_cb = fmsbox_req_off_key_cb
+	},
+	{	/* FMS_PAGE_REQ_SPD */
+		.draw_cb = fmsbox_req_spd_draw_cb,
+		.key_cb = fmsbox_req_spd_key_cb
+	},
+	{	/* FMS_PAGE_REQ_RTE */
+		.draw_cb = fmsbox_req_rte_draw_cb,
+		.key_cb = fmsbox_req_rte_key_cb
+	}
 #endif
-	FMS_PAGE_VRFY,
-	FMS_NUM_PAGES
+	{	/* FMS_PAGE_VRFY */
+		.draw_cb = fmsbox_vrfy_draw_cb,
+		.key_cb = fmsbox_vrfy_key_cb
+	}
 };
 
 static void draw_atc_msg_lsk(fmsbox_t *box);
 static void handle_atc_msg_lsk(fmsbox_t *box);
 static void put_cur_time(fmsbox_t *box);
 
-static void main_menu_draw_cb(fmsbox_t *box);
-static bool main_menu_key_cb(fmsbox_t *box, fms_key_t key);
-static void logon_status_draw_cb(fmsbox_t *box);
-static bool logon_status_key_cb(fmsbox_t *box, fms_key_t key);
-static void msg_log_draw_cb(fmsbox_t *box);
-static bool msg_log_key_cb(fmsbox_t *box, fms_key_t key);
-static void msg_thr_draw_cb(fmsbox_t *box);
-static bool msg_thr_key_cb(fmsbox_t *box, fms_key_t key);
-static void freetext_draw_cb(fmsbox_t *box);
-static bool freetext_key_cb(fmsbox_t *box, fms_key_t key);
-static void requests_draw_cb(fmsbox_t *box);
-static bool requests_key_cb(fmsbox_t *box, fms_key_t key);
-static void req_alt_draw_cb(fmsbox_t *box);
-static bool req_alt_key_cb(fmsbox_t *box, fms_key_t key);
-#if 0
-static void req_off_draw_cb(fmsbox_t *box);
-static bool req_off_key_cb(fmsbox_t *box, fms_key_t key);
-static void req_spd_draw_cb(fmsbox_t *box);
-static bool req_spd_key_cb(fmsbox_t *box, fms_key_t key);
-static void req_rte_draw_cb(fmsbox_t *box);
-static bool req_rte_key_cb(fmsbox_t *box, fms_key_t key);
-#endif
-static void vrfy_draw_cb(fmsbox_t *box);
-static bool vrfy_key_cb(fmsbox_t *box, fms_key_t key);
-
-static fms_page_t fms_pages[FMS_NUM_PAGES] = {
-	{	/* FMS_PAGE_MAIN_MENU */
-		.draw_cb = main_menu_draw_cb,
-		.key_cb = main_menu_key_cb
-	},
-	{	/* FMS_PAGE_LOGON_STATUS */
-		.draw_cb = logon_status_draw_cb,
-		.key_cb = logon_status_key_cb,
-		.has_return = true
-	},
-	{	/* FMS_PAGE_MSG_LOG */
-		.draw_cb = msg_log_draw_cb,
-		.key_cb = msg_log_key_cb,
-		.has_return = true
-	},
-	{	/* FMS_PAGE_MSG_THR */
-		.draw_cb = msg_thr_draw_cb,
-		.key_cb = msg_thr_key_cb,
-		.has_return = true
-	},
-	{	/* FMS_PAGE_MSG_THR */
-		.draw_cb = freetext_draw_cb,
-		.key_cb = freetext_key_cb,
-		.has_return = true
-	},
-	{	/* FMS_PAGE_REQUESTS */
-		.draw_cb = requests_draw_cb,
-		.key_cb = requests_key_cb,
-		.has_return = true
-	},
-	{	/* FMS_PAGE_REQ_ALT */
-		.draw_cb = req_alt_draw_cb,
-		.key_cb = req_alt_key_cb
-	},
-#if 0
-	{	/* FMS_PAGE_REQ_OFF */
-		.draw_cb = req_off_draw_cb,
-		.key_cb = req_off_key_cb
-	},
-	{	/* FMS_PAGE_REQ_SPD */
-		.draw_cb = req_spd_draw_cb,
-		.key_cb = req_spd_key_cb
-	},
-	{	/* FMS_PAGE_REQ_RTE */
-		.draw_cb = req_rte_draw_cb,
-		.key_cb = req_rte_key_cb
-	}
-#endif
-	{	/* FMS_PAGE_VRFY */
-		.draw_cb = vrfy_draw_cb,
-		.key_cb = vrfy_key_cb
-	}
-};
-
-static void put_str(fmsbox_t *box, unsigned row, unsigned col,
-    bool align_right, fms_color_t color, fms_font_t size,
-    PRINTF_FORMAT(const char *fmt), ...) PRINTF_ATTR(7);
-
-static void
-set_thr_id(fmsbox_t *box, cpdlc_msg_thr_id_t thr_id)
+void
+fmsbox_set_thr_id(fmsbox_t *box, cpdlc_msg_thr_id_t thr_id)
 {
 	ASSERT(box != NULL);
 	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
-
 	box->thr_id = thr_id;
 	cpdlc_msglist_thr_mark_seen(box->msglist, thr_id);
 }
 
-static void
-set_page(fmsbox_t *box, fms_page_t *page)
+void
+fmsbox_set_page(fmsbox_t *box, unsigned page_nr)
 {
+	fms_page_t *page;
+
 	ASSERT(box != NULL);
-	ASSERT(page != NULL);
+	ASSERT3U(page_nr, <, FMS_NUM_PAGES);
+	page = &fms_pages[page_nr];
 	ASSERT(page->draw_cb != NULL);
 	ASSERT(page->key_cb != NULL);
+
 	box->page = page;
 	box->subpage = 0;
 	box->num_subpages = 0;
 }
 
 void
-set_num_subpages(fmsbox_t *box, unsigned num)
+fmsbox_set_num_subpages(fmsbox_t *box, unsigned num)
 {
 	ASSERT(box != NULL);
 	box->num_subpages = num;
@@ -270,8 +173,8 @@ put_str_v(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
 	va_end(ap2);
 }
 
-static void
-put_str(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
+void
+fmsbox_put_str(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
     fms_color_t color, fms_font_t size, const char *fmt, ...)
 {
 	va_list ap;
@@ -280,8 +183,8 @@ put_str(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
 	va_end(ap);
 }
 
-static void
-put_page_title(fmsbox_t *box, const char *fmt, ...)
+void
+fmsbox_put_page_title(fmsbox_t *box, const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
@@ -306,8 +209,8 @@ lsk2row(int lsk_key_id, int *row, bool *align_right)
 	}
 }
 
-static void
-put_lsk_action(fmsbox_t *box, int lsk_key_id, fms_color_t color,
+void
+fmsbox_put_lsk_action(fmsbox_t *box, int lsk_key_id, fms_color_t color,
     const char *fmt, ...)
 {
 	int row;
@@ -320,8 +223,8 @@ put_lsk_action(fmsbox_t *box, int lsk_key_id, fms_color_t color,
 	va_end(ap);
 }
 
-static void
-put_lsk_title(fmsbox_t *box, int lsk_key_id, const char *fmt, ...)
+void
+fmsbox_put_lsk_title(fmsbox_t *box, int lsk_key_id, const char *fmt, ...)
 {
 	int row;
 	bool align_right;
@@ -334,6 +237,46 @@ put_lsk_title(fmsbox_t *box, int lsk_key_id, const char *fmt, ...)
 	put_str_v(box, row, 0, align_right, FMS_COLOR_CYAN, FMS_FONT_SMALL,
 	    fmt, ap);
 	va_end(ap);
+}
+
+void
+fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
+    int option, const char *first, ...)
+{
+	va_list ap;
+	int idx = 0, offset = 0;
+
+	va_start(ap, first);
+	for (const char *str = first, *next = NULL; str != NULL;
+	    str = next, idx++) {
+		next = va_arg(ap, const char *);
+		if (idx == option) {
+			fmsbox_put_str(box, row, offset, align_right, FMS_COLOR_GREEN,
+			    FMS_FONT_LARGE, "%s", str);
+		} else {
+			fmsbox_put_str(box, row, offset, align_right, FMS_COLOR_WHITE,
+			    FMS_FONT_SMALL, "%s", str);
+		}
+		offset += strlen(str);
+		if (next != NULL) {
+			fmsbox_put_str(box, row, offset, align_right, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "/");
+			offset++;
+		}
+	}
+	va_end(ap);
+}
+
+void
+fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt)
+{
+	char buf[8];
+
+	ASSERT(box != NULL);
+
+	fmsbox_print_alt(alt, buf, sizeof (buf));
+	fmsbox_put_str(box, row, col, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
+	    "%s", buf);
 }
 
 static void
@@ -351,250 +294,11 @@ clear_screen(fmsbox_t *box)
 }
 
 static void
-update_scratchpad(fmsbox_t *box)
-{
-	put_str(box, SCRATCHPAD_ROW, 0, false, FMS_COLOR_CYAN,
-	    FMS_FONT_LARGE, "[");
-	put_str(box, SCRATCHPAD_ROW, 1, false, FMS_COLOR_WHITE,
-	    FMS_FONT_LARGE, "%s", box->scratchpad);
-	put_str(box, SCRATCHPAD_ROW, 0, true, FMS_COLOR_CYAN,
-	    FMS_FONT_LARGE, "]");
-}
-
-static void
 update_error_msg(fmsbox_t *box)
 {
 	ASSERT(box != NULL);
-	put_str(box, ERROR_MSG_ROW, 0, false, FMS_COLOR_AMBER,
+	fmsbox_put_str(box, ERROR_MSG_ROW, 0, false, FMS_COLOR_AMBER,
 	    FMS_FONT_LARGE, "%s", box->error_msg);
-}
-
-static void
-scratchpad_xfer(fmsbox_t *box, char *dest, size_t cap, bool allow_mod)
-{
-	if (!allow_mod) {
-		if (box->scratchpad[0] == '\0') {
-			cpdlc_strlcpy(box->scratchpad, dest,
-			    sizeof (box->scratchpad));
-		}
-		return;
-	}
-	if (strcmp(box->scratchpad, "DELETE") == 0) {
-		memset(dest, 0, cap);
-		memset(box->scratchpad, 0, sizeof (box->scratchpad));
-	} else if (box->scratchpad[0] == '\0') {
-		cpdlc_strlcpy(box->scratchpad, dest,
-		    sizeof (box->scratchpad));
-	} else {
-		cpdlc_strlcpy(dest, box->scratchpad, cap);
-		memset(box->scratchpad, 0, sizeof (box->scratchpad));
-	}
-}
-
-#define	READ_FUNC_BUF_SZ	(FMSBOX_COLS + 1)
-typedef const char *(*parse_func_t)(const char *str, unsigned field_nr,
-    void *data);
-typedef const char *(*insert_func_t)(fmsbox_t *box, unsigned field_nr,
-    void *data, void *userinfo);
-typedef const char *(*delete_func_t)(fmsbox_t *box, void *userinfo);
-typedef void (*read_func_t)(fmsbox_t *box, void *userinfo,
-    char str[READ_FUNC_BUF_SZ]);
-
-static void
-scratchpad_parse_multipart(fmsbox_t *box, void *userinfo, size_t buf_sz,
-    parse_func_t parse_func, insert_func_t insert_func,
-    delete_func_t delete_func, read_func_t read_func)
-{
-	const char *error = NULL;
-
-	ASSERT(box != NULL);
-	ASSERT(buf_sz != 0);
-	ASSERT(parse_func != NULL);
-	ASSERT(insert_func != NULL);
-	ASSERT(delete_func != NULL);
-
-	if (strlen(box->scratchpad) == 0) {
-		if (read_func != NULL) {
-			char str[READ_FUNC_BUF_SZ] = { 0 };
-
-			read_func(box, userinfo, str);
-			if (strlen(str) == 0) {
-				error = "NO DATA";
-			} else {
-				cpdlc_strlcpy(box->scratchpad, str,
-				    sizeof (box->scratchpad));
-			}
-		}
-	} else if (strcmp(box->scratchpad, "DELETE") == 0) {
-		error = delete_func(box, userinfo);
-		memset(box->scratchpad, 0, sizeof (box->scratchpad));
-	} else {
-		const char *start = box->scratchpad;
-		const char *end = start + strlen(start);
-		void *data_buf = safe_malloc(buf_sz);
-
-		for (unsigned field_nr = 0; start < end; field_nr++) {
-			char substr[sizeof (box->scratchpad) + 1];
-			const char *sep = strchr(start, '/');
-
-			if (sep == NULL)
-				sep = end;
-			cpdlc_strlcpy(substr, start, (sep - start) + 1);
-			start = sep + 1;
-
-			if (strlen(substr) == 0)
-				continue;
-			memset(data_buf, 0, buf_sz);
-			error = parse_func(substr, field_nr, data_buf);
-			if (error != NULL)
-				break;
-			error = insert_func(box, field_nr, data_buf, userinfo);
-			if (error != NULL)
-				break;
-		}
-		memset(box->scratchpad, 0, sizeof (box->scratchpad));
-		free(data_buf);
-	}
-
-	if (error != NULL)
-		cpdlc_strlcpy(box->error_msg, error, sizeof (box->error_msg));
-}
-
-static bool
-parse_time(const char *buf, int *hrs_p, int *mins_p)
-{
-	int num, hrs, mins;
-
-	ASSERT(buf != NULL);
-
-	if (strlen(buf) != 4 || !isdigit(buf[0]) || !isdigit(buf[1]) ||
-	    !isdigit(buf[2]) || !isdigit(buf[3]) ||
-	    sscanf(buf, "%d", &num) != 1) {
-		return (false);
-	}
-	hrs = num / 100;
-	mins = num % 100;
-	if (hrs_p != NULL)
-		*hrs_p = hrs;
-	if (mins_p != NULL)
-		*mins_p = mins;
-	return (hrs >= 0 && hrs <= 23 && mins >= 0 && mins <= 59);
-}
-
-static const char *
-parse_alt(const char *str, unsigned field_nr, void *data)
-{
-	cpdlc_arg_t *arg;
-
-	ASSERT(str != NULL);
-	UNUSED(field_nr);
-	ASSERT(data != NULL);
-	arg = data;
-
-	if (strlen(str) < 3)
-		goto errout;
-	if (str[0] == 'F' && str[1] == 'L') {
-		if (sscanf(&str[2], "%d", &arg->alt.alt) != 1)
-			goto errout;
-		arg->alt.fl = true;
-		arg->alt.alt *= 100;
-	} else if (str[0] == 'F') {
-		if (sscanf(&str[1], "%d", &arg->alt.alt) != 1)
-			goto errout;
-		arg->alt.fl = true;
-		arg->alt.alt *= 100;
-	} else {
-		if (sscanf(str, "%d", &arg->alt.alt) != 1)
-			goto errout;
-		/* Round to nearest 100 ft */
-		arg->alt.alt = round(arg->alt.alt / 100.0) * 100;
-	}
-	if (arg->alt.alt <= 0 || arg->alt.alt > 60000)
-		goto errout;
-
-	return (NULL);
-errout:
-	return ("BAD ALTITUDE");
-}
-
-static const char *
-insert_alt_block(fmsbox_t *box, unsigned field_nr, void *data, void *userinfo)
-{
-	cpdlc_arg_t *inarg, *outarg;
-	size_t offset;
-
-	ASSERT(box != NULL);
-	ASSERT(data != NULL);
-	inarg = data;
-	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
-
-	if (field_nr >= 2)
-		goto errout;
-	if (field_nr == 0) {
-		memcpy(outarg, inarg, sizeof (*inarg));
-		memset(&outarg[1], 0, sizeof (*inarg));
-	} else {
-		if (/* lower alt must actually be set */
-		    outarg[0].alt.alt == 0 ||
-		    /* lower alt must really be lower */
-		    outarg[0].alt.alt >= inarg->alt.alt ||
-		    /* if lower alt is FL, higher must as well */
-		    (outarg[0].alt.fl && !inarg->alt.fl)) {
-			goto errout;
-		}
-		memcpy(&outarg[1], inarg, sizeof (*inarg));
-	}
-
-	return (NULL);
-errout:
-	return ("BAD INSERT");
-}
-
-static const char *
-delete_alt_block(fmsbox_t *box, void *userinfo)
-{
-	cpdlc_arg_t *outarg;
-	size_t offset;
-
-	ASSERT(box != NULL);
-	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
-	memset(outarg, 0, 2 * sizeof (cpdlc_arg_t));
-
-	return (NULL);
-}
-
-static int
-print_alt(const cpdlc_arg_t *arg, char *str, size_t cap)
-{
-	ASSERT(arg != NULL);
-	if (arg->alt.fl)
-		return (snprintf(str, cap, "FL%d", arg->alt.alt / 100));
-	return (snprintf(str, cap, "%d", arg->alt.alt));
-}
-
-static void
-read_alt_block(fmsbox_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
-{
-	cpdlc_arg_t *outarg;
-	size_t offset;
-
-	ASSERT(box != NULL);
-	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
-
-	if (outarg->alt.alt != 0) {
-		int l = print_alt(outarg, str, READ_FUNC_BUF_SZ);
-		if (outarg[1].alt.alt != 0) {
-			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
-			l++;
-			print_alt(&outarg[1], &str[l], READ_FUNC_BUF_SZ - l);
-		}
-	}
 }
 
 fmsbox_t *
@@ -608,7 +312,7 @@ fmsbox_alloc(const char *hostname, unsigned port, const char *ca_file)
 
 	box->cl = cpdlc_client_alloc(hostname, port, ca_file, false);
 	box->msglist = cpdlc_msglist_alloc(box->cl);
-	set_page(box, &fms_pages[FMS_PAGE_MAIN_MENU]);
+	fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
 
 	fmsbox_update(box);
@@ -677,7 +381,7 @@ fmsbox_push_key(fmsbox_t *box, fms_key_t key)
 		} else if (key == FMS_KEY_LSK_R6) {
 			handle_atc_msg_lsk(box);
 		} else if (key == FMS_KEY_LSK_L6) {
-			set_page(box, &fms_pages[FMS_PAGE_MAIN_MENU]);
+			fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 		}
 	}
 	fmsbox_update(box);
@@ -713,9 +417,9 @@ fmsbox_update(fmsbox_t *box)
 	box->page->draw_cb(box);
 	draw_atc_msg_lsk(box);
 	if (box->page->has_return)
-		put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 	put_cur_time(box);
-	update_scratchpad(box);
+	fmsbox_update_scratchpad(box);
 	update_error_msg(box);
 }
 
@@ -723,7 +427,7 @@ static void
 put_page_ind(fmsbox_t *box, fms_color_t color)
 {
 	ASSERT(box->num_subpages != 0);
-	put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%d/%d",
+	fmsbox_put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%d/%d",
 	    box->subpage + 1, box->num_subpages);
 }
 
@@ -736,7 +440,7 @@ put_atc_status(fmsbox_t *box)
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	if (st != CPDLC_LOGON_COMPLETE) {
-		put_str(box, LSK_HEADER_ROW(LSK6_ROW), 6, false,
+		fmsbox_put_str(box, LSK_HEADER_ROW(LSK6_ROW), 6, false,
 		    FMS_COLOR_WHITE, FMS_FONT_SMALL, "NO ATC COMM");
 	}
 }
@@ -751,7 +455,7 @@ put_cur_time(fmsbox_t *box)
 
 	now = time(NULL);
 	tm = localtime(&now);
-	put_str(box, LSK6_ROW, 8, false, FMS_COLOR_CYAN, FMS_FONT_SMALL,
+	fmsbox_put_str(box, LSK6_ROW, 8, false, FMS_COLOR_CYAN, FMS_FONT_SMALL,
 	    "%02d%02dZ", tm->tm_hour, tm->tm_min);
 }
 
@@ -855,7 +559,7 @@ draw_atc_msg_lsk(fmsbox_t *box)
 	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
 	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID)
-		put_lsk_action(box, FMS_KEY_LSK_R6, FMS_COLOR_CYAN, "ATC MSG*");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R6, FMS_COLOR_CYAN, "ATC MSG*");
 }
 
 static void
@@ -868,41 +572,41 @@ handle_atc_msg_lsk(fmsbox_t *box)
 	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
 	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
-		set_thr_id(box, thr_id);
-		set_page(box, &fms_pages[FMS_PAGE_MSG_THR]);
+		fmsbox_set_thr_id(box, thr_id);
+		fmsbox_set_page(box, FMS_PAGE_MSG_THR);
 	}
 }
 
-static void
-main_menu_draw_cb(fmsbox_t *box)
+void
+fmsbox_main_menu_draw_cb(fmsbox_t *box)
 {
 	cpdlc_logon_status_t st;
 
 	ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
-	put_page_title(box, "FANS  MAIN MENU");
-	put_lsk_action(box, FMS_KEY_LSK_L1, FMS_COLOR_WHITE, "<LOGON/STATUS");
+	fmsbox_put_page_title(box, "FANS  MAIN MENU");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L1, FMS_COLOR_WHITE, "<LOGON/STATUS");
 	if (st == CPDLC_LOGON_COMPLETE) {
-		put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE,
 		    "MSG LOG>");
-		put_lsk_action(box, FMS_KEY_LSK_L2, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L2, FMS_COLOR_WHITE,
 		    "<REQUESTS");
-		put_lsk_action(box, FMS_KEY_LSK_R2, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R2, FMS_COLOR_WHITE,
 		    "EMERGENCY>");
-		put_lsk_action(box, FMS_KEY_LSK_L3, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L3, FMS_COLOR_WHITE,
 		    "<POS REP");
-		put_lsk_action(box, FMS_KEY_LSK_R3, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R3, FMS_COLOR_WHITE,
 		    "REPORTS DUE>");
-		put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE,
 		    "<FREE TEXT");
 	}
 
 	put_atc_status(box);
 }
 
-static bool
-main_menu_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_main_menu_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	cpdlc_logon_status_t st;
 
@@ -910,21 +614,21 @@ main_menu_key_cb(fmsbox_t *box, fms_key_t key)
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	if (key == FMS_KEY_LSK_L1)
-		set_page(box, &fms_pages[FMS_PAGE_LOGON_STATUS]);
+		fmsbox_set_page(box, FMS_PAGE_LOGON_STATUS);
 	else if (key == FMS_KEY_LSK_L2)
-		set_page(box, &fms_pages[FMS_PAGE_REQUESTS]);
+		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
 	else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE)
-		set_page(box, &fms_pages[FMS_PAGE_MSG_LOG]);
+		fmsbox_set_page(box, FMS_PAGE_MSG_LOG);
 	else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE)
-		set_page(box, &fms_pages[FMS_PAGE_FREETEXT]);
+		fmsbox_set_page(box, FMS_PAGE_FREETEXT);
 	else
 		return (false);
 
 	return (true);
 }
 
-static void
-logon_status_draw_cb(fmsbox_t *box)
+void
+fmsbox_logon_status_draw_cb(fmsbox_t *box)
 {
 	cpdlc_logon_status_t st;
 	bool logon_failed;
@@ -932,77 +636,77 @@ logon_status_draw_cb(fmsbox_t *box)
 	ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, &logon_failed);
 
-	put_page_title(box, "FANS  LOGON/STATUS");
+	fmsbox_put_page_title(box, "FANS  LOGON/STATUS");
 	if (logon_failed) {
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "LOGON FAILED*");
 	} else if (can_send_logon(box, st)) {
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "SEND LOGON*");
 	} else if (st == CPDLC_LOGON_CONNECTING_LINK ||
 	    st == CPDLC_LOGON_HANDSHAKING_LINK || st == CPDLC_LOGON_IN_PROG) {
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_WHITE,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_WHITE,
 		    "IN PROGRESS");
 	} else if (st == CPDLC_LOGON_COMPLETE) {
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "LOG OFF*");
 	}
 
-	put_str(box, 1, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL, "CDA");
+	fmsbox_put_str(box, 1, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL, "CDA");
 	if (st == CPDLC_LOGON_COMPLETE) {
-		put_str(box, 1, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
+		fmsbox_put_str(box, 1, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 		    "%s", box->to);
 	} else {
-		put_str(box, 1, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
+		fmsbox_put_str(box, 1, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 		    "--------");
 	}
-	put_str(box, 2, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL, "NDA");
-	put_str(box, 2, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL, "--------");
-	put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
+	fmsbox_put_str(box, 2, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL, "NDA");
+	fmsbox_put_str(box, 2, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL, "--------");
+	fmsbox_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
 	    "------------------------");
-	put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false, FMS_COLOR_WHITE,
+	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false, FMS_COLOR_WHITE,
 	    FMS_FONT_SMALL, "FLT ID");
 	if (box->flt_id[0] != '\0') {
-		put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", box->flt_id);
 	} else {
-		put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "--------");
 	}
-	put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, true, FMS_COLOR_WHITE,
+	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, true, FMS_COLOR_WHITE,
 	    FMS_FONT_SMALL, "LOGON TO");
 	if (box->to[0] != '\0') {
-		put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", box->to);
 	} else {
-		put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "----");
 	}
 
 	if (st == CPDLC_LOGON_COMPLETE) {
-		put_str(box, LSK_HEADER_ROW(LSK5_ROW), 5, true,
+		fmsbox_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 5, true,
 		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "LOGGED ON TO %s",
 		    box->to);
 	} else {
-		put_str(box, LSK_HEADER_ROW(LSK5_ROW), 5, true,
+		fmsbox_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 5, true,
 		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "LOGON REQUIRED");
 	}
 
 	put_atc_status(box);
 }
 
-static bool
-logon_status_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_logon_status_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	cpdlc_logon_status_t st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L4) {
-		scratchpad_xfer(box, box->flt_id, sizeof (box->flt_id),
+		fmsbox_scratchpad_xfer(box, box->flt_id, sizeof (box->flt_id),
 		    st <= CPDLC_LOGON_LINK_AVAIL);
 	} else if (key == FMS_KEY_LSK_R4) {
-		scratchpad_xfer(box, box->to, sizeof (box->to),
+		fmsbox_scratchpad_xfer(box, box->to, sizeof (box->to),
 		    st <= CPDLC_LOGON_LINK_AVAIL);
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (can_send_logon(box, st)) {
@@ -1036,11 +740,11 @@ draw_thr_hdr(fmsbox_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
 		atsu = cpdlc_msg_get_from(msg);
 
 	/* Message uplink/downlink, time and sender */
-	put_str(box, row, 0, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
+	fmsbox_put_str(box, row, 0, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 	    "%s %02d:%02d%s%s", sent ? "v" : "^", hours, mins, sent ? "" : "-",
 	    sent ? "" : atsu);
 	/* Thread status */
-	put_str(box, row, 0, true, FMS_COLOR_GREEN, FMS_FONT_SMALL,
+	fmsbox_put_str(box, row, 0, true, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 	    "%s", thr_status2str(st));
 }
 
@@ -1058,12 +762,12 @@ msg_log_draw_thr(fmsbox_t *box, cpdlc_msg_thr_id_t thr_id, unsigned row)
 	cpdlc_msglist_get_thr_msg(box->msglist, thr_id, 0, &msg, NULL, NULL,
 	    NULL, NULL);
 	cpdlc_msg_readable(msg, buf, sizeof (buf));
-	put_str(box, 2 * row + 2, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
+	fmsbox_put_str(box, 2 * row + 2, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
 	    "<%s", buf);
 }
 
-static void
-msg_log_draw_cb(fmsbox_t *box)
+void
+fmsbox_msg_log_draw_cb(fmsbox_t *box)
 {
 	enum { MSG_LOG_LINES = 4 };
 	cpdlc_msg_thr_id_t *thr_ids;
@@ -1073,13 +777,13 @@ msg_log_draw_cb(fmsbox_t *box)
 
 	thr_ids = get_thr_ids(box, &num_thr_ids, box->msg_log_open);
 	if (num_thr_ids == 0) {
-		set_num_subpages(box, 1);
+		fmsbox_set_num_subpages(box, 1);
 	} else {
-		set_num_subpages(box,
+		fmsbox_set_num_subpages(box,
 		    ceil(num_thr_ids / (double)MSG_LOG_LINES));
 	}
 
-	put_page_title(box, "CPDLC MESSAGE LOG");
+	fmsbox_put_page_title(box, "CPDLC MESSAGE LOG");
 	put_page_ind(box, FMS_COLOR_WHITE);
 
 	for (unsigned i = 0; i < MSG_LOG_LINES; i++) {
@@ -1089,29 +793,29 @@ msg_log_draw_cb(fmsbox_t *box)
 		msg_log_draw_thr(box, thr_ids[thr_i], i);
 	}
 
-	put_str(box, LSK_HEADER_ROW(LSK5_ROW), 0, true, FMS_COLOR_CYAN,
+	fmsbox_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 0, true, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "FILTER");
 	if (box->msg_log_open) {
-		put_str(box, LSK5_ROW, 5, true, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK5_ROW, 5, true, FMS_COLOR_WHITE,
 		    FMS_FONT_SMALL, "ALL");
 	} else {
-		put_str(box, LSK5_ROW, 5, true, FMS_COLOR_GREEN,
+		fmsbox_put_str(box, LSK5_ROW, 5, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "ALL");
 	}
-	put_str(box, LSK5_ROW, 4, true, FMS_COLOR_WHITE, FMS_FONT_LARGE, "/");
+	fmsbox_put_str(box, LSK5_ROW, 4, true, FMS_COLOR_WHITE, FMS_FONT_LARGE, "/");
 	if (box->msg_log_open) {
-		put_str(box, LSK5_ROW, 0, true, FMS_COLOR_GREEN,
+		fmsbox_put_str(box, LSK5_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "OPEN");
 	} else {
-		put_str(box, LSK5_ROW, 0, true, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK5_ROW, 0, true, FMS_COLOR_WHITE,
 		    FMS_FONT_SMALL, "OPEN");
 	}
 
 	free(thr_ids);
 }
 
-static bool
-msg_log_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_msg_log_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	enum { MSG_LOG_LINES = 4 };
 
@@ -1125,8 +829,8 @@ msg_log_key_cb(fmsbox_t *box, fms_key_t key)
 		    (box->subpage * MSG_LOG_LINES);
 
 		if (thr_nr < num_thr_ids) {
-			set_thr_id(box, thr_ids[thr_nr]);
-			set_page(box, &fms_pages[FMS_PAGE_MSG_THR]);
+			fmsbox_set_thr_id(box, thr_ids[thr_nr]);
+			fmsbox_set_page(box, FMS_PAGE_MSG_THR);
 		}
 		free(thr_ids);
 	} else if (key == FMS_KEY_LSK_R5) {
@@ -1281,8 +985,8 @@ send_standby(fmsbox_t *box)
 	send_quick_resp(box, CPDLC_DM2_STANDBY);
 }
 
-static void
-msg_thr_draw_cb(fmsbox_t *box)
+void
+fmsbox_msg_thr_draw_cb(fmsbox_t *box)
 {
 	char **lines;
 	unsigned n_lines;
@@ -1294,9 +998,9 @@ msg_thr_draw_cb(fmsbox_t *box)
 	cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, 0, &msg,
 	    NULL, NULL, NULL, NULL);
 	lines = msgs2lines(box, &n_lines);
-	set_num_subpages(box, ceil(n_lines / 5.0));
+	fmsbox_set_num_subpages(box, ceil(n_lines / 5.0));
 
-	put_page_title(box, "CPDLC MESSAGE");
+	fmsbox_put_page_title(box, "CPDLC MESSAGE");
 	put_page_ind(box, FMS_COLOR_WHITE);
 	draw_thr_hdr(box, 1, box->thr_id);
 
@@ -1304,37 +1008,37 @@ msg_thr_draw_cb(fmsbox_t *box)
 		unsigned line = i + box->subpage * 5;
 		if (line >= n_lines)
 			break;
-		put_str(box, 2 + i, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
+		fmsbox_put_str(box, 2 + i, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
 		    "%s", lines[line]);
 	}
 
-	put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
+	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
 	    FMS_COLOR_WHITE, FMS_FONT_SMALL, "--------RESPONSE--------");
 
 	if (msg_can_standby(box))
-		put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_CYAN, "*STANDBY");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_CYAN, "*STANDBY");
 	if (msg_can_roger(box)) {
-		put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*ROGER");
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "UNABLE>");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*ROGER");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "UNABLE>");
 	} else if (msg_can_wilco(box)) {
-		put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*WILCO");
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "UNABLE>");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*WILCO");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "UNABLE>");
 	} else if (msg_can_affirm(box)) {
-		put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*AFFIRM");
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*AFFIRM");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "NEGATIVE>");
 	}
 
 	free_lines(lines, n_lines);
 }
 
-static bool
-msg_thr_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_msg_thr_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L6) {
-		set_page(box, &fms_pages[FMS_PAGE_MSG_LOG]);
+		fmsbox_set_page(box, FMS_PAGE_MSG_LOG);
 	} else if (key == FMS_KEY_LSK_L4) {
 		if (msg_can_standby(box))
 			send_standby(box);
@@ -1386,37 +1090,37 @@ send_freetext_msg(fmsbox_t *box)
 	memset(box->freetext, 0, sizeof (box->freetext));
 }
 
-static void
-freetext_draw_cb(fmsbox_t *box)
+void
+fmsbox_freetext_draw_cb(fmsbox_t *box)
 {
 	enum { MAX_LINES = 4 };
 
 	ASSERT(box != NULL);
 
-	set_num_subpages(box, 2);
+	fmsbox_set_num_subpages(box, 2);
 
-	put_page_title(box, "FANS  FREE TEXT");
+	fmsbox_put_page_title(box, "FANS  FREE TEXT");
 	put_page_ind(box, FMS_COLOR_WHITE);
 
 	for (int row = 0; row < MAX_LINES; row++) {
 		int line = row + box->subpage * MAX_LINES;
 		if (box->freetext[line][0] != '\0') {
-			put_str(box, LSKi_ROW(row), 0, false, FMS_COLOR_WHITE,
+			fmsbox_put_str(box, LSKi_ROW(row), 0, false, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "%s", box->freetext[line]);
 		} else {
-			put_str(box, LSKi_ROW(row), 0, false, FMS_COLOR_WHITE,
+			fmsbox_put_str(box, LSKi_ROW(row), 0, false, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "%s", "------------------------");
 		}
 	}
 
 	if (freetext_msg_ready(box)) {
-		put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*ERASE");
-		put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "SEND*");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN, "*ERASE");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "SEND*");
 	}
 }
 
-static bool
-freetext_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_freetext_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	enum { MAX_LINES = 4 };
 
@@ -1424,14 +1128,14 @@ freetext_key_cb(fmsbox_t *box, fms_key_t key)
 
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4) {
 		int line = key - FMS_KEY_LSK_L1 + box->subpage * MAX_LINES;
-		scratchpad_xfer(box, box->freetext[line],
+		fmsbox_scratchpad_xfer(box, box->freetext[line],
 		    sizeof (box->freetext[line]), true);
 	} else if (key == FMS_KEY_LSK_L5) {
 		memset(box->freetext, 0, sizeof (box->freetext));
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (freetext_msg_ready(box)) {
 			send_freetext_msg(box);
-			set_page(box, &fms_pages[FMS_PAGE_MAIN_MENU]);
+			fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 		}
 	} else {
 		return (false);
@@ -1439,74 +1143,46 @@ freetext_key_cb(fmsbox_t *box, fms_key_t key)
 	return (true);
 }
 
-static void
-requests_draw_cb(fmsbox_t *box)
+void
+fmsbox_requests_draw_cb(fmsbox_t *box)
 {
 	ASSERT(box != NULL);
 
-	put_page_title(box, "FANS  REQUESTS");
+	fmsbox_put_page_title(box, "FANS  REQUESTS");
 
-	put_lsk_action(box, FMS_KEY_LSK_L1, FMS_COLOR_WHITE, "<ALTITUDE");
-	put_lsk_action(box, FMS_KEY_LSK_L2, FMS_COLOR_WHITE, "<OFFSET");
-	put_lsk_action(box, FMS_KEY_LSK_L3, FMS_COLOR_WHITE, "<SPEED");
-	put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE, "<ROUTE");
-	put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE, "CLEARANCE>");
-	put_lsk_action(box, FMS_KEY_LSK_R2, FMS_COLOR_WHITE, "VMC DESCENT>");
-	put_lsk_action(box, FMS_KEY_LSK_R3, FMS_COLOR_WHITE, "WHEN CAN WE>");
-	put_lsk_action(box, FMS_KEY_LSK_R4, FMS_COLOR_WHITE, "VOICE REQ>");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L1, FMS_COLOR_WHITE, "<ALTITUDE");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L2, FMS_COLOR_WHITE, "<OFFSET");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L3, FMS_COLOR_WHITE, "<SPEED");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE, "<ROUTE");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE, "CLEARANCE>");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_R2, FMS_COLOR_WHITE, "VMC DESCENT>");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_R3, FMS_COLOR_WHITE, "WHEN CAN WE>");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_R4, FMS_COLOR_WHITE, "VOICE REQ>");
 }
 
-static bool
-requests_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	enum { MAX_LINES = 4 };
 
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L1) {
-		set_page(box, &fms_pages[FMS_PAGE_REQ_ALT]);
+		fmsbox_set_page(box, FMS_PAGE_REQ_ALT);
 		memset(&box->alt_req, 0, sizeof (box->alt_req));
 #if 0
 	} else if (key == FMS_KEY_LSK_L2) {
-		set_page(box, &fms_pages[FMS_PAGE_REQ_OFF]);
+		fmsbox_set_page(box, FMS_PAGE_REQ_OFF);
 	} else if (key == FMS_KEY_LSK_L3) {
-		set_page(box, &fms_pages[FMS_PAGE_REQ_SPD]);
+		fmsbox_set_page(box, FMS_PAGE_REQ_SPD);
 	} else if (key == FMS_KEY_LSK_L4) {
-		set_page(box, &fms_pages[FMS_PAGE_REQ_RTE]);
+		fmsbox_set_page(box, FMS_PAGE_REQ_RTE);
 #endif
 	} else {
 		return (false);
 	}
 
 	return (true);
-}
-
-static void
-put_altn_selector(fmsbox_t *box, int row, bool align_right, int option,
-    const char *first, ...)
-{
-	va_list ap;
-	int idx = 0, offset = 0;
-
-	va_start(ap, first);
-	for (const char *str = first, *next = NULL; str != NULL;
-	    str = next, idx++) {
-		next = va_arg(ap, const char *);
-		if (idx == option) {
-			put_str(box, row, offset, align_right, FMS_COLOR_GREEN,
-			    FMS_FONT_LARGE, "%s", str);
-		} else {
-			put_str(box, row, offset, align_right, FMS_COLOR_WHITE,
-			    FMS_FONT_SMALL, "%s", str);
-		}
-		offset += strlen(str);
-		if (next != NULL) {
-			put_str(box, row, offset, align_right, FMS_COLOR_WHITE,
-			    FMS_FONT_LARGE, "/");
-			offset++;
-		}
-	}
-	va_end(ap);
 }
 
 static void
@@ -1517,19 +1193,7 @@ verify_send(fmsbox_t *box, const char *title, int ret_page)
 
 	cpdlc_strlcpy(box->verify.title, title, sizeof (box->verify.title));
 	box->verify.ret_page = ret_page;
-	set_page(box, &fms_pages[FMS_PAGE_VRFY]);
-}
-
-static void
-put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt)
-{
-	char buf[8];
-
-	ASSERT(box != NULL);
-
-	print_alt(alt, buf, sizeof (buf));
-	put_str(box, row, col, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
-	    "%s", buf);
+	fmsbox_set_page(box, FMS_PAGE_VRFY);
 }
 
 static bool
@@ -1591,69 +1255,72 @@ construct_alt_req(fmsbox_t *box)
 	}
 }
 
-static void
-req_alt_draw_cb(fmsbox_t *box)
+void
+fmsbox_req_alt_draw_cb(fmsbox_t *box)
 {
 	ASSERT(box != NULL);
 
-	put_page_title(box, "FANS  ALTITUDE REQ");
+	fmsbox_put_page_title(box, "FANS  ALTITUDE REQ");
 
-	put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
 	if (box->alt_req.alt[0].alt.alt != 0) {
-		put_alt(box, LSK1_ROW, 0, &box->alt_req.alt[0]);
+		fmsbox_put_alt(box, LSK1_ROW, 0, &box->alt_req.alt[0]);
 	} else {
-		put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
+		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "_____");
 	}
-	put_str(box, LSK1_ROW, 5, false, FMS_COLOR_CYAN, FMS_FONT_SMALL, "/");
+	fmsbox_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_CYAN, FMS_FONT_SMALL, "/");
 	if (box->alt_req.alt[1].alt.alt != 0) {
-		put_alt(box, LSK1_ROW, 6, &box->alt_req.alt[1]);
+		fmsbox_put_alt(box, LSK1_ROW, 6, &box->alt_req.alt[1]);
 	} else {
-		put_str(box, LSK1_ROW, 6, false, FMS_COLOR_CYAN,
+		fmsbox_put_str(box, LSK1_ROW, 6, false, FMS_COLOR_CYAN,
 		    FMS_FONT_SMALL, "-----");
 	}
 
-	put_lsk_title(box, FMS_KEY_LSK_L2, "DUE TO WX");
-	put_altn_selector(box, LSK2_ROW, false, box->alt_req.due_wx,
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L2, "DUE TO WX");
+	fmsbox_put_altn_selector(box, LSK2_ROW, false, box->alt_req.due_wx,
 	    "NO", "YES", NULL);
 
-	put_lsk_title(box, FMS_KEY_LSK_L3, "DUE TO A/C");
-	put_altn_selector(box, LSK3_ROW, false, box->alt_req.due_ac,
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L3, "DUE TO A/C");
+	fmsbox_put_altn_selector(box, LSK3_ROW, false, box->alt_req.due_ac,
 	    "NO", "YES", NULL);
 
-	put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
 	if (strlen(box->alt_req.step_at) != 0) {
-		put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "%s", box->alt_req.step_at);
 	} else {
-		put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "NONE");
 	}
 
-	put_lsk_title(box, FMS_KEY_LSK_R4, "PLT DISCRET");
-	put_altn_selector(box, LSK4_ROW, true, box->alt_req.plt_discret,
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R4, "PLT DISCRET");
+	fmsbox_put_altn_selector(box, LSK4_ROW, true, box->alt_req.plt_discret,
 	    "NO", "YES", NULL);
 
-	put_lsk_title(box, FMS_KEY_LSK_R5, "MAINT SEP/VMC");
-	put_altn_selector(box, LSK5_ROW, true, box->alt_req.maint_sep_vmc,
-	    "NO", "YES", NULL);
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R5, "MAINT SEP/VMC");
+	fmsbox_put_altn_selector(box, LSK5_ROW, true,
+	    box->alt_req.maint_sep_vmc, "NO", "YES", NULL);
 
-	if (can_verify_alt_req(box))
-		put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<VERIFY");
+	if (can_verify_alt_req(box)) {
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
+		    "<VERIFY");
+	}
 
-	put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 
-static bool
-req_alt_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L1) {
-		scratchpad_parse_multipart(box,
+		fmsbox_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fmsbox_t, alt_req.alt),
-		    sizeof (cpdlc_arg_t), parse_alt, insert_alt_block,
-		    delete_alt_block, read_alt_block);
+		    sizeof (cpdlc_arg_t), fmsbox_parse_alt,
+		    fmsbox_insert_alt_block, fmsbox_delete_alt_block,
+		    fmsbox_read_alt_block);
 	} else if (key == FMS_KEY_LSK_L2) {
 		box->alt_req.due_wx = !box->alt_req.due_wx;
 		box->alt_req.due_ac = false;
@@ -1666,11 +1333,12 @@ req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_send(box, "ALT REQ", FMS_PAGE_REQ_ALT);
 		}
 	} else if (key == FMS_KEY_LSK_L6) {
-		set_page(box, &fms_pages[FMS_PAGE_REQUESTS]);
+		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
 	} else if (key == FMS_KEY_LSK_R1) {
-		scratchpad_xfer(box, box->alt_req.step_at,
+		fmsbox_scratchpad_xfer(box, box->alt_req.step_at,
 		    sizeof (box->alt_req.step_at), true);
-		box->alt_req.step_at_time = parse_time(box->alt_req.step_at,
+		box->alt_req.step_at_time =
+		    fmsbox_parse_time(box->alt_req.step_at,
 		    &box->alt_req.step_hrs, &box->alt_req.step_mins);
 		if (strlen(box->alt_req.step_at) != 0) {
 			memset(&box->alt_req.alt[1], 0,
@@ -1687,17 +1355,17 @@ req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 	return (true);
 }
 
-static void
-vrfy_draw_cb(fmsbox_t *box)
+void
+fmsbox_vrfy_draw_cb(fmsbox_t *box)
 {
 	ASSERT(box != NULL);
 
-	put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "SEND*");
-	put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN, "SEND*");
+	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 
-static bool
-vrfy_key_cb(fmsbox_t *box, fms_key_t key)
+bool
+fmsbox_vrfy_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	ASSERT(box != NULL);
 
@@ -1706,10 +1374,10 @@ vrfy_key_cb(fmsbox_t *box, fms_key_t key)
 		cpdlc_msglist_send(box->msglist, box->verify.msg,
 		    CPDLC_NO_MSG_THR_ID);
 		box->verify.msg = NULL;
-		set_page(box, &fms_pages[FMS_PAGE_MAIN_MENU]);
+		fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 	} else if (key == FMS_KEY_LSK_L6 && box->verify.ret_page >= 0 &&
 	    box->verify.ret_page < FMS_NUM_PAGES) {
-		set_page(box, &fms_pages[box->verify.ret_page]);
+		fmsbox_set_page(box, box->verify.ret_page);
 	} else {
 		return (false);
 	}
