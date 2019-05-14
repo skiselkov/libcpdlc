@@ -31,13 +31,18 @@
 #include "fmsbox_impl.h"
 
 void
-fmsbox_verify_send(fmsbox_t *box, const char *title, int ret_page)
+fmsbox_verify_msg(fmsbox_t *box, cpdlc_msg_t *msg, const char *title,
+    int ret_page)
 {
 	ASSERT(box != NULL);
+	ASSERT(msg != NULL);
 	ASSERT(title != NULL);
 
 	cpdlc_strlcpy(box->verify.title, title, sizeof (box->verify.title));
 	box->verify.ret_page = ret_page;
+	if (box->verify.msg != NULL)
+		cpdlc_msg_free(box->verify.msg);
+	box->verify.msg = msg;
 	fmsbox_set_page(box, FMS_PAGE_VRFY);
 }
 

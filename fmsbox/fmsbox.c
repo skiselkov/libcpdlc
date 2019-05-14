@@ -170,6 +170,17 @@ fmsbox_set_num_subpages(fmsbox_t *box, unsigned num)
 	box->subpage %= num;
 }
 
+void
+fmsbox_set_error(fmsbox_t *box, const char *error)
+{
+	ASSERT(box != NULL);
+
+	if (error != NULL)
+		cpdlc_strlcpy(box->error_msg, error, sizeof (box->error_msg));
+	else
+		memset(box->error_msg, 0, sizeof (box->error_msg));
+}
+
 static void
 put_str_v(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
     fms_color_t color, fms_font_t size, const char *fmt, va_list ap)
@@ -398,6 +409,10 @@ fmsbox_push_key(fmsbox_t *box, fms_key_t key)
 	ASSERT(box->page != NULL);
 	ASSERT(box->page->key_cb != NULL);
 
+	/* Clear any errors on a new LSK entry */
+	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_R6 &&
+	    strlen(box->scratchpad) != 0)
+		fmsbox_set_error(box, NULL);
 	if (!box->page->key_cb(box, key)) {
 		if (key == FMS_KEY_CLR_DEL) {
 			del_key(box);
@@ -650,4 +665,31 @@ fmsbox_free_lines(char **lines, unsigned n_lines)
 	for (unsigned i = 0; i < n_lines; i++)
 		free(lines[i]);
 	free(lines);
+}
+
+void
+fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at)
+{
+	ASSERT(box != NULL);
+	ASSERT(step_at != NULL);
+
+	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
+	if (strlen(step_at->pos) != 0) {
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "%s", step_at->pos);
+	} else {
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "NONE");
+	}
+}
+
+void
+fmsbox_key_step_at(fmsbox_t *box, fms_step_at_t *step_at)
+{
+	ASSERT(box != NULL);
+	ASSERT(step_at != NULL);
+
+	fmsbox_scratchpad_xfer(box, step_at->pos, sizeof (step_at->pos), true);
+	step_at->time = fmsbox_parse_time(step_at->pos, &step_at->hrs,
+	    &step_at->mins);
 }

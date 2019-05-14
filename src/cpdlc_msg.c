@@ -248,8 +248,13 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_DISTANCE:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%.01f NM", arg->dist);
+			if (arg->dist - (int)arg->dist == 0) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.0f NM", arg->dist);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.01f NM", arg->dist);
+			}
 		} else {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 			    " %.01f", arg->dist);
@@ -1292,6 +1297,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		break;
 	case CPDLC_ARG_DISTANCE:
 		arg->dist = *(double *)arg_val1;
+		ASSERT3F(arg->dist, >=, 0);
 		break;
 	case CPDLC_ARG_VVI:
 		arg->vvi = *(int *)arg_val1;

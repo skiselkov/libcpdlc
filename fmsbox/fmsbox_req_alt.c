@@ -39,25 +39,23 @@ can_verify_alt_req(fmsbox_t *box)
 }
 
 static void
-construct_alt_req(fmsbox_t *box)
+verify_alt_req(fmsbox_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg;
+	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
-	if (box->verify.msg != NULL)
-		cpdlc_msg_free(box->verify.msg);
-	msg = box->verify.msg = cpdlc_msg_alloc();
-	if (strlen(box->alt_req.step_at) != 0) {
-		if (box->alt_req.step_at_time) {
+	if (strlen(box->alt_req.step_at.pos) != 0) {
+		if (box->alt_req.step_at.time) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM13_AT_time_REQ_CLB_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
-			    &box->alt_req.step_hrs, &box->alt_req.step_mins);
+			    &box->alt_req.step_at.hrs,
+			    &box->alt_req.step_at.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM11_AT_pos_REQ_CLB_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
-			    box->alt_req.step_at, NULL);
+			    box->alt_req.step_at.pos, NULL);
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 1,
 		    &box->alt_req.alt[0].alt.fl, &box->alt_req.alt[0].alt.alt);
@@ -88,6 +86,8 @@ construct_alt_req(fmsbox_t *box)
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM66_DUE_TO_ACFT_PERF, 0);
 	}
+
+	fmsbox_verify_msg(box, msg, "ALT REQ", FMS_PAGE_REQ_ALT);
 }
 
 void
@@ -120,14 +120,7 @@ fmsbox_req_alt_draw_cb(fmsbox_t *box)
 	fmsbox_put_altn_selector(box, LSK3_ROW, false, box->alt_req.due_ac,
 	    "NO", "YES", NULL);
 
-	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
-	if (strlen(box->alt_req.step_at) != 0) {
-		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "%s", box->alt_req.step_at);
-	} else {
-		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "NONE");
-	}
+	fmsbox_put_step_at(box, &box->alt_req.step_at);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R4, "PLT DISCRET");
 	fmsbox_put_altn_selector(box, LSK4_ROW, true,
@@ -158,9 +151,8 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 		    fmsbox_read_alt_block);
 		if (box->alt_req.alt[1].alt.alt != 0) {
 			/* Block altitude requests cannot include a STEP AT */
-			memset(box->alt_req.step_at, 0,
+			memset(&box->alt_req.step_at, 0,
 			    sizeof (box->alt_req.step_at));
-			box->alt_req.step_at_time = false;
 		}
 	} else if (key == FMS_KEY_LSK_L2) {
 		box->alt_req.due_wx = !box->alt_req.due_wx;
@@ -169,23 +161,17 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 		box->alt_req.due_wx = false;
 		box->alt_req.due_ac = !box->alt_req.due_ac;
 	} else if (key == FMS_KEY_LSK_L5) {
-		if (can_verify_alt_req(box)) {
-			construct_alt_req(box);
-			fmsbox_verify_send(box, "ALT REQ", FMS_PAGE_REQ_ALT);
-		}
+		if (can_verify_alt_req(box))
+			verify_alt_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
 	} else if (key == FMS_KEY_LSK_R1) {
-		fmsbox_scratchpad_xfer(box, box->alt_req.step_at,
-		    sizeof (box->alt_req.step_at), true);
-		box->alt_req.step_at_time =
-		    fmsbox_parse_time(box->alt_req.step_at,
-		    &box->alt_req.step_hrs, &box->alt_req.step_mins);
-		if (strlen(box->alt_req.step_at) != 0) {
+		fmsbox_key_step_at(box, &box->alt_req.step_at);
+		if (strlen(box->alt_req.step_at.pos) != 0) {
 			memset(&box->alt_req.alt[1], 0,
 			    sizeof (box->alt_req.alt[1]));
 		} else {
-			box->alt_req.step_at_time = false;
+			box->alt_req.step_at.time = false;
 		}
 	} else if (key == FMS_KEY_LSK_R4) {
 		box->alt_req.plt_discret = !box->alt_req.plt_discret;

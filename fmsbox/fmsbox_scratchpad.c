@@ -124,6 +124,5 @@ fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
 		memset(box->scratchpad, 0, sizeof (box->scratchpad));
 	}
 
-	if (error != NULL)
-		cpdlc_strlcpy(box->error_msg, error, sizeof (box->error_msg));
+	fmsbox_set_error(box, error);
 }

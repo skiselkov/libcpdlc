@@ -55,6 +55,13 @@ typedef struct {
 	bool	has_return;
 } fms_page_t;
 
+typedef struct {
+	char		pos[8];
+	bool		time;
+	int		hrs;
+	int		mins;
+} fms_step_at_t;
+
 struct fmsbox_s {
 	fmsbox_char_t	scr[FMSBOX_ROWS][FMSBOX_COLS];
 	fms_page_t	*page;
@@ -70,17 +77,24 @@ struct fmsbox_s {
 	bool			msg_log_open;
 	char			freetext[MAX_FREETEXT_LINES][FMSBOX_COLS + 1];
 
-	struct {
-		cpdlc_arg_t	alt[2];
-		bool		due_wx;
-		bool		due_ac;
-		char		step_at[8];
-		bool		step_at_time;
-		int		step_hrs;
-		int		step_mins;
-		bool		plt_discret;
-		bool		maint_sep_vmc;
-	} alt_req;
+	union {
+		struct {
+			cpdlc_arg_t	alt[2];
+			bool		due_wx;
+			bool		due_ac;
+			fms_step_at_t	step_at;
+			bool		plt_discret;
+			bool		maint_sep_vmc;
+		} alt_req;
+		struct {
+			cpdlc_dir_t	dir;
+			double		nm;
+			fms_step_at_t	step_at;
+			bool		due_wx;
+			bool		due_ac;
+			bool		due_tfc;
+		} off_req;
+	};
 
 	struct {
 		cpdlc_msg_t	*msg;
@@ -114,6 +128,8 @@ enum {
 void fmsbox_set_thr_id(fmsbox_t *box, cpdlc_msg_thr_id_t thr_id);
 void fmsbox_set_page(fmsbox_t *box, unsigned page_nr);
 void fmsbox_set_num_subpages(fmsbox_t *box, unsigned num);
+void fmsbox_set_error(fmsbox_t *box, const char *error);
+
 void fmsbox_put_page_ind(fmsbox_t *box, fms_color_t color);
 void fmsbox_put_atc_status(fmsbox_t *box);
 
@@ -140,6 +156,9 @@ void fmsbox_free_lines(char **lines, unsigned n_lines);
 
 cpdlc_msg_thr_id_t *fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids,
     bool ignore_closed);
+
+void fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at);
+void fmsbox_key_step_at(fmsbox_t *box, fms_step_at_t *step_at);
 
 #ifdef	__cplusplus
 }
