@@ -63,7 +63,7 @@ void *
 list_tail(const list_t *list)
 {
 	ASSERT(list != NULL);
-	return (list->head);
+	return (list->tail);
 }
 
 void *

@@ -92,6 +92,19 @@ extern "C" {
 #define	ASSERT_MSG(x, fmt, ...)	UNUSED(x)
 #endif	/* !DEBUG */
 
+/*
+ * Compile-time assertion. The condition 'x' must be constant.
+ */
+#if	defined(__GNUC__) || defined(__clang__)
+#define	CTASSERT(x)		_CTASSERT(x, __LINE__)
+#define	_CTASSERT(x, y)		__CTASSERT(x, y)
+#define	__CTASSERT(x, y)	\
+	typedef char __compile_time_assertion__ ## y [(x) ? 1 : -1] \
+	    __attribute__((unused))
+#else	/* !defined(__GNUC__) && !defined(__clang__) */
+#define	CTASSERT(x)
+#endif	/* !defined(__GNUC__) && !defined(__clang__) */
+
 #if	defined(__GNUC__) || defined(__clang__)
 #define	BUILTIN_STRRCHR __builtin_strrchr
 #else	/* !defined(__GNUC__) && !defined(__clang__) */

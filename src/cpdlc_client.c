@@ -102,7 +102,8 @@ struct cpdlc_client_s {
 	/* protected by `lock' */
 	thread_t			worker;
 	bool				worker_started;
-	cpdlc_logon_status_t	logon_status;
+	cpdlc_logon_status_t		logon_status;
+	bool				logon_failure;
 	int				sock;
 	gnutls_session_t		session;
 	bool				handshake_completed;
@@ -162,7 +163,7 @@ logon_worker(void *userinfo)
 
 	init_conn(cl);
 
-	while (cl->logon_status != CPDLC_LOGON_NONE) {
+	while (cl->logon_status != CPDLC_LOGON_NONE && !cl->logon_failure) {
 		bool new_msgs = false;
 		cpdlc_msg_token_t *out_tokens;
 		unsigned num_out_tokens;
@@ -359,7 +360,7 @@ reset_link_state(cpdlc_client_t *cl)
 	outmsgbuf_t *outbuf;
 
 	ASSERT(cl != NULL);
-	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
+	cl->logon_status = CPDLC_LOGON_NONE;
 	if (cl->session != NULL) {
 		if (cl->handshake_completed) {
 			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
@@ -619,10 +620,13 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		if (msg->is_logon) {
 			const char *logon_data = cpdlc_msg_get_logon_data(msg);
 
-			if (strcmp(logon_data, "SUCCESS") == 0)
+			if (strcmp(logon_data, "SUCCESS") == 0) {
 				cl->logon_status = CPDLC_LOGON_COMPLETE;
-			else
+				cl->logon_failure = false;
+			} else {
 				cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
+				cl->logon_failure = true;
+			}
 			cpdlc_msg_free(msg);
 		} else {
 			/* Discard non-logon messages in this state */
@@ -845,6 +849,7 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 		cl->logon.to = strdup(to);
 	else
 		cl->logon.to = NULL;
+	cl->logon_failure = false;
 
 	if (!cl->worker_started) {
 		cl->worker_started = true;
@@ -860,13 +865,16 @@ cpdlc_client_logoff(cpdlc_client_t *cl)
 	ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->logon_status = CPDLC_LOGON_NONE;
+	cl->logon_failure = false;
 	mutex_exit(&cl->lock);
 }
 
 cpdlc_logon_status_t
-cpdlc_client_get_logon_status(const cpdlc_client_t *cl)
+cpdlc_client_get_logon_status(const cpdlc_client_t *cl, bool *logon_failure)
 {
 	ASSERT(cl != NULL);
+	if (logon_failure != NULL)
+		*logon_failure = cl->logon_failure;
 	return (cl->logon_status);
 }
 

@@ -114,6 +114,10 @@ proc_input(int c)
 			fmsbox_push_key(fmsbox, FMS_KEY_LSK_R1 + lsk_nr);
 		else
 			fmsbox_push_key(fmsbox, FMS_KEY_LSK_L1 + lsk_nr);
+	} else if (c == KEY_NPAGE) {
+		fmsbox_push_key(fmsbox, FMS_KEY_NEXT);
+	} else if (c == KEY_PPAGE) {
+		fmsbox_push_key(fmsbox, FMS_KEY_PREV);
 	}
 }
 

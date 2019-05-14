@@ -164,7 +164,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			if (arg->alt.fl) {
 				if (arg->alt.met) {
 					value = arg->alt.alt;
-					units = "M";
+					units = " M";
 				} else {
 					value = arg->alt.alt / 100;
 					units = "";
@@ -172,10 +172,10 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			} else {
 				if (arg->alt.met) {
 					value = arg->alt.alt;
-					units = "M";
+					units = " M";
 				} else {
 					value = arg->alt.alt;
-					units = "FT";
+					units = " FT";
 				}
 			}
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d%s",
@@ -249,7 +249,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 	case CPDLC_ARG_DISTANCE:
 		if (readable) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%.01fNM", arg->dist);
+			    "%.01f NM", arg->dist);
 		} else {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 			    " %.01f", arg->dist);
@@ -257,11 +257,11 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_VVI:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%dFT/MIN",
-			    arg->vvi);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%d FPM", arg->vvi);
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
-			    arg->vvi);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %d", arg->vvi);
 		}
 		break;
 	case CPDLC_ARG_TOFROM:
@@ -316,11 +316,11 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_FREQUENCY:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%.03fMHZ",
-			    arg->freq);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%.03f MHZ", arg->freq);
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %.03f",
-			    arg->freq);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %.03f", arg->freq);
 		}
 		break;
 	case CPDLC_ARG_DEGREES:
@@ -331,10 +331,10 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		if (readable) {
 			if (arg->baro.hpa) {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%.0fHPA", arg->baro.val);
+				    "%.0f HPA", arg->baro.val);
 			} else {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%.02fIN", arg->baro.val);
+				    "%.02f IN", arg->baro.val);
 			}
 		} else {
 			if (arg->baro.hpa) {
@@ -356,7 +356,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 				    sizeof (textbuf));
 			}
 		} else {
-			*textbuf = '\0';
+			textbuf[0] = '\0';
 		}
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
 		    readable ? "" : " ", textbuf);

@@ -51,21 +51,24 @@ typedef enum {
 	CPDLC_MSG_THR_ACCEPTED,
 	CPDLC_MSG_THR_REJECTED,
 	CPDLC_MSG_THR_TIMEDOUT,
+	CPDLC_MSG_THR_STANDBY,
 	CPDLC_MSG_THR_FAILED,
 	CPDLC_MSG_THR_PENDING,
+	CPDLC_MSG_THR_DISREGARD,
 	CPDLC_MSG_THR_ERROR
 } cpdlc_msg_thr_status_t;
 
 CPDLC_API cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);
 CPDLC_API void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
 
-CPDLC_API void cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
-    cpdlc_get_time_func_t func);
+CPDLC_API void cpdlc_msglist_update(cpdlc_msglist_t *msglist);
 
 CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
     cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_id_t *thr_ids, unsigned *cap);
+    bool ignore_closed, cpdlc_msg_thr_id_t *thr_ids, unsigned *cap);
+CPDLC_API bool cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 
@@ -86,6 +89,8 @@ CPDLC_API void *cpdlc_msglist_get_userinfo(cpdlc_msglist_t *msglist);
 
 CPDLC_API void cpdlc_msglist_set_update_cb(cpdlc_msglist_t *msglist,
     cpdlc_msglist_update_cb_t update_cb);
+CPDLC_API void cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
+    cpdlc_get_time_func_t func);
 
 #ifdef	__cplusplus
 }

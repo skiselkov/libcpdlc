@@ -31,6 +31,8 @@
 #include "cpdlc_thread.h"
 #include "minilist.h"
 
+#define	REQ_TIMEOUT	100	/* seconds */
+
 typedef struct msg_bucket_s {
 	cpdlc_msg_t		*msg;
 	cpdlc_msg_token_t	tok;
@@ -38,6 +40,7 @@ typedef struct msg_bucket_s {
 	list_node_t		node;
 	unsigned		hours;
 	unsigned		mins;
+	time_t			time;
 } msg_bucket_t;
 
 typedef struct msg_thr_s {
@@ -62,6 +65,169 @@ struct cpdlc_msglist_s {
 
 	cpdlc_get_time_func_t		get_time_func;
 };
+
+static msg_thr_t *msglist_send_impl(cpdlc_msglist_t *msglist,
+    cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
+
+static bool
+msg_is_dl_req(const cpdlc_msg_t *msg)
+{
+	int msg_type;
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	msg_type = msg->segs[0].info->msg_type;
+	return ((msg_type >= CPDLC_DM6_REQ_alt &&
+	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE) ||
+	    (msg_type >= CPDLC_DM49_WHEN_CAN_WE_EXPCT_spd &&
+	    msg_type <= CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt) ||
+	    msg_type == CPDLC_DM70_REQ_HDG_deg ||
+	    msg_type == CPDLC_DM71_REQ_GND_TRK_deg);
+}
+
+static bool
+msg_dl_req_resp(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	ASSERT(msg->segs[0].info->is_dl);
+	return (msg->segs[0].info->resp == CPDLC_RESP_Y);
+}
+
+static bool
+msg_is_ul_req(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return (msg->segs[0].info->resp == CPDLC_RESP_WU ||
+	    msg->segs[0].info->resp == CPDLC_RESP_AN ||
+	    msg->segs[0].info->resp == CPDLC_RESP_NE);
+}
+
+static bool
+msg_is_stby(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return ((msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_DM2_STANDBY) ||
+	    (!msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_UM1_STANDBY));
+}
+
+static bool
+msg_is_accept(const cpdlc_msg_t *msg)
+{
+	int msg_type;
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	msg_type = msg->segs[0].info->msg_type;
+	return ((msg->segs[0].info->is_dl &&
+	    (msg_type == CPDLC_DM0_WILCO || msg_type == CPDLC_DM4_AFFIRM)) ||
+	    (!msg->segs[0].info->is_dl && msg_type == CPDLC_UM4_AFFIRM));
+}
+
+static bool
+msg_is_reject(const cpdlc_msg_t *msg)
+{
+	int msg_type;
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	msg_type = msg->segs[0].info->msg_type;
+	return ((msg->segs[0].info->is_dl &&
+	    (msg_type == CPDLC_DM1_UNABLE || msg_type == CPDLC_DM5_NEGATIVE ||
+	    msg_type == CPDLC_DM62_ERROR_errorinfo)) ||
+	    (!msg->segs[0].info->is_dl &&
+	    (msg_type == CPDLC_UM0_UNABLE || msg_type == CPDLC_UM5_NEGATIVE ||
+	    msg_type == CPDLC_UM159_ERROR_description)));
+}
+
+static bool
+is_error_msg(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return ((msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_DM62_ERROR_errorinfo) ||
+	    (!msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_UM159_ERROR_description));
+}
+
+static bool
+msg_is_rgr(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return ((msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_DM3_ROGER) ||
+	    (!msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_UM3_ROGER));
+}
+
+static bool
+is_disregard_msg(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return (!msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type == CPDLC_UM168_DISREGARD);
+}
+
+static bool
+thr_status_is_final(cpdlc_msg_thr_status_t st)
+{
+	return (st == CPDLC_MSG_THR_CLOSED || st == CPDLC_MSG_THR_ACCEPTED ||
+	    st == CPDLC_MSG_THR_REJECTED || st == CPDLC_MSG_THR_TIMEDOUT ||
+	    st == CPDLC_MSG_THR_DISREGARD || st == CPDLC_MSG_THR_FAILED ||
+	    st == CPDLC_MSG_THR_ERROR);
+}
+
+static void
+thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
+{
+	msg_bucket_t *first = list_head(&thr->buckets);
+	msg_bucket_t *last = list_tail(&thr->buckets);
+	time_t now = time(NULL);
+
+	if (thr_status_is_final(thr->status))
+		return;
+
+	if (first == last && first->sent && !msg_dl_req_resp(first->msg)) {
+		thr->status = CPDLC_MSG_THR_CLOSED;
+	} else if (last->sent && msg_is_dl_req(last->msg)) {
+		switch (cpdlc_client_get_msg_status(msglist->cl, last->tok)) {
+		case CPDLC_MSG_STATUS_SENDING:
+			thr->status = CPDLC_MSG_THR_PENDING;
+			break;
+		case CPDLC_MSG_STATUS_SEND_FAILED:
+			thr->status = CPDLC_MSG_THR_FAILED;
+			break;
+		default:
+			thr->status = CPDLC_MSG_THR_OPEN;
+			break;
+		}
+	} else if (msg_is_stby(last->msg)) {
+		thr->status = CPDLC_MSG_THR_STANDBY;
+	} else if (msg_is_accept(last->msg)) {
+		thr->status = CPDLC_MSG_THR_ACCEPTED;
+	} else if (msg_is_reject(last->msg)) {
+		thr->status = CPDLC_MSG_THR_REJECTED;
+	} else if (msg_is_rgr(last->msg)) {
+		thr->status = CPDLC_MSG_THR_CLOSED;
+	} else if (msg_is_ul_req(last->msg) &&
+	    thr->status != CPDLC_MSG_THR_STANDBY &&
+	    now - last->time > REQ_TIMEOUT) {
+		cpdlc_msg_t *msg = cpdlc_msg_alloc();
+		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(last->msg));
+		cpdlc_msg_add_seg(msg, true, CPDLC_DM62_ERROR_errorinfo, 0);
+		cpdlc_msg_seg_set_arg(msg, 0, 0, "TIMEDOUT", NULL);
+		msglist_send_impl(msglist, msg, thr->thr_id);
+		thr->status = CPDLC_MSG_THR_TIMEDOUT;
+	} else if (is_disregard_msg(last->msg)) {
+		thr->status = CPDLC_MSG_THR_DISREGARD;
+	} else if (is_error_msg(last->msg)) {
+		thr->status = CPDLC_MSG_THR_ERROR;
+	}
+}
 
 static void
 dfl_get_time_func(unsigned *hours, unsigned *mins)
@@ -91,7 +257,7 @@ find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 		thr->thr_id = msglist->next_thr_id++;
 		list_create(&thr->buckets, sizeof (msg_bucket_t),
 		    offsetof(msg_bucket_t, node));
-		list_insert_tail(&msglist->thr, thr);
+		list_insert_head(&msglist->thr, thr);
 		return (thr);
 	}
 }
@@ -112,19 +278,38 @@ free_msg_thr(msg_thr_t *thr)
 	free(thr);
 }
 
+static bool
+msg_matches_bucket(const cpdlc_msg_t *msg, const msg_bucket_t *bucket)
+{
+	unsigned min, mrn;
+
+	ASSERT(msg != NULL);
+	ASSERT(bucket != NULL);
+	ASSERT(bucket->msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+
+	min = cpdlc_msg_get_min(bucket->msg);
+	mrn = cpdlc_msg_get_mrn(msg);
+
+	if (is_disregard_msg(msg))
+		return (!bucket->sent && min == mrn);
+	else
+		return (bucket->sent && min == mrn);
+}
+
 msg_thr_t *
-msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, unsigned mrn)
+msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 {
 	ASSERT(msglist != NULL);
+	ASSERT(msg != NULL);
+
 	for (msg_thr_t *thr = list_tail(&msglist->thr); thr != NULL;
 	    thr = list_prev(&msglist->thr, thr)) {
 		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
 		    bucket != NULL; bucket = list_prev(&thr->buckets, bucket)) {
 			ASSERT(bucket->msg != NULL);
-			if (bucket->sent &&
-			    cpdlc_msg_get_min(bucket->msg) == mrn) {
+			if (msg_matches_bucket(msg, bucket))
 				return (thr);
-			}
 		}
 	}
 	return (NULL);
@@ -148,8 +333,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 	update_cb = msglist->update_cb;
 
 	while ((msg = cpdlc_client_recv_msg(cl)) != NULL) {
-		msg_thr_t *thr = msg_thr_find_by_mrn(msglist,
-		    cpdlc_msg_get_mrn(msg));
+		msg_thr_t *thr = msg_thr_find_by_mrn(msglist, msg);
 		msg_bucket_t *bucket;
 
 		if (thr == NULL)
@@ -159,8 +343,10 @@ msg_recv_cb(cpdlc_client_t *cl)
 		bucket->tok = CPDLC_INVALID_MSG_TOKEN;
 		ASSERT(msglist->get_time_func != NULL);
 		msglist->get_time_func(&bucket->hours, &bucket->mins);
+		bucket->time = time(NULL);
 
 		list_insert_tail(&thr->buckets, bucket);
+		thr_status_upd(msglist, thr);
 
 		if (update_cb != NULL) {
 			upd_thrs = safe_realloc(upd_thrs, (num_upd_thrs + 1) *
@@ -212,18 +398,21 @@ cpdlc_msglist_free(cpdlc_msglist_t *msglist)
 }
 
 void
-cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
-    cpdlc_get_time_func_t func)
+cpdlc_msglist_update(cpdlc_msglist_t *msglist)
 {
 	ASSERT(msglist != NULL);
-	ASSERT(func != NULL);
+
 	mutex_enter(&msglist->lock);
-	msglist->get_time_func = func;
+
+	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
+	    thr = list_next(&msglist->thr, thr))
+		thr_status_upd(msglist, thr);
+
 	mutex_exit(&msglist->lock);
 }
 
-cpdlc_msg_thr_id_t
-cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
+static msg_thr_t *
+msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
     cpdlc_msg_thr_id_t thr_id)
 {
 	msg_thr_t		*thr;
@@ -232,11 +421,11 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	ASSERT(msglist != NULL);
 	ASSERT(msg != NULL);
 
-	mutex_enter(&msglist->lock);
-
 	thr = find_msg_thr(msglist, thr_id);
 	if (thr_id == CPDLC_NO_MSG_THR_ID)
 		thr->status = CPDLC_MSG_THR_OPEN;
+	else
+		ASSERT(!thr_status_is_final(thr->status));
 	thr_id = thr->thr_id;
 
 	/* Assign the appropriate MIN and MRN flags */
@@ -255,15 +444,32 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	bucket->sent = true;
 	ASSERT(msglist->get_time_func != NULL);
 	msglist->get_time_func(&bucket->hours, &bucket->mins);
+	bucket->time = time(NULL);
 	list_insert_tail(&thr->buckets, bucket);
 
+	return (thr);
+}
+
+cpdlc_msg_thr_id_t
+cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	msg_thr_t *thr;
+
+	ASSERT(msglist != NULL);
+	ASSERT(msg != NULL);
+
+	mutex_enter(&msglist->lock);
+	thr = msglist_send_impl(msglist, msg, thr_id);
+	thr_id = thr->thr_id;
+	thr_status_upd(msglist, thr);
 	mutex_exit(&msglist->lock);
 
 	return (thr_id);
 }
 
 void
-cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
+cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
     cpdlc_msg_thr_id_t *thr_ids, unsigned *cap)
 {
 	unsigned thr_i = 0;
@@ -273,11 +479,14 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
 
 	mutex_enter(&msglist->lock);
 	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
-	    thr = list_next(&msglist->thr, thr), thr_i++) {
+	    thr = list_next(&msglist->thr, thr)) {
+		if (ignore_closed && thr_status_is_final(thr->status))
+			continue;
 		if (thr_i < *cap) {
 			ASSERT(thr_ids != NULL);
 			thr_ids[thr_i] = thr->thr_id;
 		}
+		thr_i++;
 	}
 	mutex_exit(&msglist->lock);
 
@@ -387,6 +596,23 @@ cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	free_msg_thr(thr);
 }
 
+bool
+cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
+{
+	msg_thr_t *thr;
+	bool result;
+
+	ASSERT(msglist != NULL);
+	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	thr = find_msg_thr(msglist, thr_id);
+	result = thr_status_is_final(thr->status);
+	mutex_exit(&msglist->lock);
+
+	return (result);
+}
+
 void
 cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist, void *userinfo)
 {
@@ -411,5 +637,16 @@ cpdlc_msglist_set_update_cb(cpdlc_msglist_t *msglist,
 	ASSERT(msglist != NULL);
 	mutex_enter(&msglist->lock);
 	msglist->update_cb = update_cb;
+	mutex_exit(&msglist->lock);
+}
+
+void
+cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
+    cpdlc_get_time_func_t func)
+{
+	ASSERT(msglist != NULL);
+	ASSERT(func != NULL);
+	mutex_enter(&msglist->lock);
+	msglist->get_time_func = func;
 	mutex_exit(&msglist->lock);
 }
