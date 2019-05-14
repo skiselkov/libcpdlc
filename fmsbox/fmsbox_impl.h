@@ -48,6 +48,7 @@ extern "C" {
 #define	LSKi_ROW(_idx)		((_idx) * 2 + 2)
 #define	LSK_HEADER_ROW(x)	((x) - 1)
 #define	MAX_FREETEXT_LINES	8
+#define	REQ_FREETEXT_LINES	4
 
 typedef struct {
 	void	(*draw_cb)(fmsbox_t *box);
@@ -88,8 +89,6 @@ struct fmsbox_s {
 	union {
 		struct {
 			cpdlc_arg_t	alt[2];
-			bool		due_wx;
-			bool		due_ac;
 			fms_step_at_t	step_at;
 			bool		plt_discret;
 			bool		maint_sep_vmc;
@@ -98,11 +97,17 @@ struct fmsbox_s {
 			cpdlc_dir_t	dir;
 			double		nm;
 			fms_step_at_t	step_at;
-			bool		due_wx;
-			bool		due_ac;
-			bool		due_tfc;
 		} off_req;
+		struct {
+			cpdlc_arg_t	spd[2];
+		} spd_req;
 	};
+	struct {
+		bool	due_wx;
+		bool	due_ac;
+		bool	due_tfc;
+		char	freetext[REQ_FREETEXT_LINES][FMSBOX_COLS + 1];
+	} req_common;
 
 	struct {
 		cpdlc_msg_t	*msg;
@@ -154,6 +159,7 @@ void fmsbox_put_lsk_title(fmsbox_t *box, int lsk_key_id,
 void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
+void fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
 
 const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,

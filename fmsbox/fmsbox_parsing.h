@@ -43,14 +43,23 @@ typedef void (*fmsbox_read_func_t)(fmsbox_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
 bool fmsbox_parse_time(const char *buf, int *hrs_p, int *mins_p);
+
 const char *fmsbox_parse_alt(const char *str, unsigned field_nr, void *data);
 const char *fmsbox_insert_alt_block(fmsbox_t *box, unsigned field_nr,
     void *data, void *userinfo);
-const char *fmsbox_delete_alt_block(fmsbox_t *box, void *userinfo);
 void fmsbox_read_alt_block(fmsbox_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
+const char *fmsbox_parse_spd(const char *str, unsigned field_nr, void *data);
+const char *fmsbox_insert_spd_block(fmsbox_t *box, unsigned field_nr,
+    void *data, void *userinfo);
+void fmsbox_read_spd_block(fmsbox_t *box, void *userinfo,
+    char str[READ_FUNC_BUF_SZ]);
+
+const char *fmsbox_delete_cpdlc_arg_block(fmsbox_t *box, void *userinfo);
+
 int fmsbox_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap);
+int fmsbox_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap);
 
 #ifdef	__cplusplus
 }

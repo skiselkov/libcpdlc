@@ -320,6 +320,18 @@ fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt)
 	    "%s", buf);
 }
 
+void
+fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt)
+{
+	char buf[8];
+
+	ASSERT(box != NULL);
+
+	fmsbox_print_spd(alt, buf, sizeof (buf));
+	fmsbox_put_str(box, row, col, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
+	    "%s", buf);
+}
+
 static void
 clear_screen(fmsbox_t *box)
 {

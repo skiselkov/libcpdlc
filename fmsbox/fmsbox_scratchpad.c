@@ -99,7 +99,6 @@ fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
 		const char *start = box->scratchpad;
 		const char *end = start + strlen(start);
 		void *data_buf = safe_malloc(buf_sz);
-		const char *error = NULL;
 
 		for (unsigned field_nr = 0; start < end; field_nr++) {
 			char substr[SCRATCHPAD_MAX + 1];

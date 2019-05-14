@@ -25,7 +25,21 @@
 
 #include "../src/cpdlc_assert.h"
 
+#include "fmsbox_req.h"
 #include "fmsbox_req_rte.h"
+
+static void
+draw_main_page(fmsbox_t *box)
+{
+	UNUSED(box);
+}
+
+static bool
+can_verify_rte_req(fmsbox_t *box)
+{
+	ASSERT(box != NULL);
+	return (false);
+}
 
 void
 fmsbox_req_rte_draw_cb(fmsbox_t *box)
@@ -34,6 +48,20 @@ fmsbox_req_rte_draw_cb(fmsbox_t *box)
 
 	fmsbox_put_page_title(box, "FANS  ROUTE REQ");
 
+	fmsbox_set_num_subpages(box, 2);
+
+	fmsbox_put_page_title(box, "FANS  ROUTE REQ");
+	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
+
+	if (box->subpage == 0)
+		draw_main_page(box);
+	else
+		fmsbox_req_draw_freetext(box);
+
+	if (can_verify_rte_req(box)) {
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
+		    "<VERIFY");
+	}
 	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 

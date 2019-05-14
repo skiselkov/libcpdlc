@@ -28,6 +28,8 @@
 #include "../src/cpdlc_assert.h"
 
 #include "fmsbox_impl.h"
+#include "fmsbox_req.h"
+#include "fmsbox_req_alt.h"
 #include "fmsbox_scratchpad.h"
 #include "fmsbox_vrfy.h"
 
@@ -81,23 +83,14 @@ verify_alt_req(fmsbox_t *box)
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM74_MAINT_OWN_SEPARATION_AND_VMC, 0);
 	}
-	if (box->alt_req.due_wx) {
-		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM65_DUE_TO_WX, 0);
-	} else if (box->alt_req.due_ac) {
-		seg = cpdlc_msg_add_seg(msg, true,
-		    CPDLC_DM66_DUE_TO_ACFT_PERF, 0);
-	}
+	fmsbox_req_add_common(box, msg);
 
 	fmsbox_verify_msg(box, msg, "ALT REQ", FMS_PAGE_REQ_ALT);
 }
 
-void
-fmsbox_req_alt_draw_cb(fmsbox_t *box)
+static void
+draw_main_page(fmsbox_t *box)
 {
-	ASSERT(box != NULL);
-
-	fmsbox_put_page_title(box, "FANS  ALTITUDE REQ");
-
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
 	if (box->alt_req.alt[0].alt.alt != 0) {
 		fmsbox_put_alt(box, LSK1_ROW, 0, &box->alt_req.alt[0]);
@@ -113,13 +106,7 @@ fmsbox_req_alt_draw_cb(fmsbox_t *box)
 		fmsbox_put_str(box, LSK1_ROW, 6, false, FMS_COLOR_CYAN,
 		    FMS_FONT_SMALL, "-----");
 	}
-	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L2, "DUE TO WX");
-	fmsbox_put_altn_selector(box, LSK2_ROW, false, box->alt_req.due_wx,
-	    "NO", "YES", NULL);
-
-	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L3, "DUE TO A/C");
-	fmsbox_put_altn_selector(box, LSK3_ROW, false, box->alt_req.due_ac,
-	    "NO", "YES", NULL);
+	fmsbox_req_draw_due(box, false);
 
 	fmsbox_put_step_at(box, &box->alt_req.step_at);
 
@@ -130,12 +117,27 @@ fmsbox_req_alt_draw_cb(fmsbox_t *box)
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R5, "MAINT SEP/VMC");
 	fmsbox_put_altn_selector(box, LSK5_ROW, true,
 	    !box->alt_req.maint_sep_vmc, "YES", "NO", NULL);
+}
+
+void
+fmsbox_req_alt_draw_cb(fmsbox_t *box)
+{
+	ASSERT(box != NULL);
+
+	fmsbox_set_num_subpages(box, 2);
+
+	fmsbox_put_page_title(box, "FANS  ALTITUDE REQ");
+	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
+
+	if (box->subpage == 0)
+		draw_main_page(box);
+	else
+		fmsbox_req_draw_freetext(box);
 
 	if (can_verify_alt_req(box)) {
 		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
 		    "<VERIFY");
 	}
-
 	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 
@@ -144,37 +146,36 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	ASSERT(box != NULL);
 
-	if (key == FMS_KEY_LSK_L1) {
+	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		fmsbox_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fmsbox_t, alt_req.alt),
 		    sizeof (cpdlc_arg_t), fmsbox_parse_alt,
-		    fmsbox_insert_alt_block, fmsbox_delete_alt_block,
+		    fmsbox_insert_alt_block, fmsbox_delete_cpdlc_arg_block,
 		    fmsbox_read_alt_block);
 		if (box->alt_req.alt[1].alt.alt != 0) {
 			/* Block altitude requests cannot include a STEP AT */
 			box->alt_req.step_at.type = STEP_AT_NONE;
 		}
-	} else if (key == FMS_KEY_LSK_L2) {
-		box->alt_req.due_wx = !box->alt_req.due_wx;
-		box->alt_req.due_ac = false;
-	} else if (key == FMS_KEY_LSK_L3) {
-		box->alt_req.due_wx = false;
-		box->alt_req.due_ac = !box->alt_req.due_ac;
+	} else if (box->subpage == 0 &&
+	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {
+		fmsbox_req_key_due(box, key);
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (can_verify_alt_req(box))
 			verify_alt_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (key == FMS_KEY_LSK_R1 || key == FMS_KEY_LSK_R2) {
+	} else if (KEY_IS_REQ_STEP_AT(box, key)) {
 		fmsbox_key_step_at(box, key, &box->alt_req.step_at);
 		if (box->alt_req.step_at.type != STEP_AT_NONE) {
 			memset(&box->alt_req.alt[1], 0,
 			    sizeof (box->alt_req.alt[1]));
 		}
-	} else if (key == FMS_KEY_LSK_R4) {
+	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		box->alt_req.plt_discret = !box->alt_req.plt_discret;
-	} else if (key == FMS_KEY_LSK_R5) {
+	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R5) {
 		box->alt_req.maint_sep_vmc = !box->alt_req.maint_sep_vmc;
+	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);
 	}

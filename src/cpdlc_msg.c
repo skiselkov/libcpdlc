@@ -203,7 +203,7 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		} else {
 			if (readable) {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%dKT", arg->spd.spd);
+				    "%d KT", arg->spd.spd);
 			} else {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 				    " %d", arg->spd.spd);
@@ -499,7 +499,7 @@ cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	for (unsigned i = 0; i < msg->num_segs; i++) {
 		readable_seg(&msg->segs[i], &n_bytes, &buf, &cap);
 		if (i + 1 < msg->num_segs)
-			APPEND_SNPRINTF(n_bytes, buf, cap, " ");
+			APPEND_SNPRINTF(n_bytes, buf, cap, ", ");
 	}
 
 	return (n_bytes);
