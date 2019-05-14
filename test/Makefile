@@ -48,8 +48,22 @@ CLIENT_TEST_OBJS = \
 	$(SRCPREFIX)/cpdlc_msglist.o \
 	$(SRCPREFIX)/minilist.o \
 	$(FMSBOX)/fmsbox.o \
+	$(FMSBOX)/fmsbox_freetext.o \
+	$(FMSBOX)/fmsbox_main_menu.o \
+	$(FMSBOX)/fmsbox_msg.o \
+	$(FMSBOX)/fmsbox_logon_status.o \
 	$(FMSBOX)/fmsbox_parsing.o \
-	$(FMSBOX)/fmsbox_scratchpad.o
+	$(FMSBOX)/fmsbox_req.o \
+	$(FMSBOX)/fmsbox_req_alt.o \
+	$(FMSBOX)/fmsbox_req_clx.o \
+	$(FMSBOX)/fmsbox_req_off.o \
+	$(FMSBOX)/fmsbox_req_rte.o \
+	$(FMSBOX)/fmsbox_req_spd.o \
+	$(FMSBOX)/fmsbox_req_vmc.o \
+	$(FMSBOX)/fmsbox_req_wcw.o \
+	$(FMSBOX)/fmsbox_req_voice.o \
+	$(FMSBOX)/fmsbox_scratchpad.o \
+	$(FMSBOX)/fmsbox_vrfy.o
 
 all : msgtest client_test
 

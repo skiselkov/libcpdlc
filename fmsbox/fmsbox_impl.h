@@ -29,6 +29,7 @@
 #include <stdbool.h>
 
 #include "../src/cpdlc_msglist.h"
+#include "fmsbox.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -99,11 +100,13 @@ enum {
 	FMS_PAGE_FREETEXT,
 	FMS_PAGE_REQUESTS,
 	FMS_PAGE_REQ_ALT,
-#if 0
 	FMS_PAGE_REQ_OFF,
 	FMS_PAGE_REQ_SPD,
 	FMS_PAGE_REQ_RTE,
-#endif
+	FMS_PAGE_REQ_CLX,
+	FMS_PAGE_REQ_VMC,
+	FMS_PAGE_REQ_WCW,
+	FMS_PAGE_REQ_VOICE,
 	FMS_PAGE_VRFY,
 	FMS_NUM_PAGES
 };
@@ -111,6 +114,8 @@ enum {
 void fmsbox_set_thr_id(fmsbox_t *box, cpdlc_msg_thr_id_t thr_id);
 void fmsbox_set_page(fmsbox_t *box, unsigned page_nr);
 void fmsbox_set_num_subpages(fmsbox_t *box, unsigned num);
+void fmsbox_put_page_ind(fmsbox_t *box, fms_color_t color);
+void fmsbox_put_atc_status(fmsbox_t *box);
 
 void fmsbox_put_str(fmsbox_t *box, unsigned row, unsigned col,
     bool align_right, fms_color_t color, fms_font_t size,
@@ -126,30 +131,15 @@ void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
 
-void fmsbox_main_menu_draw_cb(fmsbox_t *box);
-bool fmsbox_main_menu_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_logon_status_draw_cb(fmsbox_t *box);
-bool fmsbox_logon_status_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_msg_log_draw_cb(fmsbox_t *box);
-bool fmsbox_msg_log_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_msg_thr_draw_cb(fmsbox_t *box);
-bool fmsbox_msg_thr_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_freetext_draw_cb(fmsbox_t *box);
-bool fmsbox_freetext_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_requests_draw_cb(fmsbox_t *box);
-bool fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_req_alt_draw_cb(fmsbox_t *box);
-bool fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key);
-#if 0
-void fmsbox_req_off_draw_cb(fmsbox_t *box);
-bool fmsbox_req_off_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_req_spd_draw_cb(fmsbox_t *box);
-bool fmsbox_req_spd_key_cb(fmsbox_t *box, fms_key_t key);
-void fmsbox_req_rte_draw_cb(fmsbox_t *box);
-bool fmsbox_req_rte_key_cb(fmsbox_t *box, fms_key_t key);
-#endif
-void fmsbox_vrfy_draw_cb(fmsbox_t *box);
-bool fmsbox_vrfy_key_cb(fmsbox_t *box, fms_key_t key);
+const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st);
+void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
+    unsigned *n_lines_p);
+void fmsbox_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
+    char ***lines_p, unsigned *n_lines_p);
+void fmsbox_free_lines(char **lines, unsigned n_lines);
+
+cpdlc_msg_thr_id_t *fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids,
+    bool ignore_closed);
 
 #ifdef	__cplusplus
 }
