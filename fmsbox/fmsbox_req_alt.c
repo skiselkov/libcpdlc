@@ -35,7 +35,8 @@ static bool
 can_verify_alt_req(fmsbox_t *box)
 {
 	ASSERT(box);
-	return (box->alt_req.alt[0].alt.alt != 0);
+	return (box->alt_req.alt[0].alt.alt != 0 &&
+	    fmsbox_step_at_can_send(&box->alt_req.step_at));
 }
 
 static void
@@ -44,8 +45,8 @@ verify_alt_req(fmsbox_t *box)
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
-	if (strlen(box->alt_req.step_at.pos) != 0) {
-		if (box->alt_req.step_at.time) {
+	if (box->alt_req.step_at.type != STEP_AT_NONE) {
+		if (box->alt_req.step_at.type == STEP_AT_TIME) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM13_AT_time_REQ_CLB_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
@@ -151,8 +152,7 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 		    fmsbox_read_alt_block);
 		if (box->alt_req.alt[1].alt.alt != 0) {
 			/* Block altitude requests cannot include a STEP AT */
-			memset(&box->alt_req.step_at, 0,
-			    sizeof (box->alt_req.step_at));
+			box->alt_req.step_at.type = STEP_AT_NONE;
 		}
 	} else if (key == FMS_KEY_LSK_L2) {
 		box->alt_req.due_wx = !box->alt_req.due_wx;
@@ -165,13 +165,11 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_alt_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (key == FMS_KEY_LSK_R1) {
-		fmsbox_key_step_at(box, &box->alt_req.step_at);
-		if (strlen(box->alt_req.step_at.pos) != 0) {
+	} else if (key == FMS_KEY_LSK_R1 || key == FMS_KEY_LSK_R2) {
+		fmsbox_key_step_at(box, key, &box->alt_req.step_at);
+		if (box->alt_req.step_at.type != STEP_AT_NONE) {
 			memset(&box->alt_req.alt[1], 0,
 			    sizeof (box->alt_req.alt[1]));
-		} else {
-			box->alt_req.step_at.time = false;
 		}
 	} else if (key == FMS_KEY_LSK_R4) {
 		box->alt_req.plt_discret = !box->alt_req.plt_discret;

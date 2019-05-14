@@ -674,22 +674,84 @@ fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at)
 	ASSERT(step_at != NULL);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
-	if (strlen(step_at->pos) != 0) {
-		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "%s", step_at->pos);
-	} else {
+	switch (step_at->type) {
+	case STEP_AT_NONE:
 		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "NONE");
+		break;
+	case STEP_AT_TIME:
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "TIME");
+		fmsbox_put_lsk_title(box, FMS_KEY_LSK_R2, "TIME");
+		if (step_at->time_set) {
+			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%02d%02d",
+			    step_at->hrs, step_at->mins);
+		} else {
+			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "____");
+		}
+		break;
+	case STEP_AT_POS:
+		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "POS");
+		fmsbox_put_lsk_title(box, FMS_KEY_LSK_R2, "POS");
+		if (strlen(step_at->pos) != 0) {
+			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%s", step_at->pos);
+		} else {
+			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "_____");
+		}
+		break;
+	default:
+		VERIFY(0);
 	}
 }
 
 void
-fmsbox_key_step_at(fmsbox_t *box, fms_step_at_t *step_at)
+fmsbox_key_step_at(fmsbox_t *box, fms_key_t key, fms_step_at_t *step_at)
 {
 	ASSERT(box != NULL);
 	ASSERT(step_at != NULL);
 
-	fmsbox_scratchpad_xfer(box, step_at->pos, sizeof (step_at->pos), true);
-	step_at->time = fmsbox_parse_time(step_at->pos, &step_at->hrs,
-	    &step_at->mins);
+	if (key == FMS_KEY_LSK_R1) {
+		step_at->type = (step_at->type + 1) % NUM_STEP_AT_TYPES;
+	} else if (step_at->type != STEP_AT_NONE) {
+		ASSERT3U(key, ==, FMS_KEY_LSK_R2);
+
+		if (step_at->type == STEP_AT_TIME) {
+			char buf[8] = { 0 };
+
+			if (step_at->time_set) {
+				snprintf(buf, sizeof (buf), "%02d%02d",
+				    step_at->hrs, step_at->mins);
+			}
+			fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+			if (strlen(buf) != 0) {
+				int hrs, mins;
+				if (fmsbox_parse_time(buf, &hrs, &mins)) {
+					step_at->time_set = true;
+					step_at->hrs = hrs;
+					step_at->mins = mins;
+				} else {
+					fmsbox_set_error(box, "FORMAT ERROR");
+				}
+			} else {
+				step_at->time_set = false;
+			}
+		} else {
+			fmsbox_scratchpad_xfer(box, step_at->pos,
+			    sizeof (step_at->pos), true);
+		}
+	}
+}
+
+bool
+fmsbox_step_at_can_send(const fms_step_at_t *step_at)
+{
+	ASSERT(step_at != NULL);
+	return (step_at->type == STEP_AT_NONE ||
+	    (step_at->type == STEP_AT_TIME && step_at->time_set) ||
+	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
 }

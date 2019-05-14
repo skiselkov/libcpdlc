@@ -55,9 +55,17 @@ typedef struct {
 	bool	has_return;
 } fms_page_t;
 
+typedef enum {
+	STEP_AT_NONE,
+	STEP_AT_TIME,
+	STEP_AT_POS,
+	NUM_STEP_AT_TYPES
+} step_at_type_t;
+
 typedef struct {
+	step_at_type_t	type;
 	char		pos[8];
-	bool		time;
+	bool		time_set;
 	int		hrs;
 	int		mins;
 } fms_step_at_t;
@@ -158,7 +166,8 @@ cpdlc_msg_thr_id_t *fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids,
     bool ignore_closed);
 
 void fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at);
-void fmsbox_key_step_at(fmsbox_t *box, fms_step_at_t *step_at);
+void fmsbox_key_step_at(fmsbox_t *box, fms_key_t key, fms_step_at_t *step_at);
+bool fmsbox_step_at_can_send(const fms_step_at_t *step_at);
 
 #ifdef	__cplusplus
 }

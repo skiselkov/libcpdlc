@@ -49,7 +49,8 @@ static bool
 can_verify_off_req(fmsbox_t *box)
 {
 	ASSERT(box);
-	return (box->off_req.nm != 0);
+	return (box->off_req.nm != 0 &&
+	    fmsbox_step_at_can_send(&box->off_req.step_at));
 }
 
 static void
@@ -60,8 +61,8 @@ verify_off_req(fmsbox_t *box)
 
 	msg = cpdlc_msg_alloc();
 
-	if (strlen(box->off_req.step_at.pos) != 0) {
-		if (box->off_req.step_at.time) {
+	if (box->off_req.step_at.type != STEP_AT_NONE) {
+		if (box->off_req.step_at.type == STEP_AT_TIME) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
@@ -180,8 +181,8 @@ fmsbox_req_off_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_off_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (key == FMS_KEY_LSK_R1) {
-		fmsbox_key_step_at(box, &box->off_req.step_at);
+	} else if (key == FMS_KEY_LSK_R1 || key == FMS_KEY_LSK_R2) {
+		fmsbox_key_step_at(box, key, &box->off_req.step_at);
 	} else {
 		return (false);
 	}
