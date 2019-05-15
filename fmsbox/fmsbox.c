@@ -554,6 +554,7 @@ fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty)
 {
 	if (dirty)
 		return ("NEW");
+
 	switch (st) {
 	case CPDLC_MSG_THR_OPEN:
 		return ("OPEN");
@@ -613,8 +614,10 @@ draw_atc_msg_lsk(fmsbox_t *box)
 	ASSERT(box != NULL);
 	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
-	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID)
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R6, FMS_COLOR_CYAN, "ATC MSG*");
+	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R6, FMS_COLOR_CYAN,
+		    "ATC MSG*");
+	}
 }
 
 static void

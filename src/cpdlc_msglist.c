@@ -484,7 +484,8 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 	mutex_enter(&msglist->lock);
 	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
 	    thr = list_next(&msglist->thr, thr)) {
-		if (ignore_closed && thr_status_is_final(thr->status))
+		if (ignore_closed && !thr->dirty &&
+		    thr_status_is_final(thr->status))
 			continue;
 		if (thr_i < *cap) {
 			ASSERT(thr_ids != NULL);

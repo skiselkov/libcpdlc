@@ -117,9 +117,9 @@ struct fmsbox_s {
 
 	cpdlc_msg_thr_id_t	thr_id;
 	bool			msg_log_open;
-	char			freetext[MAX_FREETEXT_LINES][FMSBOX_COLS + 1];
 
 	union {
+		char		freetext[MAX_FREETEXT_LINES][FMSBOX_COLS + 1];
 		struct {
 			cpdlc_arg_t	alt[2];
 			fms_step_at_t	step_at;

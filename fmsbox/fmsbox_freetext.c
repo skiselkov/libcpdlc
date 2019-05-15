@@ -29,6 +29,7 @@
 
 #include "fmsbox_impl.h"
 #include "fmsbox_scratchpad.h"
+#include "fmsbox_vrfy.h"
 
 static bool
 freetext_msg_ready(fmsbox_t *box)
@@ -41,7 +42,7 @@ freetext_msg_ready(fmsbox_t *box)
 }
 
 static void
-send_freetext_msg(fmsbox_t *box)
+verify_freetext_msg(fmsbox_t *box)
 {
 	char buf[sizeof (box->freetext)] = { 0 };
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
@@ -56,9 +57,8 @@ send_freetext_msg(fmsbox_t *box)
 
 	cpdlc_msg_add_seg(msg, true, CPDLC_DM67_FREETEXT_NORMAL_text, 0);
 	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
-	cpdlc_msglist_send(box->msglist, msg, CPDLC_NO_MSG_THR_ID);
 
-	memset(box->freetext, 0, sizeof (box->freetext));
+	fmsbox_verify_msg(box, msg, "FREE TEXT", FMS_PAGE_FREETEXT);
 }
 
 void
@@ -88,9 +88,7 @@ fmsbox_freetext_draw_cb(fmsbox_t *box)
 
 	if (freetext_msg_ready(box)) {
 		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "*ERASE");
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
-		    "SEND*");
+		    "<VERIFY");
 	}
 }
 
@@ -106,12 +104,8 @@ fmsbox_freetext_key_cb(fmsbox_t *box, fms_key_t key)
 		fmsbox_scratchpad_xfer(box, box->freetext[line],
 		    sizeof (box->freetext[line]), true);
 	} else if (key == FMS_KEY_LSK_L5) {
-		memset(box->freetext, 0, sizeof (box->freetext));
-	} else if (key == FMS_KEY_LSK_R5) {
-		if (freetext_msg_ready(box)) {
-			send_freetext_msg(box);
-			fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
-		}
+		if (freetext_msg_ready(box))
+			verify_freetext_msg(box);
 	} else {
 		return (false);
 	}
