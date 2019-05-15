@@ -153,6 +153,7 @@ struct fmsbox_s {
 		struct {
 			cpdlc_arg_t	alt;
 			cpdlc_arg_t	spd[2];
+			bool		crz_clb;
 			bool		back_on_rte;
 			alt_chg_t	alt_chg;
 		} wcw_req;
@@ -224,7 +225,7 @@ void fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
 void fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
     unsigned hdg, bool hdg_true);
 
-const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st);
+const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
     unsigned *n_lines_p);
 void fmsbox_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,

@@ -49,8 +49,14 @@ verify_wcw_req(fmsbox_t *box)
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
 	if (box->wcw_req.alt.alt.alt != 0) {
-		seg = cpdlc_msg_add_seg(msg, true, 67,
-		    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
+		if (box->wcw_req.crz_clb) {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt, 0);
+		} else {
+			/* FIXME: need to query current alt for proper msg */
+			seg = cpdlc_msg_add_seg(msg, true, 67,
+			    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
+		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->wcw_req.alt.alt.fl,
 		    &box->wcw_req.alt.alt.alt);
 	} else if (box->wcw_req.spd[1].spd.spd != 0) {
@@ -93,6 +99,14 @@ draw_main_page(fmsbox_t *box)
 	} else {
 		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_CYAN,
 		    FMS_FONT_LARGE, "-----");
+	}
+
+	if (box->wcw_req.alt.alt.alt >= 32000) {
+		fmsbox_put_lsk_title(box, FMS_KEY_LSK_L2, "CRZ CLB");
+		fmsbox_put_altn_selector(box, LSK2_ROW, false,
+		    box->wcw_req.crz_clb, "NO", "YES", NULL);
+	} else {
+		box->wcw_req.crz_clb = false;
 	}
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L3, "ALT CHANGE");
@@ -167,6 +181,8 @@ fmsbox_req_wcw_key_cb(fmsbox_t *box, fms_key_t key)
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
 		}
+	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
+		box->wcw_req.crz_clb = !box->wcw_req.crz_clb;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
 		memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
 		memset(box->wcw_req.spd, 0, sizeof (box->wcw_req.spd));
@@ -174,7 +190,7 @@ fmsbox_req_wcw_key_cb(fmsbox_t *box, fms_key_t key)
 		box->wcw_req.alt_chg = (box->wcw_req.alt_chg + 1) %
 		    (ALT_CHG_LOWER + 1);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R1) {
-		if (!fmsbox_scratchpad_xfer_multi(box,
+		if (fmsbox_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fmsbox_t, wcw_req.spd),
 		    sizeof (cpdlc_arg_t), fmsbox_parse_spd,
 		    fmsbox_insert_spd_block, fmsbox_delete_cpdlc_arg_block,

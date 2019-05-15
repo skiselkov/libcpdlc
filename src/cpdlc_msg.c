@@ -57,8 +57,6 @@
 			(__start)++; \
 	} while (0)
 
-#define	INVALID_MSG_SEQ_NR	UINT32_MAX
-
 static const cpdlc_msg_info_t *
 msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 {
@@ -425,8 +423,9 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 {
 	unsigned n_bytes = 0;
 
-	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=CPDLC/MIN=%d/MRN=%d",
-	    msg->min, msg->mrn);
+	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=CPDLC/MIN=%d", msg->min);
+	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
 	if (msg->is_logon) {
 		char textbuf[64];
 		ASSERT(msg->logon_data != NULL);
@@ -523,7 +522,7 @@ validate_logon_message(const cpdlc_msg_t *msg)
 		    "MUST contain a FROM header\n");
 		return (false);
 	}
-	if (msg->min == INVALID_MSG_SEQ_NR) {
+	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
 		fprintf(stderr, "Message malformed: missing or invalid "
 		    "MIN header\n");
 		return (false);
@@ -542,14 +541,9 @@ validate_message(const cpdlc_msg_t *msg)
 		fprintf(stderr, "Message malformed: no message segments found\n");
 		return (false);
 	}
-	if (msg->min == INVALID_MSG_SEQ_NR) {
+	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
 		fprintf(stderr, "Message malformed: missing or invalid "
 		    "MIN header\n");
-		return (false);
-	}
-	if (msg->mrn == INVALID_MSG_SEQ_NR) {
-		fprintf(stderr, "Message malformed: missing or invalid "
-		    "MRN header\n");
 		return (false);
 	}
 	return (true);
@@ -1022,8 +1016,8 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 	}
 
 	msg = safe_calloc(1, sizeof (*msg));
-	msg->min = INVALID_MSG_SEQ_NR;
-	msg->mrn = INVALID_MSG_SEQ_NR;
+	msg->min = CPDLC_INVALID_MSG_SEQ_NR;
+	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
 
 	start = in_buf;
 	while (in_buf < term) {
@@ -1152,7 +1146,7 @@ void
 cpdlc_msg_set_min(cpdlc_msg_t *msg, unsigned min)
 {
 	ASSERT(msg != NULL);
-	ASSERT(min != INVALID_MSG_SEQ_NR);
+	ASSERT(min != CPDLC_INVALID_MSG_SEQ_NR);
 	msg->min = min;
 }
 
@@ -1167,7 +1161,7 @@ void
 cpdlc_msg_set_mrn(cpdlc_msg_t *msg, unsigned mrn)
 {
 	ASSERT(msg != NULL);
-	ASSERT(mrn != INVALID_MSG_SEQ_NR);
+	ASSERT(mrn != CPDLC_INVALID_MSG_SEQ_NR);
 	msg->mrn = mrn;
 }
 

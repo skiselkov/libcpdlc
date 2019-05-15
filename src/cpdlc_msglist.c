@@ -48,6 +48,7 @@ typedef struct msg_thr_s {
 	cpdlc_msg_thr_status_t	status;
 	list_t			buckets;
 	list_node_t		node;
+	bool			dirty;
 } msg_thr_t;
 
 struct cpdlc_msglist_s {
@@ -303,6 +304,8 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 	ASSERT(msglist != NULL);
 	ASSERT(msg != NULL);
 
+	if (cpdlc_msg_get_mrn(msg) == CPDLC_INVALID_MSG_SEQ_NR)
+		return (NULL);
 	for (msg_thr_t *thr = list_tail(&msglist->thr); thr != NULL;
 	    thr = list_prev(&msglist->thr, thr)) {
 		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
@@ -344,6 +347,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 		ASSERT(msglist->get_time_func != NULL);
 		msglist->get_time_func(&bucket->hours, &bucket->mins);
 		bucket->time = time(NULL);
+		thr->dirty = true;
 
 		list_insert_tail(&thr->buckets, bucket);
 		thr_status_upd(msglist, thr);
@@ -498,7 +502,7 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 
 cpdlc_msg_thr_status_t
 cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
-    cpdlc_msg_thr_id_t thr_id)
+    cpdlc_msg_thr_id_t thr_id, bool *dirty)
 {
 	msg_thr_t		*thr;
 	cpdlc_msg_thr_status_t	status;
@@ -509,6 +513,8 @@ cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
 	status = thr->status;
+	if (dirty != NULL)
+		*dirty = thr->dirty;
 	mutex_exit(&msglist->lock);
 
 	return (status);
@@ -524,8 +530,7 @@ cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
-	if (thr->status == CPDLC_MSG_THR_NEW)
-		thr->status = CPDLC_MSG_THR_OPEN;
+	thr->dirty = false;
 	mutex_exit(&msglist->lock);
 }
 

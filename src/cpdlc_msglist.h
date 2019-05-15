@@ -45,7 +45,6 @@ typedef void (*cpdlc_msglist_update_cb_t)(cpdlc_msglist_t *msglist,
 typedef void (*cpdlc_get_time_func_t)(unsigned *hours, unsigned *mins);
 
 typedef enum {
-	CPDLC_MSG_THR_NEW,
 	CPDLC_MSG_THR_OPEN,
 	CPDLC_MSG_THR_CLOSED,
 	CPDLC_MSG_THR_ACCEPTED,
@@ -73,7 +72,7 @@ CPDLC_API void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 
 CPDLC_API cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(
-    cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id);
+    cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id, bool *dirty);
 CPDLC_API void cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API unsigned cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,

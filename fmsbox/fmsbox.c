@@ -550,11 +550,11 @@ fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids, bool ignore_closed)
 }
 
 const char *
-fmsbox_thr_status2str(cpdlc_msg_thr_status_t st)
+fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty)
 {
-	switch (st) {
-	case CPDLC_MSG_THR_NEW:
+	if (dirty)
 		return ("NEW");
+	switch (st) {
 	case CPDLC_MSG_THR_OPEN:
 		return ("OPEN");
 	case CPDLC_MSG_THR_CLOSED:
@@ -591,10 +591,10 @@ get_new_thr_id(fmsbox_t *box)
 
 	thr_ids = fmsbox_get_thr_ids(box, &num_thr_ids, true);
 	for (unsigned i = 0; i < num_thr_ids; i++) {
-		cpdlc_msg_thr_status_t st =
-		    cpdlc_msglist_get_thr_status(box->msglist, thr_ids[i]);
+		bool dirty;
 
-		if (st == CPDLC_MSG_THR_NEW) {
+		cpdlc_msglist_get_thr_status(box->msglist, thr_ids[i], &dirty);
+		if (dirty) {
 			thr_id = thr_ids[i];
 			break;
 		}

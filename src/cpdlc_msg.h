@@ -34,6 +34,8 @@
 extern "C" {
 #endif
 
+#define	CPDLC_INVALID_MSG_SEQ_NR	UINT32_MAX
+
 typedef enum {
 	CPDLC_UM0_UNABLE,
 	CPDLC_UM1_STANDBY,

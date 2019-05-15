@@ -35,12 +35,12 @@ draw_thr_hdr(fmsbox_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
 	const cpdlc_msg_t *msg;
 	cpdlc_msg_thr_status_t st;
 	unsigned hours, mins;
-	bool sent;
+	bool sent, dirty;
 	const char *atsu;
 
 	cpdlc_msglist_get_thr_msg(box->msglist, thr_id, 0, &msg, NULL,
 	    &hours, &mins, &sent);
-	st = cpdlc_msglist_get_thr_status(box->msglist, thr_id);
+	st = cpdlc_msglist_get_thr_status(box->msglist, thr_id, &dirty);
 
 	if (sent)
 		atsu = cpdlc_msg_get_to(msg);
@@ -53,7 +53,7 @@ draw_thr_hdr(fmsbox_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
 	    sent ? "" : atsu);
 	/* Thread status */
 	fmsbox_put_str(box, row, 0, true, FMS_COLOR_GREEN, FMS_FONT_SMALL,
-	    "%s", fmsbox_thr_status2str(st));
+	    "%s", fmsbox_thr_status2str(st, dirty));
 }
 
 static void
@@ -136,6 +136,26 @@ fmsbox_msg_log_key_cb(fmsbox_t *box, fms_key_t key)
 	return (true);
 }
 
+static const cpdlc_msg_t *
+msg_get_last_uplink(fmsbox_t *box)
+{
+	ASSERT(box != NULL);
+	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+
+	for (unsigned i = 0,
+	    n = cpdlc_msglist_get_thr_msg_count(box->msglist, box->thr_id);
+	    i < n; i++) {
+		const cpdlc_msg_t *msg;
+		bool sent;
+
+		cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, n - i - 1,
+		    &msg, NULL, NULL, NULL, &sent);
+		if (!sent)
+			return (msg);
+	}
+	return (NULL);
+}
+
 static bool
 msg_can_resp(fmsbox_t *box, cpdlc_resp_type_t resp)
 {
@@ -143,10 +163,8 @@ msg_can_resp(fmsbox_t *box, cpdlc_resp_type_t resp)
 
 	ASSERT(box != NULL);
 	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
-
-	cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, 0, &msg,
-	    NULL, NULL, NULL, NULL);
-	return (msg->segs[0].info->resp == resp);
+	msg = msg_get_last_uplink(box);
+	return (msg != NULL && msg->segs[0].info->resp == resp);
 }
 
 static bool
@@ -174,7 +192,7 @@ static bool
 msg_can_standby(fmsbox_t *box)
 {
 	cpdlc_msg_thr_status_t st =
-	    cpdlc_msglist_get_thr_status(box->msglist, box->thr_id);
+	    cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL);
 	return (!cpdlc_msglist_thr_is_done(box->msglist, box->thr_id) &&
 	    st != CPDLC_MSG_THR_STANDBY &&
 	    (msg_can_resp(box, CPDLC_RESP_AN) ||
@@ -217,32 +235,10 @@ send_standby(fmsbox_t *box)
 	send_quick_resp(box, CPDLC_DM2_STANDBY);
 }
 
-void
-fmsbox_msg_thr_draw_cb(fmsbox_t *box)
+static void
+draw_response_section(fmsbox_t *box)
 {
-	char **lines = NULL;
-	unsigned n_lines = 0;
-	const cpdlc_msg_t *msg;
-
 	ASSERT(box != NULL);
-	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
-
-	cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, 0, &msg,
-	    NULL, NULL, NULL, NULL);
-	fmsbox_thr2lines(box->msglist, box->thr_id, &lines, &n_lines);
-	fmsbox_set_num_subpages(box, ceil(n_lines / 5.0));
-
-	fmsbox_put_page_title(box, "CPDLC MESSAGE");
-	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
-	draw_thr_hdr(box, 1, box->thr_id);
-
-	for (unsigned i = 0; i < 5; i++) {
-		unsigned line = i + box->subpage * 5;
-		if (line >= n_lines)
-			break;
-		fmsbox_put_str(box, 2 + i, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", lines[line]);
-	}
 
 	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
 	    FMS_COLOR_WHITE, FMS_FONT_SMALL, "--------RESPONSE--------");
@@ -266,6 +262,40 @@ fmsbox_msg_thr_draw_cb(fmsbox_t *box)
 		    "*AFFIRM");
 		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "NEGATIVE>");
+	}
+}
+
+void
+fmsbox_msg_thr_draw_cb(fmsbox_t *box)
+{
+	char **lines = NULL;
+	unsigned n_lines = 0;
+	unsigned max_lines;
+	bool thr_is_done;
+
+	ASSERT(box != NULL);
+	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+
+	thr_is_done = cpdlc_msglist_thr_is_done(box->msglist, box->thr_id);
+	max_lines = (thr_is_done ? 9 : 5);
+	cpdlc_msglist_thr_mark_seen(box->msglist, box->thr_id);
+
+	fmsbox_thr2lines(box->msglist, box->thr_id, &lines, &n_lines);
+	fmsbox_set_num_subpages(box, ceil(n_lines / (double)max_lines));
+
+	fmsbox_put_page_title(box, "CPDLC MESSAGE");
+	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
+	draw_thr_hdr(box, 1, box->thr_id);
+	for (unsigned i = 0; i < max_lines; i++) {
+		unsigned line = i + box->subpage * max_lines;
+		if (line >= n_lines)
+			break;
+		fmsbox_put_str(box, 2 + i, 0, false, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%s", lines[line]);
+	}
+
+	if (!thr_is_done) {
+		draw_response_section(box);
 	}
 
 	fmsbox_free_lines(lines, n_lines);
