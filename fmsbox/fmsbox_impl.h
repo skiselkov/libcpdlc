@@ -96,6 +96,12 @@ typedef enum {
 	CLX_REQ_DEP
 } clx_req_t;
 
+typedef enum {
+	ALT_CHG_NONE,
+	ALT_CHG_HIGHER,
+	ALT_CHG_LOWER
+} alt_chg_t;
+
 typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
 
 struct fmsbox_s {
@@ -145,8 +151,10 @@ struct fmsbox_s {
 			bool		clx;
 		} clx_req;
 		struct {
-		} vmc_req;
-		struct {
+			cpdlc_arg_t	alt;
+			cpdlc_arg_t	spd[2];
+			bool		back_on_rte;
+			alt_chg_t	alt_chg;
 		} wcw_req;
 	};
 	struct {

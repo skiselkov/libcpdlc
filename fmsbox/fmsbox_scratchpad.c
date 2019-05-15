@@ -81,7 +81,7 @@ fmsbox_scratchpad_xfer(fmsbox_t *box, char *dest, size_t cap, bool allow_mod)
 	}
 }
 
-void
+bool
 fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
     fmsbox_parse_func_t parse_func, fmsbox_insert_func_t insert_func,
     fmsbox_delete_func_t delete_func, fmsbox_read_func_t read_func)
@@ -138,6 +138,8 @@ fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
 	}
 
 	fmsbox_set_error(box, error);
+
+	return (error == NULL);
 }
 
 void

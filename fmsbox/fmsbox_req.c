@@ -81,7 +81,6 @@ fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key)
 		memset(&box->clx_req, 0, sizeof (box->clx_req));
 	} else if (key == FMS_KEY_LSK_R2) {
 		fmsbox_set_page(box, FMS_PAGE_REQ_VMC);
-		memset(&box->vmc_req, 0, sizeof (box->vmc_req));
 	} else if (key == FMS_KEY_LSK_R3) {
 		fmsbox_set_page(box, FMS_PAGE_REQ_WCW);
 		memset(&box->wcw_req, 0, sizeof (box->wcw_req));
@@ -119,8 +118,6 @@ fmsbox_req_add_common(fmsbox_t *box, cpdlc_msg_t *msg)
 
 		for (int i = 0; i < REQ_FREETEXT_LINES; i++) {
 			if (box->req_common.freetext[i][0] != '\0') {
-				if (strlen(buf) != 0)
-					strcat(buf, " ");
 				strcat(buf, box->req_common.freetext[i]);
 			}
 		}

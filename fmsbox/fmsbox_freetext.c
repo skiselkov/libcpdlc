@@ -43,18 +43,15 @@ freetext_msg_ready(fmsbox_t *box)
 static void
 send_freetext_msg(fmsbox_t *box)
 {
-	char buf[sizeof (box->freetext) + MAX_FREETEXT_LINES] = { 0 };
+	char buf[sizeof (box->freetext)] = { 0 };
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
 	ASSERT(box != NULL);
 	ASSERT(freetext_msg_ready(box));
 
 	for (int i = 0; i < MAX_FREETEXT_LINES; i++) {
-		if (box->freetext[i][0] != '\0') {
-			if (strlen(buf) != 0)
-				strcat(buf, " ");
+		if (box->freetext[i][0] != '\0')
 			strcat(buf, box->freetext[i]);
-		}
 	}
 
 	cpdlc_msg_add_seg(msg, true, CPDLC_DM67_FREETEXT_NORMAL_text, 0);
