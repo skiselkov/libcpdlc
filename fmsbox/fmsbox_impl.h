@@ -89,6 +89,13 @@ typedef struct {
 	double		lon;
 } fms_pos_t;
 
+typedef enum {
+	CLX_REQ_NONE,
+	CLX_REQ_ARR,
+	CLX_REQ_APP,
+	CLX_REQ_DEP
+} clx_req_t;
+
 typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
 
 struct fmsbox_s {
@@ -131,6 +138,16 @@ struct fmsbox_s {
 			unsigned	trk;
 			bool		trk_true;
 		} rte_req;
+		struct {
+			clx_req_t	type;
+			char		proc[8];
+			char		trans[8];
+			bool		clx;
+		} clx_req;
+		struct {
+		} vmc_req;
+		struct {
+		} wcw_req;
 	};
 	struct {
 		bool	due_wx;

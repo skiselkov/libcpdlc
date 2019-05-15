@@ -148,6 +148,8 @@ symbol2str(char c)
 		return ("\u2193");
 	case '`':
 		return ("\u00B0");
+	case '_':
+		return ("\u2610");
 	}
 	return (NULL);
 }
