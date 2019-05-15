@@ -70,6 +70,7 @@
 #define	MAX_BUF_SZ_NO_LOGON	128
 #define	POLL_TIMEOUT		1000	/* ms */
 #define	QUEUED_MSG_TIMEOUT	3600	/* seconds */
+#define	LOGON_GRACE_TIME	30	/* seconds */
 
 typedef enum {
 	LOGON_NONE,
@@ -84,6 +85,7 @@ typedef struct {
 	socklen_t	addr_len;
 	int		addr_family;
 	int		fd;
+	time_t		logoff_time;
 
 	uint8_t		*inbuf;
 	size_t		inbuf_sz;
@@ -566,6 +568,7 @@ handle_accepts(listen_sock_t *ls)
 		}
 
 		set_fd_nonblock(conn->fd);
+		conn->logoff_time = time(NULL);
 		old_conn = avl_find(&conns, conn, &where);
 		if (old_conn != NULL) {
 			logMsg("Error accepting connection: duplicate "
@@ -793,6 +796,7 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 		if (!msg->segs[i].info->is_dl &&
 		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
 			conn_reset_logon(conn);
+			conn->logoff_time = time(NULL);
 		}
 	}
 }
@@ -1288,6 +1292,25 @@ close_blocked_conns(void)
 	}
 }
 
+static void
+close_timedout_conns(void)
+{
+	time_t now = time(NULL);
+
+	/*
+	 * Run through existing connections and close ones which haven't
+	 * yet logged on and have timed out.
+	 */
+	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
+	    conn = conn_next) {
+		conn_next = AVL_NEXT(&conns, conn);
+		if (!conn->logon_success &&
+		    now - conn->logoff_time > LOGON_GRACE_TIME) {
+			close_conn(conn);
+		}
+	}
+}
+
 static bool
 tls_init(void)
 {
@@ -1306,7 +1329,7 @@ tls_init(void)
 	do { \
 		int error = (op); \
 		if (error < GNUTLS_E_SUCCESS) { \
-			logMsg(#op " failed: %s", gnutls_strerror(error)); \
+			logMsg("%s failed: %s", #op, gnutls_strerror(error)); \
 			gnutls_global_deinit(); \
 			return (false); \
 		} \
@@ -1329,10 +1352,13 @@ tls_init(void)
 	TLS_CHK(gnutls_certificate_set_x509_key_file2(x509_creds,
 	    tls_certfile, tls_keyfile, GNUTLS_X509_FMT_PEM,
 	    tls_keyfile_pass, tls_keyfile_enctype));
-        TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
 #if	GNUTLS_VERSION_NUMBER >= 0x030506
+	TLS_CHK(gnutls_priority_init2(&prio_cache, NULL, NULL,
+	    GNUTLS_PRIORITY_INIT_DEF_APPEND));
 	gnutls_certificate_set_known_dh_params(x509_creds,
 	    GNUTLS_SEC_PARAM_HIGH);
+#else	/* GNUTLS_VERSION_NUMBER */
+	TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
 #endif	/* GNUTLS_VERSION_NUMBER */
 
 	return (true);
@@ -1403,6 +1429,7 @@ main(int argc, char *argv[])
 		handle_queued_msgs();
 		if (blocklist_refresh())
 			close_blocked_conns();
+		close_timedout_conns();
 	}
 
 	msgquota_fini();
