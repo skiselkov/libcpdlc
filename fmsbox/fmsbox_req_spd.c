@@ -65,7 +65,6 @@ verify_spd_req(fmsbox_t *box)
 static void
 draw_main_page(fmsbox_t *box)
 {
-
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "SPD/SPD BLOCK");
 	if (box->spd_req.spd[0].spd.spd != 0) {
 		fmsbox_put_spd(box, LSK1_ROW, 0, &box->spd_req.spd[0]);

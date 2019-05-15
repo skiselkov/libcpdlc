@@ -86,6 +86,7 @@ fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key)
 		memset(&box->wcw_req, 0, sizeof (box->wcw_req));
 	} else if (key == FMS_KEY_LSK_R4) {
 		fmsbox_set_page(box, FMS_PAGE_REQ_VOICE);
+		memset(&box->voice_req, 0, sizeof (box->voice_req));
 	} else {
 		return (false);
 	}

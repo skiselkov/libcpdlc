@@ -157,6 +157,10 @@ struct fmsbox_s {
 			bool		back_on_rte;
 			alt_chg_t	alt_chg;
 		} wcw_req;
+		struct {
+			bool		freq_set;
+			double		freq;
+		} voice_req;
 	};
 	struct {
 		bool	due_wx;
