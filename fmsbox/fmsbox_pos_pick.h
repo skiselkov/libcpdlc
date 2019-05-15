@@ -23,30 +23,22 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_FMSBOX_SCRATCHPAD_H_
-#define	_LIBCPDLC_FMSBOX_SCRATCHPAD_H_
+#ifndef	_LIBCPDLC_FMSBOX_POS_PICK_H_
+#define	_LIBCPDLC_FMSBOX_POS_PICK_H_
 
-#include "fmsbox_parsing.h"
+#include "fmsbox_impl.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-void fmsbox_update_scratchpad(fmsbox_t *box);
-
-bool fmsbox_scratchpad_is_delete(fmsbox_t *box);
-void fmsbox_scratchpad_clear(fmsbox_t *box);
-void fmsbox_scratchpad_xfer(fmsbox_t *box, char *dest, size_t cap,
-    bool allow_mod);
-void fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
-    fmsbox_parse_func_t parse_func, fmsbox_insert_func_t insert_func,
-    fmsbox_delete_func_t delete_func, fmsbox_read_func_t read_func);
-void fmsbox_scratchpad_xfer_hdg(fmsbox_t *box, bool *hdg_set, unsigned *hdg,
-    bool *hdg_true);
-void fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos);
+void fmsbox_pos_pick_start(fmsbox_t *box, pos_pick_done_cb_t done_cb,
+    unsigned ret_page, const fms_pos_t *old_pos);
+void fmsbox_pos_pick_draw_cb(fmsbox_t *box);
+bool fmsbox_pos_pick_key_cb(fmsbox_t *box, fms_key_t key);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_FMSBOX_SCRATCHPAD_H_ */
+#endif	/* _LIBCPDLC_FMSBOX_POS_PICK_H_ */

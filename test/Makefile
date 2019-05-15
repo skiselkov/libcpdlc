@@ -27,7 +27,7 @@ include ../Makefile.com
 CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG $(PLATFORM_DEFS) \
     $(shell pkg-config gnutls --cflags)
 LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
-CLIENT_TEST_LIBS += -lncurses
+CLIENT_TEST_LIBS += -lncursesw
 
 SRCPREFIX=../src
 FMSBOX=../fmsbox
@@ -53,6 +53,7 @@ CLIENT_TEST_OBJS = \
 	$(FMSBOX)/fmsbox_msg.o \
 	$(FMSBOX)/fmsbox_logon_status.o \
 	$(FMSBOX)/fmsbox_parsing.o \
+	$(FMSBOX)/fmsbox_pos_pick.o \
 	$(FMSBOX)/fmsbox_req.o \
 	$(FMSBOX)/fmsbox_req_alt.o \
 	$(FMSBOX)/fmsbox_req_clx.o \

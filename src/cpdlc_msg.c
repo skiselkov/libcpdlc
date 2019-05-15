@@ -329,8 +329,13 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_DEGREES:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d",
-		    readable ? "" : " ", arg->deg);
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%03d%s",
+			    arg->deg.deg, arg->deg.tru ? " TRUE" : "");
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d%s",
+			    arg->deg.deg, arg->deg.tru ? "T" : "");
+		}
 		break;
 	case CPDLC_ARG_BARO:
 		if (readable) {
@@ -914,12 +919,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			}
 			break;
 		case CPDLC_ARG_DEGREES:
-			arg->deg = atoi(start);
-			if (arg->deg >= 360) {
+			arg_end = find_arg_end(start, end);
+			arg->deg.deg = atoi(start);
+			if (arg->deg.deg >= 360) {
 				fprintf(stderr, "Malformed message: "
 				    "invalid heading/track\n");
 				return (false);
 			}
+			arg->deg.tru = (arg_end[-1] == 'T');
 			break;
 		case CPDLC_ARG_BARO:
 			if (start + 4 >= end) {
@@ -1306,7 +1313,9 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->tofrom = *(bool *)arg_val1;
 		break;
 	case CPDLC_ARG_ROUTE:
-		cpdlc_strlcpy(arg->route, arg_val1, sizeof (arg->route));
+		if (arg->route != NULL)
+			free(arg->route);
+		arg->route = strdup(arg_val1);
 		break;
 	case CPDLC_ARG_PROCEDURE:
 		cpdlc_strlcpy(arg->proc, arg_val1, sizeof (arg->proc));
@@ -1325,7 +1334,9 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->freq = *(double *)arg_val1;
 		break;
 	case CPDLC_ARG_DEGREES:
-		arg->deg = *(unsigned *)arg_val1;
+		ASSERT(arg_val2 != NULL);
+		arg->deg.deg = *(unsigned *)arg_val1;
+		arg->deg.tru = *(bool *)arg_val2;
 		break;
 	case CPDLC_ARG_BARO:
 		ASSERT(arg_val2 != NULL);
@@ -1428,7 +1439,9 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (sizeof (arg->freq));
 	case CPDLC_ARG_DEGREES:
 		ASSERT(arg_val1 != NULL);
-		*(unsigned *)arg_val1 = arg->deg;
+		ASSERT(arg_val2 != NULL);
+		*(unsigned *)arg_val1 = arg->deg.deg;
+		*(bool *)arg_val2 = arg->deg.tru;
 		return (sizeof (arg->deg));
 	case CPDLC_ARG_BARO:
 		ASSERT(arg_val1 != NULL);

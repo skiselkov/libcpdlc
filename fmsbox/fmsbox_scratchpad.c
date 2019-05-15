@@ -23,6 +23,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +45,18 @@ fmsbox_update_scratchpad(fmsbox_t *box)
 	    FMS_FONT_LARGE, "%s", box->scratchpad);
 	fmsbox_put_str(box, SCRATCHPAD_ROW, 0, true, FMS_COLOR_CYAN,
 	    FMS_FONT_LARGE, "]");
+}
+
+bool
+fmsbox_scratchpad_is_delete(fmsbox_t *box)
+{
+	return (strcmp(box->scratchpad, "DELETE") == 0);
+}
+
+void
+fmsbox_scratchpad_clear(fmsbox_t *box)
+{
+	memset(box->scratchpad, 0, sizeof (box->scratchpad));
 }
 
 void
@@ -124,4 +138,61 @@ fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
 	}
 
 	fmsbox_set_error(box, error);
+}
+
+void
+fmsbox_scratchpad_xfer_hdg(fmsbox_t *box, bool *hdg_set, unsigned *hdg,
+    bool *hdg_true)
+{
+	char buf[8] = { 0 };
+	int new_hdg;
+	const char *error = NULL;
+
+	ASSERT(box != NULL);
+	ASSERT(hdg_set != NULL);
+	ASSERT(hdg != NULL);
+	ASSERT(hdg_true != NULL);
+
+	if (*hdg_set) {
+		if (*hdg_true)
+			snprintf(buf, sizeof (buf), "%03dT", *hdg);
+		else
+			snprintf(buf, sizeof (buf), "%03d", *hdg);
+	}
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) == 0) {
+		*hdg_set = false;
+	} else if (sscanf(buf, "%d", &new_hdg) == 1 && new_hdg >= 0 &&
+	    new_hdg <= 360) {
+		char last = buf[strlen(buf) - 1];
+		*hdg_set = true;
+		*hdg = new_hdg % 360;
+		if (!isdigit(last)) {
+			if (last == 'T')
+				*hdg_true = true;
+			else if (last == 'M')
+				*hdg_true = false;
+			else
+				error = "FORMAT ERROR";
+		} else {
+			*hdg_true = false;
+		}
+	} else {
+		error = "FORMAT ERROR";
+	}
+
+	fmsbox_set_error(box, error);
+}
+
+void
+fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos)
+{
+	char buf[32];
+
+	ASSERT(box != NULL);
+	ASSERT(pos != NULL);
+
+	fmsbox_print_pos(pos, buf, sizeof (buf), POS_PRINT_NORM);
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	fmsbox_set_error(box, fmsbox_scan_pos(buf, pos));
 }

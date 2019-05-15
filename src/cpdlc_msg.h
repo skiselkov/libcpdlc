@@ -376,7 +376,10 @@ typedef union {
 		char	name[32];
 	} icaoname;
 	double		freq;
-	unsigned	deg;
+	struct {
+		unsigned	deg;
+		bool		tru;
+	} deg;
 	struct {
 		bool	hpa;
 		double	val;

@@ -75,6 +75,7 @@ fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key)
 		memset(&box->spd_req, 0, sizeof (box->spd_req));
 	} else if (key == FMS_KEY_LSK_L4) {
 		fmsbox_set_page(box, FMS_PAGE_REQ_RTE);
+		memset(&box->rte_req, 0, sizeof (box->rte_req));
 	} else if (key == FMS_KEY_LSK_R1) {
 		fmsbox_set_page(box, FMS_PAGE_REQ_CLX);
 	} else if (key == FMS_KEY_LSK_R2) {

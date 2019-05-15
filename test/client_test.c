@@ -24,7 +24,8 @@
  */
 
 #include <ctype.h>
-#include <ncurses.h>
+#include <locale.h>
+#include <ncursesw/ncurses.h>
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
@@ -62,6 +63,7 @@ init_term(void)
 	int max_y, max_x;
 	char *buf;
 
+	setlocale(LC_ALL, "");
 	win = initscr();
 	keypad(stdscr, true);
 	nodelay(win, true);
@@ -91,12 +93,19 @@ init_term(void)
 	free(buf);
 }
 
+static bool
+is_fms_entry_key(int c)
+{
+	return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+	    (c >= '0' && c <= '9') || c == '/' || c == ' ' || c == '.');
+}
+
 static void
 proc_input(int c)
 {
 	if (c == KEY_BACKSPACE || c == KEY_DC) {
 		fmsbox_push_key(fmsbox, FMS_KEY_CLR_DEL);
-	} else if (isalnum(c) || c == '/' || c == ' ' || c == '.') {
+	} else if (is_fms_entry_key(c)) {
 		fmsbox_push_char(fmsbox, c);
 	} else if (c == '+' || c == '-') {
 		fmsbox_push_key(fmsbox, FMS_KEY_PLUS_MINUS);
@@ -129,6 +138,76 @@ read_input(void)
 		proc_input(c);
 }
 
+static const char *
+symbol2str(char c)
+{
+	switch (c) {
+	case '^':
+		return ("\u2191");
+	case 'v':
+		return ("\u2193");
+	case '`':
+		return ("\u00B0");
+	}
+	return (NULL);
+}
+
+static const char *
+letter2sc(char c)
+{
+	switch (c) {
+	case 'A':
+		return ("\u1d00");
+	case 'B':
+		return ("\u0299");
+	case 'C':
+		return ("\u1d04");
+	case 'D':
+		return ("\u1d05");
+	case 'E':
+		return ("\u1d07");
+	case 'F':
+		return ("\ua730");
+	case 'G':
+		return ("\u0262");
+	case 'H':
+		return ("\u029c");
+	case 'I':
+		return ("\u026a");
+	case 'J':
+		return ("\u1d0a");
+	case 'K':
+		return ("\u1d0b");
+	case 'L':
+		return ("\u029f");
+	case 'M':
+		return ("\u1d0d");
+	case 'N':
+		return ("\u0274");
+	case 'O':
+		return ("\u1d0f");
+	case 'P':
+		return ("\u1d18");
+	case 'R':
+		return ("\u0280");
+	case 'S':
+		return ("\ua731");
+	case 'T':
+		return ("\u1d1b");
+	case 'U':
+		return ("\u1d1c");
+	case 'V':
+		return ("\u1d20");
+	case 'W':
+		return ("\u1d21");
+	case 'Y':
+		return ("\u028f");
+	case 'Z':
+		return ("\u1d22");
+	}
+	return (NULL);
+}
+
 static void
 draw_screen(void)
 {
@@ -140,15 +219,23 @@ draw_screen(void)
 
 		move(row_i + OFF_Y, OFF_X);
 		for (unsigned col_i = 0; col_i < FMSBOX_COLS; col_i++) {
+			const char *str;
+
 			if (row[col_i].color != color) {
 				attroff(COLOR_PAIR(color));
 				color = row[col_i].color;
 				attron(COLOR_PAIR(color));
 			}
-			if (row[col_i].size == FMS_FONT_SMALL)
-				printw("%c", tolower(row[col_i].c));
-			else
+			if ((str = symbol2str(row[col_i].c)) != NULL) {
+				addstr(str);
+			} else if (row[col_i].size == FMS_FONT_SMALL) {
+				if ((str = letter2sc(row[col_i].c)) != NULL)
+					addstr(str);
+				else
+					printw("%c", tolower(row[col_i].c));
+			} else {
 				printw("%c", toupper(row[col_i].c));
+			}
 		}
 	}
 	attroff(COLOR_PAIR(color));

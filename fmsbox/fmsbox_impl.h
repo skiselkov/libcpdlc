@@ -71,13 +71,33 @@ typedef struct {
 	int		mins;
 } fms_step_at_t;
 
+typedef enum {
+	FMS_POS_NAVAID,		/* 1-4 letter navaid ID */
+	FMS_POS_ARPT,		/* 4 letter ICAO */
+	FMS_POS_FIX,		/* 1-5 letter fix */
+	FMS_POS_LAT_LON,	/* latitude-longitude */
+	FMS_POS_PBD		/* place-bearing-distance */
+} fms_pos_type_t;
+
+typedef struct {
+	fms_pos_type_t	type;
+	bool		set;
+	char		name[8];
+	unsigned	brg;
+	unsigned	dist;
+	double		lat;
+	double		lon;
+} fms_pos_t;
+
+typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
+
 struct fmsbox_s {
-	fmsbox_char_t	scr[FMSBOX_ROWS][FMSBOX_COLS];
-	fms_page_t	*page;
-	unsigned	subpage;
-	unsigned	num_subpages;
-	char		scratchpad[SCRATCHPAD_MAX + 1];
-	char		error_msg[ERROR_MSG_MAX + 1];
+	fmsbox_char_t		scr[FMSBOX_ROWS][FMSBOX_COLS];
+	fms_page_t		*page;
+	unsigned		subpage;
+	unsigned		num_subpages;
+	char			scratchpad[SCRATCHPAD_MAX + 1];
+	char			error_msg[ERROR_MSG_MAX + 1];
 
 	char			flt_id[12];
 	char			to[8];
@@ -101,6 +121,16 @@ struct fmsbox_s {
 		struct {
 			cpdlc_arg_t	spd[2];
 		} spd_req;
+		struct {
+			fms_pos_t	dct;
+			fms_pos_t	wx_dev;
+			bool		hdg_set;
+			unsigned	hdg;
+			bool		hdg_true;
+			bool		trk_set;
+			unsigned	trk;
+			bool		trk_true;
+		} rte_req;
 	};
 	struct {
 		bool	due_wx;
@@ -108,12 +138,17 @@ struct fmsbox_s {
 		bool	due_tfc;
 		char	freetext[REQ_FREETEXT_LINES][FMSBOX_COLS + 1];
 	} req_common;
-
 	struct {
 		cpdlc_msg_t	*msg;
 		char		title[8];
-		int		ret_page;
+		unsigned	ret_page;
 	} verify;
+	struct {
+		fms_pos_t		pos;
+		bool			was_set;
+		unsigned		ret_page;
+		pos_pick_done_cb_t	done_cb;
+	} pos_pick;
 
 	cpdlc_client_t	*cl;
 	cpdlc_msglist_t	*msglist;
@@ -135,6 +170,7 @@ enum {
 	FMS_PAGE_REQ_WCW,
 	FMS_PAGE_REQ_VOICE,
 	FMS_PAGE_VRFY,
+	FMS_PAGE_POS_PICK,
 	FMS_NUM_PAGES
 };
 
@@ -160,6 +196,8 @@ void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
 void fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
+void fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
+    unsigned hdg, bool hdg_true);
 
 const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
@@ -174,6 +212,15 @@ cpdlc_msg_thr_id_t *fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids,
 void fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at);
 void fmsbox_key_step_at(fmsbox_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fmsbox_step_at_can_send(const fms_step_at_t *step_at);
+
+typedef enum {
+	POS_PRINT_NORM,
+	POS_PRINT_PRETTY,
+	POS_PRINT_COMPACT
+} pos_print_style_t;
+void fmsbox_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
+    pos_print_style_t style);
+const char *fmsbox_scan_pos(const char *buf, fms_pos_t *pos);
 
 #ifdef	__cplusplus
 }

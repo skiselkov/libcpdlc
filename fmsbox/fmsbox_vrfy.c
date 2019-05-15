@@ -32,11 +32,13 @@
 
 void
 fmsbox_verify_msg(fmsbox_t *box, cpdlc_msg_t *msg, const char *title,
-    int ret_page)
+    unsigned ret_page)
 {
 	ASSERT(box != NULL);
 	ASSERT(msg != NULL);
 	ASSERT(title != NULL);
+	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	ASSERT(ret_page != FMS_PAGE_VRFY);
 
 	cpdlc_strlcpy(box->verify.title, title, sizeof (box->verify.title));
 	box->verify.ret_page = ret_page;
@@ -88,8 +90,7 @@ fmsbox_vrfy_key_cb(fmsbox_t *box, fms_key_t key)
 		    CPDLC_NO_MSG_THR_ID);
 		box->verify.msg = NULL;
 		fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
-	} else if (key == FMS_KEY_LSK_L6 && box->verify.ret_page >= 0 &&
-	    box->verify.ret_page < FMS_NUM_PAGES) {
+	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, box->verify.ret_page);
 	} else {
 		return (false);
