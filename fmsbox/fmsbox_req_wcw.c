@@ -87,7 +87,7 @@ verify_wcw_req(fmsbox_t *box)
 
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "WHEN CAN WE", FMS_PAGE_REQ_WCW);
+	fmsbox_verify_msg(box, msg, "WHEN", FMS_PAGE_REQ_WCW);
 }
 
 static void

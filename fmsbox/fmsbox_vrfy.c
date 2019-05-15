@@ -62,6 +62,7 @@ fmsbox_vrfy_draw_cb(fmsbox_t *box)
 	ASSERT(n_lines != 0);
 	fmsbox_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
+	fmsbox_put_page_title(box, "FANS  VRFY %s", box->verify.title);
 	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
 
 	for (int i = 0; i < MAX_LINES; i++) {

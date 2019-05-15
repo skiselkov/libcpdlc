@@ -48,7 +48,7 @@ verify_voice_req(fmsbox_t *box)
 	}
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "VOICE REQ", FMS_PAGE_REQ_VOICE);
+	fmsbox_verify_msg(box, msg, "VOICE", FMS_PAGE_REQ_VOICE);
 }
 
 static void
