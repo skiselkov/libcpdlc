@@ -122,8 +122,13 @@ fmsbox_req_add_common(fmsbox_t *box, cpdlc_msg_t *msg)
 				strcat(buf, box->req_common.freetext[i]);
 			}
 		}
-		seg = cpdlc_msg_add_seg(msg, true,
-		    CPDLC_DM67_FREETEXT_NORMAL_text, 0);
+		if (box->req_common.distress) {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM68_FREETEXT_DISTRESS_text, 0);
+		} else {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM67_FREETEXT_NORMAL_text, 0);
+		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
 	}
 }

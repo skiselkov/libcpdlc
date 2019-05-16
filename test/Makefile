@@ -34,40 +34,17 @@ FMSBOX=../fmsbox
 
 MSGTEST_OBJS = \
 	msgtest.o \
-	$(SRCPREFIX)/cpdlc_assert.o \
-	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o \
-	$(SRCPREFIX)/minilist.o
+	$(CORE_SRC_OBJS)
 
 CLIENT_TEST_OBJS = \
 	client_test.o \
-	$(SRCPREFIX)/cpdlc_assert.o \
-	$(SRCPREFIX)/cpdlc_client.o \
-	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o \
-	$(SRCPREFIX)/cpdlc_msglist.o \
-	$(SRCPREFIX)/minilist.o \
-	$(FMSBOX)/fmsbox.o \
-	$(FMSBOX)/fmsbox_freetext.o \
-	$(FMSBOX)/fmsbox_main_menu.o \
-	$(FMSBOX)/fmsbox_msg.o \
-	$(FMSBOX)/fmsbox_logon_status.o \
-	$(FMSBOX)/fmsbox_parsing.o \
-	$(FMSBOX)/fmsbox_pos_pick.o \
-	$(FMSBOX)/fmsbox_rej.o \
-	$(FMSBOX)/fmsbox_req.o \
-	$(FMSBOX)/fmsbox_req_alt.o \
-	$(FMSBOX)/fmsbox_req_clx.o \
-	$(FMSBOX)/fmsbox_req_off.o \
-	$(FMSBOX)/fmsbox_req_rte.o \
-	$(FMSBOX)/fmsbox_req_spd.o \
-	$(FMSBOX)/fmsbox_req_vmc.o \
-	$(FMSBOX)/fmsbox_req_wcw.o \
-	$(FMSBOX)/fmsbox_req_voice.o \
-	$(FMSBOX)/fmsbox_scratchpad.o \
-	$(FMSBOX)/fmsbox_vrfy.o
+	$(CORE_SRC_OBJS) \
+	$(FMSBOX_OBJS)
 
 all : msgtest client_test
+
+clean :
+	rm -f msgtest $(MSGTEST_OBJS) client_test $(CLIENT_TEST_OBJS)
 
 msgtest : $(MSGTEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
@@ -75,8 +52,4 @@ msgtest : $(MSGTEST_OBJS)
 client_test : $(CLIENT_TEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(CLIENT_TEST_LIBS) $(LIBS)
 
-%.o : %.c
-	$(CC) $(CFLAGS) -c -o $@ $^
-
-clean :
-	rm -f msgtest $(MSGTEST_OBJS) client_test $(CLIENT_TEST_OBJS)
+include ../Makefile.rules

@@ -72,6 +72,11 @@ fmsbox_main_menu_key_cb(fmsbox_t *box, fms_key_t key)
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
 	} else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE) {
 		fmsbox_set_page(box, FMS_PAGE_MSG_LOG);
+	} else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE) {
+		fmsbox_set_page(box, FMS_PAGE_EMER);
+		memset(&box->emer, 0, sizeof (box->emer));
+		/* The EMER page can send freetext as well */
+		memset(&box->req_common, 0, sizeof (box->req_common));
 	} else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE) {
 		fmsbox_set_page(box, FMS_PAGE_FREETEXT);
 		memset(box->freetext, 0, sizeof (box->freetext));

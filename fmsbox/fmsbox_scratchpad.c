@@ -34,6 +34,7 @@
 
 #include "fmsbox.h"
 #include "fmsbox_impl.h"
+#include "fmsbox_parsing.h"
 #include "fmsbox_scratchpad.h"
 
 void
@@ -187,6 +188,23 @@ fmsbox_scratchpad_xfer_hdg(fmsbox_t *box, bool *hdg_set, unsigned *hdg,
 }
 
 void
+fmsbox_scratchpad_xfer_alt(fmsbox_t *box, cpdlc_arg_t *alt)
+{
+	char buf[8] = { 0 };
+
+	ASSERT(box != NULL);
+	ASSERT(alt != NULL);
+
+	if (alt->alt.alt != 0)
+		fmsbox_print_alt(alt, buf, sizeof (buf));
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0)
+		fmsbox_set_error(box, fmsbox_parse_alt(buf, 0, alt));
+	else
+		memset(alt, 0, sizeof (*alt));
+}
+
+void
 fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos)
 {
 	char buf[32];
@@ -196,5 +214,114 @@ fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos)
 
 	fmsbox_print_pos(pos, buf, sizeof (buf), POS_PRINT_NORM);
 	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
-	fmsbox_set_error(box, fmsbox_scan_pos(buf, pos));
+	fmsbox_set_error(box, fmsbox_parse_pos(buf, pos));
+}
+
+void
+fmsbox_scratchpad_xfer_uint(fmsbox_t *box, unsigned *value, bool *set,
+    unsigned minval, unsigned maxval)
+{
+	char buf[16] = { 0 };
+
+	ASSERT(box != NULL);
+	ASSERT(value != NULL);
+	ASSERT(set != NULL);
+
+	if (*set)
+		snprintf(buf, sizeof (buf), "%d", *value);
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		unsigned tmp;
+
+		if (sscanf(buf, "%d", &tmp) != 1 || tmp < minval ||
+		    tmp > maxval) {
+			fmsbox_set_error(box, "FORMAT ERROR");
+		} else {
+			*value = tmp;
+			*set = true;
+		}
+	} else {
+		*set = false;
+	}
+}
+
+void
+fmsbox_scratchpad_xfer_time(fmsbox_t *box, int *hrs_p, int *mins_p, bool *set)
+{
+	char buf[8] = { 0 };
+	int hrs, mins;
+
+	ASSERT(box != NULL);
+	ASSERT(hrs_p != NULL);
+	ASSERT(mins_p != NULL);
+	ASSERT(set != NULL);
+
+	if (*set)
+		snprintf(buf, sizeof (buf), "%02d%02d", *hrs_p, *mins_p);
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		if (!fmsbox_parse_time(buf, &hrs, &mins)) {
+			fmsbox_set_error(box, "FORMAT ERROR");
+		} else {
+			*hrs_p = hrs;
+			*mins_p = mins;
+			*set = true;
+		}
+	} else {
+		*set = false;
+	}
+}
+
+static bool
+parse_dir(char *buf, cpdlc_dir_t *dir)
+{
+	char first, last, c;
+
+	ASSERT(buf != NULL);
+	ASSERT(strlen(buf) != 0);
+	ASSERT(dir != NULL);
+
+	first = buf[0];
+	last = buf[strlen(buf) - 1];
+	if (!isdigit(first)) {
+		c = first;
+		memmove(&buf[0], &buf[1], strlen(buf));
+	} else if (!isdigit(last)) {
+		c = last;
+	} else {
+		return (false);
+	}
+	if (c == 'L')
+		*dir = CPDLC_DIR_LEFT;
+	else if (c == 'R')
+		*dir = CPDLC_DIR_RIGHT;
+	else
+		return (false);
+	return (true);
+}
+
+void
+fmsbox_scratchpad_xfer_offset(fmsbox_t *box, cpdlc_dir_t *dir_p, double *nm_p)
+{
+	char buf[8];
+
+	fmsbox_print_off(*dir_p, *nm_p, buf, sizeof (buf));
+	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		unsigned nm;
+		cpdlc_dir_t dir;
+
+		if (strlen(buf) < 2 || !parse_dir(buf, &dir) ||
+		    sscanf(buf, "%d", &nm) != 1 || nm == 0 || nm > 999) {
+			fmsbox_set_error(box, "FORMAT ERROR");
+		} else if (buf[0] == 'L') {
+			*dir_p = dir;
+			*nm_p = nm;
+		} else {
+			*dir_p = dir;
+			*nm_p = nm;
+		}
+	} else {
+		*nm_p = 0;
+	}
 }

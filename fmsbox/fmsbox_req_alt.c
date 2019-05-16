@@ -93,7 +93,7 @@ draw_main_page(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
 	if (box->alt_req.alt[0].alt.alt != 0) {
-		fmsbox_put_alt(box, LSK1_ROW, 0, &box->alt_req.alt[0]);
+		fmsbox_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0]);
 	} else {
 		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "_____");
@@ -101,7 +101,7 @@ draw_main_page(fmsbox_t *box)
 	fmsbox_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
 	if (box->alt_req.alt[1].alt.alt != 0) {
-		fmsbox_put_alt(box, LSK1_ROW, 6, &box->alt_req.alt[1]);
+		fmsbox_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1]);
 	} else {
 		fmsbox_put_str(box, LSK1_ROW, 6, false, FMS_COLOR_CYAN,
 		    FMS_FONT_SMALL, "-----");

@@ -394,7 +394,11 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 cpdlc_msg_t *
 cpdlc_msg_alloc(void)
 {
-	return (safe_calloc(1, sizeof (cpdlc_msg_t)));
+	cpdlc_msg_t *msg = safe_calloc(1, sizeof (cpdlc_msg_t));
+
+	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
+
+	return (msg);
 }
 
 void

@@ -95,7 +95,7 @@ draw_main_page(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "ALTITUDE");
 	if (box->wcw_req.alt.alt.alt != 0) {
-		fmsbox_put_alt(box, LSK1_ROW, 0, &box->wcw_req.alt);
+		fmsbox_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt);
 	} else {
 		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_CYAN,
 		    FMS_FONT_LARGE, "-----");

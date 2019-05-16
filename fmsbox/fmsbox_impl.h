@@ -110,6 +110,15 @@ typedef enum {
 	REJ_DUE_UNLOADABLE
 } rej_due_t;
 
+typedef enum {
+	EMER_REASON_NONE,
+	EMER_REASON_WX,
+	EMER_REASON_MED,
+	EMER_REASON_CABIN_PRESS,
+	EMER_REASON_ENG_LOSS,
+	EMER_REASON_LOW_FUEL
+} emer_reason_t;
+
 typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
 
 struct fmsbox_s {
@@ -174,6 +183,7 @@ struct fmsbox_s {
 		bool	due_wx;
 		bool	due_ac;
 		bool	due_tfc;
+		bool	distress;
 		char	freetext[REQ_FREETEXT_LINES][FMSBOX_COLS + 1];
 	} req_common;
 	struct {
@@ -193,6 +203,21 @@ struct fmsbox_s {
 		unsigned		ret_page;
 		pos_pick_done_cb_t	done_cb;
 	} pos_pick;
+	struct {
+		bool			pan;
+		bool			fuel_set;
+		int			fuel_hrs;
+		int			fuel_mins;
+		bool			souls_set;
+		unsigned		souls;
+		cpdlc_arg_t		des;
+		struct {
+			cpdlc_dir_t	dir;
+			double		nm;
+		} offset;
+		fms_pos_t		divert;
+		emer_reason_t		reason;
+	} emer;
 
 	cpdlc_client_t	*cl;
 	cpdlc_msglist_t	*msglist;
@@ -215,6 +240,7 @@ enum {
 	FMS_PAGE_REQ_VOICE,
 	FMS_PAGE_REJ,
 	FMS_PAGE_VRFY,
+	FMS_PAGE_EMER,
 	FMS_PAGE_POS_PICK,
 	FMS_NUM_PAGES
 };
@@ -239,7 +265,8 @@ void fmsbox_put_lsk_title(fmsbox_t *box, int lsk_key_id,
 
 void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
-void fmsbox_put_alt(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
+void fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
+    const cpdlc_arg_t *alt);
 void fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
 void fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
     unsigned hdg, bool hdg_true);
@@ -257,15 +284,6 @@ cpdlc_msg_thr_id_t *fmsbox_get_thr_ids(fmsbox_t *box, unsigned *num_thr_ids,
 void fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at);
 void fmsbox_key_step_at(fmsbox_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fmsbox_step_at_can_send(const fms_step_at_t *step_at);
-
-typedef enum {
-	POS_PRINT_NORM,
-	POS_PRINT_PRETTY,
-	POS_PRINT_COMPACT
-} pos_print_style_t;
-void fmsbox_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
-    pos_print_style_t style);
-const char *fmsbox_scan_pos(const char *buf, fms_pos_t *pos);
 
 #ifdef	__cplusplus
 }

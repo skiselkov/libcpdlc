@@ -29,23 +29,11 @@
 
 #include "../src/cpdlc_assert.h"
 
+#include "fmsbox_parsing.h"
 #include "fmsbox_req.h"
 #include "fmsbox_req_off.h"
 #include "fmsbox_scratchpad.h"
 #include "fmsbox_vrfy.h"
-
-static void
-print_off(fmsbox_t *box, char *buf, size_t cap)
-{
-	ASSERT(box != NULL);
-	if (box->off_req.nm != 0) {
-		snprintf(buf, cap, "%c%.0f",
-		    box->off_req.dir == CPDLC_DIR_LEFT ? 'L' : 'R',
-		    box->off_req.nm);
-	} else if (buf != NULL) {
-		buf[0] = '\0';
-	}
-}
 
 static bool
 can_verify_off_req(fmsbox_t *box)
@@ -98,7 +86,8 @@ draw_main_page(fmsbox_t *box)
 		    FMS_FONT_LARGE, "____");
 	} else {
 		char buf[8];
-		print_off(box, buf, sizeof (buf));
+		fmsbox_print_off(box->off_req.dir, box->off_req.nm, buf,
+		    sizeof (buf));
 		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", buf);
 	}
@@ -131,62 +120,14 @@ fmsbox_req_off_draw_cb(fmsbox_t *box)
 	fmsbox_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 
-static bool
-parse_dir(char *buf, cpdlc_dir_t *dir)
-{
-	char first, last, c;
-
-	ASSERT(buf != NULL);
-	ASSERT(strlen(buf) != 0);
-	ASSERT(dir != NULL);
-
-	first = buf[0];
-	last = buf[strlen(buf) - 1];
-	if (!isdigit(first)) {
-		c = first;
-		memmove(&buf[0], &buf[1], strlen(buf));
-	} else if (!isdigit(last)) {
-		c = last;
-	} else {
-		return (false);
-	}
-	if (c == 'L')
-		*dir = CPDLC_DIR_LEFT;
-	else if (c == 'R')
-		*dir = CPDLC_DIR_RIGHT;
-	else
-		return (false);
-	return (true);
-}
-
 bool
 fmsbox_req_off_key_cb(fmsbox_t *box, fms_key_t key)
 {
 	ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		char buf[8];
-
-		print_off(box, buf, sizeof (buf));
-		fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
-		if (strlen(buf) != 0) {
-			unsigned nm;
-			cpdlc_dir_t dir;
-
-			if (strlen(buf) < 2 || !parse_dir(buf, &dir) ||
-			    sscanf(buf, "%d", &nm) != 1 ||
-			    nm == 0 || nm > 999) {
-				fmsbox_set_error(box, "FORMAT ERROR");
-			} else if (buf[0] == 'L') {
-				box->off_req.dir = dir;
-				box->off_req.nm = nm;
-			} else {
-				box->off_req.dir = dir;
-				box->off_req.nm = nm;
-			}
-		} else {
-			box->off_req.nm = 0;
-		}
+		fmsbox_scratchpad_xfer_offset(box, &box->off_req.dir,
+		    &box->off_req.nm);
 	} else if (box->subpage == 0 &&
 	    (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4)) {
 		fmsbox_req_key_due(box, key);

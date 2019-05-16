@@ -43,7 +43,13 @@ bool fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
     fmsbox_delete_func_t delete_func, fmsbox_read_func_t read_func);
 void fmsbox_scratchpad_xfer_hdg(fmsbox_t *box, bool *hdg_set, unsigned *hdg,
     bool *hdg_true);
+void fmsbox_scratchpad_xfer_alt(fmsbox_t *box, cpdlc_arg_t *alt);
 void fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos);
+void fmsbox_scratchpad_xfer_uint(fmsbox_t *box, unsigned *value, bool *set,
+    unsigned minval, unsigned maxval);
+void fmsbox_scratchpad_xfer_time(fmsbox_t *box, int *hrs_p, int *mins_p,
+    bool *set);
+void fmsbox_scratchpad_xfer_offset(fmsbox_t *box, cpdlc_dir_t *dir, double *nm);
 
 #ifdef	__cplusplus
 }
