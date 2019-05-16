@@ -49,6 +49,7 @@ extern "C" {
 #define	LSK_HEADER_ROW(x)	((x) - 1)
 #define	MAX_FREETEXT_LINES	8
 #define	REQ_FREETEXT_LINES	4
+#define	REJ_FREETEXT_LINES	3
 
 typedef struct {
 	void	(*draw_cb)(fmsbox_t *box);
@@ -101,6 +102,13 @@ typedef enum {
 	ALT_CHG_HIGHER,
 	ALT_CHG_LOWER
 } alt_chg_t;
+
+typedef enum {
+	REJ_DUE_NONE,
+	REJ_DUE_WX,
+	REJ_DUE_AC,
+	REJ_DUE_UNLOADABLE
+} rej_due_t;
 
 typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
 
@@ -174,6 +182,12 @@ struct fmsbox_s {
 		unsigned	ret_page;
 	} verify;
 	struct {
+		bool		unable_or_neg;
+		unsigned	ret_page;
+		rej_due_t	due;
+		char		freetext[REJ_FREETEXT_LINES][FMSBOX_COLS + 1];
+	} rej;
+	struct {
 		fms_pos_t		pos;
 		bool			was_set;
 		unsigned		ret_page;
@@ -199,6 +213,7 @@ enum {
 	FMS_PAGE_REQ_VMC,
 	FMS_PAGE_REQ_WCW,
 	FMS_PAGE_REQ_VOICE,
+	FMS_PAGE_REJ,
 	FMS_PAGE_VRFY,
 	FMS_PAGE_POS_PICK,
 	FMS_NUM_PAGES

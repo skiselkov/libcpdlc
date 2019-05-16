@@ -28,6 +28,7 @@
 #include "../src/cpdlc_assert.h"
 
 #include "fmsbox_impl.h"
+#include "fmsbox_rej.h"
 
 static void
 draw_thr_hdr(fmsbox_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
@@ -243,25 +244,15 @@ draw_response_section(fmsbox_t *box)
 	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
 	    FMS_COLOR_WHITE, FMS_FONT_SMALL, "--------RESPONSE--------");
 
-	if (msg_can_standby(box)) {
+	if (msg_can_roger(box) || msg_can_wilco(box) || msg_can_affirm(box)) {
 		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_CYAN,
-		    "*STANDBY");
+		    "*ACPT");
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		    "REJ>");
 	}
-	if (msg_can_roger(box)) {
+	if (msg_can_standby(box)) {
 		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "*ROGER");
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
-		    "UNABLE");
-	} else if (msg_can_wilco(box)) {
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "*WILCO");
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
-		    "UNABLE");
-	} else if (msg_can_affirm(box)) {
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "*AFFIRM");
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
-		    "NEGATIVE>");
+		    "*STBY");
 	}
 }
 
@@ -309,15 +300,20 @@ fmsbox_msg_thr_key_cb(fmsbox_t *box, fms_key_t key)
 	if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_MSG_LOG);
 	} else if (key == FMS_KEY_LSK_L4) {
-		if (msg_can_standby(box))
-			send_standby(box);
-	} else if (key == FMS_KEY_LSK_L5) {
 		if (msg_can_roger(box))
 			send_roger(box);
 		else if (msg_can_wilco(box))
 			send_wilco(box);
 		else if (msg_can_affirm(box))
 			send_affirm(box);
+	} else if (key == FMS_KEY_LSK_L5) {
+		if (msg_can_standby(box))
+			send_standby(box);
+	} else if (key == FMS_KEY_LSK_R5) {
+		if (msg_can_roger(box) || msg_can_wilco(box))
+			fmsbox_rej(box, true, FMS_PAGE_MSG_THR);
+		else if (msg_can_affirm(box))
+			fmsbox_rej(box, false, FMS_PAGE_MSG_THR);
 	} else {
 		return (false);
 	}

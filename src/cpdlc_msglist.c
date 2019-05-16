@@ -31,8 +31,6 @@
 #include "cpdlc_thread.h"
 #include "minilist.h"
 
-#define	REQ_TIMEOUT	100	/* seconds */
-
 typedef struct msg_bucket_s {
 	cpdlc_msg_t		*msg;
 	cpdlc_msg_token_t	tok;
@@ -182,15 +180,42 @@ thr_status_is_final(cpdlc_msg_thr_status_t st)
 	    st == CPDLC_MSG_THR_ERROR);
 }
 
+static unsigned
+thr_get_timeout(msg_thr_t *thr)
+{
+	unsigned timeout = UINT32_MAX;
+
+	ASSERT(thr != NULL);
+	for (msg_bucket_t *bucket = list_head(&thr->buckets); bucket != NULL;
+	    bucket = list_next(&thr->buckets, bucket)) {
+		const cpdlc_msg_t *msg = bucket->msg;
+
+		ASSERT(msg != NULL);
+		for (unsigned i = 0, n = cpdlc_msg_get_num_segs(msg); i < n;
+		    i++) {
+			ASSERT(msg->segs[i].info != NULL);
+			if (msg->segs[i].info->timeout != 0 &&
+			    msg->segs[i].info->timeout < timeout) {
+				timeout = msg->segs[i].info->timeout;
+			}
+		}
+	}
+
+	return (timeout < UINT32_MAX ? timeout : 0);
+}
+
 static void
 thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 {
 	msg_bucket_t *first = list_head(&thr->buckets);
 	msg_bucket_t *last = list_tail(&thr->buckets);
 	time_t now = time(NULL);
+	unsigned timeout;
 
 	if (thr_status_is_final(thr->status))
 		return;
+
+	timeout = thr_get_timeout(thr);
 
 	if (first == last && first->sent && !msg_dl_req_resp(first->msg)) {
 		thr->status = CPDLC_MSG_THR_CLOSED;
@@ -215,8 +240,8 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 	} else if (msg_is_rgr(last->msg)) {
 		thr->status = CPDLC_MSG_THR_CLOSED;
 	} else if (msg_is_ul_req(last->msg) &&
-	    thr->status != CPDLC_MSG_THR_STANDBY &&
-	    now - last->time > REQ_TIMEOUT) {
+	    thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
+	    now - last->time > timeout) {
 		cpdlc_msg_t *msg = cpdlc_msg_alloc();
 		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(last->msg));
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM62_ERROR_errorinfo, 0);

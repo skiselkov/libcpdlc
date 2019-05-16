@@ -54,6 +54,7 @@
 #include "fmsbox_req_voice.h"
 #include "fmsbox_req_wcw.h"
 #include "fmsbox_scratchpad.h"
+#include "fmsbox_rej.h"
 #include "fmsbox_vrfy.h"
 
 #define	ADD_LINE(__lines, __n_lines, __start, __len) \
@@ -127,6 +128,10 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 	{	/* FMS_PAGE_REQ_VOICE */
 		.draw_cb = fmsbox_req_voice_draw_cb,
 		.key_cb = fmsbox_req_voice_key_cb
+	},
+	{	/* FMS_PAGE_REJ */
+		.draw_cb = fmsbox_rej_draw_cb,
+		.key_cb = fmsbox_rej_key_cb
 	},
 	{	/* FMS_PAGE_VRFY */
 		.draw_cb = fmsbox_vrfy_draw_cb,

@@ -405,6 +405,7 @@ typedef struct {
 	unsigned		num_args;
 	cpdlc_arg_type_t	args[CPDLC_MAX_ARGS];
 	cpdlc_resp_type_t	resp;
+	unsigned		timeout;	/* seconds */
 	unsigned		num_resp_msgs;
 	int			resp_msg_types[CPDLC_MAX_RESP_MSGS];
 	int			resp_msg_subtypes[CPDLC_MAX_RESP_MSGS];
