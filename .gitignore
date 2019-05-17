@@ -6,3 +6,5 @@ cpdlcd/cpdlcd
 cpdlcd/cpdlcd_*.pem
 cpdlcd/test.conf
 test/cpdlc_cert.pem
+fmsgui/cpdlc_cert.pem
+fmsgui/fmsgui

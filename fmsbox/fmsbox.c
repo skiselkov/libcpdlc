@@ -455,6 +455,12 @@ fmsbox_push_key(fmsbox_t *box, fms_key_t key)
 	if (!box->page->key_cb(box, key)) {
 		if (key == FMS_KEY_CLR_DEL) {
 			del_key(box);
+		} else if (key == FMS_KEY_CLR_DEL_LONG) {
+			fmsbox_scratchpad_clear(box);
+		} else if (key == FMS_KEY_PLUS_MINUS) {
+			fmsbox_scratchpad_pm(box);
+		} else if (key == FMS_KEY_IDX) {
+			fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 		} else if (key == FMS_KEY_NEXT && box->num_subpages > 0) {
 			box->subpage = (box->subpage + 1) % box->num_subpages;
 		} else if (key == FMS_KEY_PREV && box->num_subpages > 0) {

@@ -62,6 +62,7 @@ typedef enum {
 	FMS_KEY_NEXT,
 	FMS_KEY_IDX,
 	FMS_KEY_CLR_DEL,
+	FMS_KEY_CLR_DEL_LONG,	/* Long press - clears the scratchpad */
 	FMS_KEY_TUN,
 	FMS_KEY_PLUS_MINUS,
 	FMS_NUM_KEYS

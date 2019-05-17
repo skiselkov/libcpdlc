@@ -23,37 +23,45 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_FMSBOX_SCRATCHPAD_H_
-#define	_LIBCPDLC_FMSBOX_SCRATCHPAD_H_
+#ifndef	_MTCR_MINI_H_
+#define	_MTCR_MINI_H_
 
-#include "fmsbox_parsing.h"
+#include <cairo.h>
+#include <cairo-ft.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+#include <acfutils/geom.h>
+#include <acfutils/glew.h>
+#include <acfutils/log.h>
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-void fmsbox_update_scratchpad(fmsbox_t *box);
+typedef bool_t (*mtcr_init_cb_t)(cairo_t *cr, void *userinfo);
+typedef void (*mtcr_fini_cb_t)(cairo_t *cr, void *userinfo);
+typedef void (*mtcr_render_cb_t)(cairo_t *cr, unsigned w, unsigned h,
+    void *userinfo);
+typedef struct mtcr_s mtcr_t;
 
-bool fmsbox_scratchpad_is_delete(fmsbox_t *box);
-void fmsbox_scratchpad_clear(fmsbox_t *box);
-void fmsbox_scratchpad_pm(fmsbox_t *box);
-void fmsbox_scratchpad_xfer(fmsbox_t *box, char *dest, size_t cap,
-    bool allow_mod);
-bool fmsbox_scratchpad_xfer_multi(fmsbox_t *box, void *userinfo, size_t buf_sz,
-    fmsbox_parse_func_t parse_func, fmsbox_insert_func_t insert_func,
-    fmsbox_delete_func_t delete_func, fmsbox_read_func_t read_func);
-void fmsbox_scratchpad_xfer_hdg(fmsbox_t *box, bool *hdg_set, unsigned *hdg,
-    bool *hdg_true);
-void fmsbox_scratchpad_xfer_alt(fmsbox_t *box, cpdlc_arg_t *alt);
-void fmsbox_scratchpad_xfer_pos(fmsbox_t *box, fms_pos_t *pos);
-void fmsbox_scratchpad_xfer_uint(fmsbox_t *box, unsigned *value, bool *set,
-    unsigned minval, unsigned maxval);
-void fmsbox_scratchpad_xfer_time(fmsbox_t *box, int *hrs_p, int *mins_p,
-    bool *set);
-void fmsbox_scratchpad_xfer_offset(fmsbox_t *box, cpdlc_dir_t *dir, double *nm);
+mtcr_t *mtcr_init(unsigned w, unsigned h, double fps, mtcr_init_cb_t init_cb,
+    mtcr_render_cb_t render_cb, mtcr_fini_cb_t fini_cb, void *userinfo);
+
+void mtcr_fini(mtcr_t *mtcr);
+void mtcr_set_fps(mtcr_t *mtcr, double fps);
+double mtcr_get_fps(mtcr_t *mtcr);
+void mtcr_once(mtcr_t *mtcr);
+void mtcr_once_wait(mtcr_t *mtcr);
+void mtcr_draw(mtcr_t *mtcr, vect2_t pos, vect2_t size, const GLfloat *pvm);
+unsigned mtcr_get_width(mtcr_t *mtcr);
+unsigned mtcr_get_height(mtcr_t *mtcr);
+
+void mtcr_rounded_rectangle(cairo_t *cr, double x, double y,
+    double w, double h, double radius);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_FMSBOX_SCRATCHPAD_H_ */
+#endif	/* _MTCR_MINI_H_ */

@@ -51,13 +51,37 @@ fmsbox_update_scratchpad(fmsbox_t *box)
 bool
 fmsbox_scratchpad_is_delete(fmsbox_t *box)
 {
+	ASSERT(box != NULL);
 	return (strcmp(box->scratchpad, "DELETE") == 0);
 }
 
 void
 fmsbox_scratchpad_clear(fmsbox_t *box)
 {
+	ASSERT(box != NULL);
 	memset(box->scratchpad, 0, sizeof (box->scratchpad));
+}
+
+void
+fmsbox_scratchpad_pm(fmsbox_t *box)
+{
+	int n;
+
+	ASSERT(box != NULL);
+
+	n = strlen(box->scratchpad);
+	if (n == 0) {
+		cpdlc_strlcpy(box->scratchpad, "+", sizeof (box->scratchpad));
+	} else {
+		if (box->scratchpad[n - 1] == '+') {
+			box->scratchpad[n - 1] = '-';
+		} else if (box->scratchpad[n - 1] == '-') {
+			box->scratchpad[n - 1] = '+';
+		} else if (n + 1 < (int)sizeof (box->scratchpad)) {
+			strncat(box->scratchpad, "+",
+			    sizeof (box->scratchpad) - 1);
+		}
+	}
 }
 
 void
