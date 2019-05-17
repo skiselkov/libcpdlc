@@ -52,8 +52,8 @@ verify_alt_req(fmsbox_t *box)
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM13_AT_time_REQ_CLB_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
-			    &box->alt_req.step_at.hrs,
-			    &box->alt_req.step_at.mins);
+			    &box->alt_req.step_at.tim.hrs,
+			    &box->alt_req.step_at.tim.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM11_AT_pos_REQ_CLB_TO_alt, 0);
@@ -71,7 +71,13 @@ verify_alt_req(fmsbox_t *box)
 			    &box->alt_req.alt[i].alt.alt);
 		}
 	} else {
-		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM6_REQ_alt, 0);
+		if (box->alt_req.crz_clb) {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM8_REQ_CRZ_CLB_TO_alt, 0);
+		} else {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM6_REQ_alt, 0);
+		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->alt_req.alt[0].alt.fl,
 		    &box->alt_req.alt[0].alt.alt);
 	}
@@ -85,7 +91,7 @@ verify_alt_req(fmsbox_t *box)
 	}
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "ALT REQ", FMS_PAGE_REQ_ALT);
+	fmsbox_verify_msg(box, msg, "ALT REQ", FMS_PAGE_REQ_ALT, true);
 }
 
 static void
@@ -109,6 +115,12 @@ draw_main_page(fmsbox_t *box)
 	fmsbox_req_draw_due(box, false);
 
 	fmsbox_put_step_at(box, &box->alt_req.step_at);
+
+	if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESHOLD) {
+		fmsbox_put_lsk_title(box, FMS_KEY_LSK_L4, "CRZ CLB");
+		fmsbox_put_altn_selector(box, LSK4_ROW, false,
+		    box->alt_req.crz_clb, "NO", "YES", NULL);
+	}
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R4, "PLT DISCRET");
 	fmsbox_put_altn_selector(box, LSK4_ROW, true,
@@ -155,10 +167,27 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 		if (box->alt_req.alt[1].alt.alt != 0) {
 			/* Block altitude requests cannot include a STEP AT */
 			box->alt_req.step_at.type = STEP_AT_NONE;
+			box->alt_req.crz_clb = false;
+		}
+		if (box->alt_req.alt[0].alt.alt < CRZ_CLB_THRESHOLD ||
+		    box->alt_req.alt[1].alt.alt != 0) {
+			/*
+			 * If the altitude is below the CRZ CLB threshold,
+			 * or a block altitude is entered, reset the CRZ CLB.
+			 */
+			box->alt_req.crz_clb = false;
 		}
 	} else if (box->subpage == 0 &&
 	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {
 		fmsbox_req_key_due(box, key);
+	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
+		if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESHOLD) {
+			box->alt_req.crz_clb = !box->alt_req.crz_clb;
+			/* cruise climbs cannot be block or STEP AT requests */
+			memset(&box->alt_req.alt[1], 0,
+			    sizeof (box->alt_req.alt[1]));
+			box->alt_req.step_at.type = STEP_AT_NONE;
+		}
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (can_verify_alt_req(box))
 			verify_alt_req(box);
@@ -169,12 +198,14 @@ fmsbox_req_alt_key_cb(fmsbox_t *box, fms_key_t key)
 		if (box->alt_req.step_at.type != STEP_AT_NONE) {
 			memset(&box->alt_req.alt[1], 0,
 			    sizeof (box->alt_req.alt[1]));
+			/* STEP AT requests cannot be CRZ CLB */
+			box->alt_req.crz_clb = false;
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		box->alt_req.plt_discret = !box->alt_req.plt_discret;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R5) {
 		box->alt_req.maint_sep_vmc = !box->alt_req.maint_sep_vmc;
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

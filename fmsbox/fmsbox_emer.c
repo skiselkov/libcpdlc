@@ -86,11 +86,14 @@ verify_emer(fmsbox_t *box)
 		    box->emer.offset.nm,
 		    box->emer.offset.dir == CPDLC_DIR_LEFT ? 'L' : 'R');
 	}
-	if (box->emer.fuel_set) {
-		APPEND_SNPRINTF(buf, l, " %d HRS", box->emer.fuel_hrs);
-		if (box->emer.fuel_mins != 0) {
+	if (box->emer.fuel.set) {
+		if (box->emer.fuel.hrs != 0) {
+			APPEND_SNPRINTF(buf, l, " %d HRS", box->emer.fuel.hrs);
+		}
+		/* Handles the 00:00 fuel figure */
+		if (box->emer.fuel.mins != 0 || box->emer.fuel.hrs == 0) {
 			APPEND_SNPRINTF(buf, l, " %d MINS",
-			    box->emer.fuel_mins);
+			    box->emer.fuel.mins);
 		}
 		APPEND_SNPRINTF(buf, l, " OF FUEL REMAINING.");
 	}
@@ -111,7 +114,7 @@ verify_emer(fmsbox_t *box)
 	box->req_common.distress = true;
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "EMER MSG", FMS_PAGE_EMER);
+	fmsbox_verify_msg(box, msg, "EMER MSG", FMS_PAGE_EMER, true);
 }
 
 static void
@@ -132,14 +135,7 @@ draw_main_page(fmsbox_t *box)
 	    "MAYDAY", "PAN", NULL);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L3, "FUEL");
-	if (box->emer.fuel_set) {
-		fmsbox_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%02d:%02d", box->emer.fuel_hrs,
-		    box->emer.fuel_mins);
-	} else {
-		fmsbox_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "--:--");
-	}
+	fmsbox_put_time(box, LSK3_ROW, 0, false, &box->emer.fuel, false, true);
 	fmsbox_put_str(box, LSK3_ROW, 6, false, FMS_COLOR_GREEN,
 	    FMS_FONT_SMALL, "HH:MM");
 
@@ -239,8 +235,7 @@ fmsbox_emer_key_cb(fmsbox_t *box, fms_key_t key)
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->emer.pan = !box->emer.pan;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
-		fmsbox_scratchpad_xfer_time(box, &box->emer.fuel_hrs,
-		    &box->emer.fuel_mins, &box->emer.fuel_set);
+		fmsbox_scratchpad_xfer_time(box, &box->emer.fuel);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
 		fmsbox_scratchpad_xfer_uint(box, &box->emer.souls,
 		    &box->emer.souls_set, 1, 999);
@@ -262,7 +257,7 @@ fmsbox_emer_key_cb(fmsbox_t *box, fms_key_t key)
 		    (EMER_REASON_LOW_FUEL + 1);
 	} else if (key == FMS_KEY_LSK_L5) {
 		verify_emer(box);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

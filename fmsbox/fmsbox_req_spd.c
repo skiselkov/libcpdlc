@@ -59,27 +59,18 @@ verify_spd_req(fmsbox_t *box)
 	}
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "SPD REQ", FMS_PAGE_REQ_SPD);
+	fmsbox_verify_msg(box, msg, "SPD REQ", FMS_PAGE_REQ_SPD, true);
 }
 
 static void
 draw_main_page(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "SPD/SPD BLOCK");
-	if (box->spd_req.spd[0].spd.spd != 0) {
-		fmsbox_put_spd(box, LSK1_ROW, 0, &box->spd_req.spd[0]);
-	} else {
-		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "___");
-	}
+	fmsbox_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0], true);
+
 	fmsbox_put_str(box, LSK1_ROW, 3, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
-	if (box->spd_req.spd[1].spd.spd != 0) {
-		fmsbox_put_spd(box, LSK1_ROW, 4, &box->spd_req.spd[1]);
-	} else {
-		fmsbox_put_str(box, LSK1_ROW, 4, false, FMS_COLOR_CYAN,
-		    FMS_FONT_SMALL, "---");
-	}
+	fmsbox_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1], false);
 
 	fmsbox_req_draw_due(box, false);
 }
@@ -125,7 +116,7 @@ fmsbox_req_spd_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_spd_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

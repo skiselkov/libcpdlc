@@ -52,6 +52,7 @@ FMSBOX_OBJS=\
 	$(FMSBOX)/fmsbox_logon_status.o \
 	$(FMSBOX)/fmsbox_parsing.o \
 	$(FMSBOX)/fmsbox_pos_pick.o \
+	$(FMSBOX)/fmsbox_pos_rep.o \
 	$(FMSBOX)/fmsbox_rej.o \
 	$(FMSBOX)/fmsbox_req.o \
 	$(FMSBOX)/fmsbox_req_alt.o \

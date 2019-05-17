@@ -76,7 +76,7 @@ verify_clx_req(fmsbox_t *box)
 	}
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "CLX REQ", FMS_PAGE_REQ_CLX);
+	fmsbox_verify_msg(box, msg, "CLX REQ", FMS_PAGE_REQ_CLX, true);
 }
 
 static void
@@ -167,7 +167,7 @@ fmsbox_req_clx_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_clx_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

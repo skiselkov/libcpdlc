@@ -109,7 +109,7 @@ fmsbox_pos_pick_key_cb(fmsbox_t *box, fms_key_t key)
 		    (FMS_POS_PBD + 1);
 		box->pos_pick.pos.set = false;
 	} else if (key == FMS_KEY_LSK_L2) {
-		fmsbox_scratchpad_xfer_pos(box, &box->pos_pick.pos);
+		fmsbox_scratchpad_xfer_pos_impl(box, &box->pos_pick.pos);
 	} else if (key == FMS_KEY_LSK_L6) {
 		ASSERT(box->pos_pick.done_cb != NULL);
 		if (box->pos_pick.pos.set || box->pos_pick.was_set)

@@ -23,8 +23,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_FMSBOX_REQ_H_
-#define	_LIBCPDLC_FMSBOX_REQ_H_
+#ifndef	_LIBCPDLC_FMSBOX_POS_REP_H_
+#define	_LIBCPDLC_FMSBOX_POS_REP_H_
 
 #include "fmsbox_impl.h"
 
@@ -32,25 +32,11 @@
 extern "C" {
 #endif
 
-void fmsbox_requests_draw_cb(fmsbox_t *box);
-bool fmsbox_requests_key_cb(fmsbox_t *box, fms_key_t key);
-
-void fmsbox_req_add_common(fmsbox_t *box, cpdlc_msg_t *msg);
-
-void fmsbox_req_draw_due(fmsbox_t *box, bool due_tfc);
-void fmsbox_req_key_due(fmsbox_t *box, fms_key_t key);
-
-#define	KEY_IS_REQ_FREETEXT(__box, __key, __tgt_subpage) \
-	((__box)->subpage == (__tgt_subpage) && (__key) >= FMS_KEY_LSK_L1 && \
-	    (__key) <= FMS_KEY_LSK_L4)
-#define	KEY_IS_REQ_STEP_AT(__box, __key) \
-	((__box)->subpage == 0 && \
-	    ((__key) == FMS_KEY_LSK_R1 || (__key) == FMS_KEY_LSK_R2))
-void fmsbox_req_draw_freetext(fmsbox_t *box);
-void fmsbox_req_key_freetext(fmsbox_t *box, fms_key_t key);
+void fmsbox_pos_rep_draw_cb(fmsbox_t *box);
+bool fmsbox_pos_rep_key_cb(fmsbox_t *box, fms_key_t key);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_FMSBOX_REQ_H_ */
+#endif	/* _LIBCPDLC_FMSBOX_POS_REP_H_ */

@@ -50,12 +50,19 @@ extern "C" {
 #define	MAX_FREETEXT_LINES	8
 #define	REQ_FREETEXT_LINES	4
 #define	REJ_FREETEXT_LINES	3
+#define	CRZ_CLB_THRESHOLD	32000	/* feet */
 
 typedef struct {
 	void	(*draw_cb)(fmsbox_t *box);
 	bool	(*key_cb)(fmsbox_t *box, fms_key_t key);
 	bool	has_return;
 } fms_page_t;
+
+typedef struct {
+	bool	set;
+	int	hrs;
+	int	mins;
+} fms_time_t;
 
 typedef enum {
 	STEP_AT_NONE,
@@ -67,9 +74,7 @@ typedef enum {
 typedef struct {
 	step_at_type_t	type;
 	char		pos[8];
-	bool		time_set;
-	int		hrs;
-	int		mins;
+	fms_time_t	tim;
 } fms_step_at_t;
 
 typedef enum {
@@ -89,6 +94,23 @@ typedef struct {
 	double		lat;
 	double		lon;
 } fms_pos_t;
+
+typedef struct {
+	bool		set;
+	unsigned	deg;
+	unsigned	spd;
+} fms_winds_t;
+
+typedef struct {
+	bool		set;
+	unsigned	hdg;
+	bool		tru;
+} fms_hdg_t;
+
+typedef struct {
+	bool		set;
+	int		temp;
+} fms_temp_t;
 
 typedef enum {
 	CLX_REQ_NONE,
@@ -122,7 +144,7 @@ typedef enum {
 typedef void (*pos_pick_done_cb_t)(fmsbox_t *box, const fms_pos_t *pos);
 
 struct fmsbox_s {
-	fmsbox_char_t		scr[FMSBOX_ROWS][FMSBOX_COLS];
+	fms_char_t		scr[FMSBOX_ROWS][FMSBOX_COLS];
 	fms_page_t		*page;
 	unsigned		subpage;
 	unsigned		num_subpages;
@@ -139,6 +161,7 @@ struct fmsbox_s {
 		char		freetext[MAX_FREETEXT_LINES][FMSBOX_COLS + 1];
 		struct {
 			cpdlc_arg_t	alt[2];
+			bool		crz_clb;
 			fms_step_at_t	step_at;
 			bool		plt_discret;
 			bool		maint_sep_vmc;
@@ -154,12 +177,8 @@ struct fmsbox_s {
 		struct {
 			fms_pos_t	dct;
 			fms_pos_t	wx_dev;
-			bool		hdg_set;
-			unsigned	hdg;
-			bool		hdg_true;
-			bool		trk_set;
-			unsigned	trk;
-			bool		trk_true;
+			fms_hdg_t	hdg;
+			fms_hdg_t	trk;
 		} rte_req;
 		struct {
 			clx_req_t	type;
@@ -178,6 +197,24 @@ struct fmsbox_s {
 			bool		freq_set;
 			double		freq;
 		} voice_req;
+		struct {
+			fms_pos_t	rpt_wpt;
+			fms_time_t	wpt_time;
+			cpdlc_arg_t	wpt_alt;
+			cpdlc_arg_t	spd;
+			fms_pos_t	nxt_fix;
+			fms_time_t	nxt_fix_time;
+			fms_pos_t	nxt_fix1;
+			fms_temp_t	temp;
+			fms_winds_t	winds_aloft;
+			fms_pos_t	curr_pos;
+			fms_time_t	pos_time;
+			cpdlc_arg_t	alt;
+			fms_time_t	time_at_dest;
+			cpdlc_arg_t	clb_des;
+			cpdlc_dir_t	off_dir;
+			double		off_nm;
+		} pos_rep;
 	};
 	struct {
 		bool	due_wx;
@@ -206,9 +243,7 @@ struct fmsbox_s {
 	} pos_pick;
 	struct {
 		bool			pan;
-		bool			fuel_set;
-		int			fuel_hrs;
-		int			fuel_mins;
+		fms_time_t		fuel;
 		bool			souls_set;
 		unsigned		souls;
 		cpdlc_arg_t		des;
@@ -243,6 +278,7 @@ enum {
 	FMS_PAGE_VRFY,
 	FMS_PAGE_EMER,
 	FMS_PAGE_POS_PICK,
+	FMS_PAGE_POS_REP,
 	FMS_NUM_PAGES
 };
 
@@ -254,7 +290,7 @@ void fmsbox_set_error(fmsbox_t *box, const char *error);
 void fmsbox_put_page_ind(fmsbox_t *box, fms_color_t color);
 void fmsbox_put_atc_status(fmsbox_t *box);
 
-void fmsbox_put_str(fmsbox_t *box, unsigned row, unsigned col,
+int fmsbox_put_str(fmsbox_t *box, unsigned row, unsigned col,
     bool align_right, fms_color_t color, fms_font_t size,
     PRINTF_FORMAT(const char *fmt), ...) PRINTF_ATTR(7);
 void fmsbox_put_page_title(fmsbox_t *box,
@@ -268,9 +304,16 @@ void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
     const cpdlc_arg_t *alt);
-void fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt);
+void fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
+    const cpdlc_arg_t *spd, bool req);
 void fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
-    unsigned hdg, bool hdg_true);
+    const fms_hdg_t *hdg, bool req);
+void fmsbox_put_time(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_time_t *t, bool req, bool colon);
+void fmsbox_put_temp(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_temp_t *temp, bool req);
+void fmsbox_put_pos(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_pos_t *pos);
 
 const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,

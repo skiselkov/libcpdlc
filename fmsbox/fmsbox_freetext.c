@@ -58,7 +58,7 @@ verify_freetext_msg(fmsbox_t *box)
 	cpdlc_msg_add_seg(msg, true, CPDLC_DM67_FREETEXT_NORMAL_text, 0);
 	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
 
-	fmsbox_verify_msg(box, msg, "FREE TEXT", FMS_PAGE_FREETEXT);
+	fmsbox_verify_msg(box, msg, "FREE TEXT", FMS_PAGE_FREETEXT, true);
 }
 
 void

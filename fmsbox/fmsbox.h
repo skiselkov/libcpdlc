@@ -86,13 +86,13 @@ typedef struct {
 	char		c;
 	fms_color_t	color;
 	fms_font_t	size;
-} fmsbox_char_t;
+} fms_char_t;
 
 fmsbox_t *fmsbox_alloc(const char *hostname, unsigned port,
     const char *ca_file);
 void fmsbox_free(fmsbox_t *box);
 
-const fmsbox_char_t *fmsbox_get_screen_row(const fmsbox_t *box, unsigned row);
+const fms_char_t *fmsbox_get_screen_row(const fmsbox_t *box, unsigned row);
 
 void fmsbox_push_key(fmsbox_t *box, fms_key_t key);
 void fmsbox_push_char(fmsbox_t *box, char c);

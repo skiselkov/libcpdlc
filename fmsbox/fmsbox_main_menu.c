@@ -70,6 +70,8 @@ fmsbox_main_menu_key_cb(fmsbox_t *box, fms_key_t key)
 		fmsbox_set_page(box, FMS_PAGE_LOGON_STATUS);
 	} else if (key == FMS_KEY_LSK_L2 && st == CPDLC_LOGON_COMPLETE) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
+	} else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE) {
+		fmsbox_set_page(box, FMS_PAGE_POS_REP);
 	} else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE) {
 		fmsbox_set_page(box, FMS_PAGE_MSG_LOG);
 	} else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE) {

@@ -38,7 +38,7 @@ verify_vmc_req(fmsbox_t *box)
 	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM67_FREETEXT_NORMAL_text, 0);
 	cpdlc_msg_seg_set_arg(msg, seg, 0, "REQUEST VMC DESCENT", NULL);
 	fmsbox_req_add_common(box, msg);
-	fmsbox_verify_msg(box, msg, "VMC REQ", FMS_PAGE_REQ_VMC);
+	fmsbox_verify_msg(box, msg, "VMC REQ", FMS_PAGE_REQ_VMC, true);
 }
 
 static void
@@ -80,7 +80,7 @@ fmsbox_req_vmc_key_cb(fmsbox_t *box, fms_key_t key)
 		verify_vmc_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

@@ -45,6 +45,7 @@
 #include "fmsbox_msg.h"
 #include "fmsbox_parsing.h"
 #include "fmsbox_pos_pick.h"
+#include "fmsbox_pos_rep.h"
 #include "fmsbox_req.h"
 #include "fmsbox_req_alt.h"
 #include "fmsbox_req_clx.h"
@@ -146,6 +147,10 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 	{	/* FMS_PAGE_POS_PICK */
 		.draw_cb = fmsbox_pos_pick_draw_cb,
 		.key_cb = fmsbox_pos_pick_key_cb
+	},
+	{	/* FMS_PAGE_POS_REP */
+		.draw_cb = fmsbox_pos_rep_draw_cb,
+		.key_cb = fmsbox_pos_rep_key_cb
 	}
 };
 
@@ -197,7 +202,7 @@ fmsbox_set_error(fmsbox_t *box, const char *error)
 		memset(box->error_msg, 0, sizeof (box->error_msg));
 }
 
-static void
+static int
 put_str_v(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
     fms_color_t color, fms_font_t size, const char *fmt, va_list ap)
 {
@@ -218,7 +223,7 @@ put_str_v(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
 	if (align_right)
 		col = MAX(FMSBOX_COLS - (int)col - l, 0);
 
-	for (int i = 0, n = strlen(text); i < n; i++) {
+	for (int i = 0; i < l; i++) {
 		if (col + i >= FMSBOX_COLS)
 			break;
 		box->scr[row][col + i].c = text[i];
@@ -228,16 +233,27 @@ put_str_v(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
 
 	free(text);
 	va_end(ap2);
+
+	return (l);
 }
 
-void
+int
 fmsbox_put_str(fmsbox_t *box, unsigned row, unsigned col, bool align_right,
     fms_color_t color, fms_font_t size, const char *fmt, ...)
 {
+	int l;
 	va_list ap;
+
+	ASSERT(box != NULL);
+	ASSERT3U(color, <=, FMS_COLOR_MAGENTA);
+	ASSERT3U(size, <=, FMS_FONT_LARGE);
+	ASSERT(fmt != NULL);
+
 	va_start(ap, fmt);
-	put_str_v(box, row, col, align_right, color, size, fmt, ap);
+	l = put_str_v(box, row, col, align_right, color, size, fmt, ap);
 	va_end(ap);
+
+	return (l);
 }
 
 void
@@ -331,6 +347,7 @@ fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
 	char buf[8];
 
 	ASSERT(box != NULL);
+	ASSERT(alt != NULL);
 
 	fmsbox_print_alt(alt, buf, sizeof (buf));
 	fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
@@ -338,25 +355,95 @@ fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
 }
 
 void
-fmsbox_put_spd(fmsbox_t *box, int row, int col, const cpdlc_arg_t *alt)
+fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
+    const cpdlc_arg_t *spd, bool req)
 {
 	char buf[8];
 
 	ASSERT(box != NULL);
+	ASSERT(spd != NULL);
 
-	fmsbox_print_spd(alt, buf, sizeof (buf));
-	fmsbox_put_str(box, row, col, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
-	    "%s", buf);
+	if (spd->spd.spd != 0) {
+		fmsbox_print_spd(spd, buf, sizeof (buf));
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%s", buf);
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, req ? "___" : "---");
+	}
 }
 
 void
-fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right, unsigned hdg,
-    bool hdg_true)
+fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_hdg_t *hdg, bool req)
 {
-	fmsbox_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
-	    FMS_FONT_LARGE, "%03d", hdg);
-	fmsbox_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
-	    FMS_FONT_SMALL, "`%c", hdg_true ? 'T' : 'M');
+	ASSERT(box != NULL);
+	ASSERT(hdg != NULL);
+	if (hdg->set) {
+		fmsbox_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%03d", hdg->hdg);
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "`%c", hdg->tru ? 'T' : 'M');
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, req ? "___" : "---");
+	}
+}
+
+void
+fmsbox_put_time(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_time_t *t, bool req, bool colon)
+{
+	ASSERT(box != NULL);
+	if (t->set) {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%02d%s%02d", t->hrs, colon ? " " : "",
+		    t->mins);
+		if (colon) {
+			fmsbox_put_str(box, row, col + 2, align_right,
+			    FMS_COLOR_CYAN, FMS_FONT_LARGE, ":");
+		}
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, "%s%s%s", req ? "__" : "--",
+		    colon ? ":" : "", req ? "__" : "--");
+	}
+}
+
+void
+fmsbox_put_temp(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_temp_t *temp, bool req)
+{
+	ASSERT(box != NULL);
+	ASSERT(temp != NULL);
+	if (temp->set) {
+		fmsbox_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%+d", temp->temp);
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "`C");
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, req ? "___" : "---");
+	}
+}
+
+void
+fmsbox_put_pos(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_pos_t *pos)
+{
+	ASSERT(box != NULL);
+	ASSERT(pos != NULL);
+	if (pos->set) {
+		char buf[16];
+		fmsbox_print_pos(pos, buf, sizeof (buf), POS_PRINT_PRETTY);
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%s", buf);
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "<POS");
+		fmsbox_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "---------");
+	}
 }
 
 static void
@@ -414,7 +501,7 @@ fmsbox_free(fmsbox_t *box)
 	free(box);
 }
 
-const fmsbox_char_t *
+const fms_char_t *
 fmsbox_get_screen_row(const fmsbox_t *box, unsigned row)
 {
 	ASSERT(box != NULL);
@@ -429,7 +516,10 @@ del_key(fmsbox_t *box)
 
 	ASSERT(box != NULL);
 
-	memset(box->error_msg, 0, sizeof (box->error_msg));
+	if (box->error_msg[0] != '\0') {
+		memset(box->error_msg, 0, sizeof (box->error_msg));
+		return;
+	}
 	l = strlen(box->scratchpad);
 	if (l == 0) {
 		cpdlc_strlcpy(box->scratchpad, "DELETE",
@@ -745,14 +835,8 @@ fmsbox_put_step_at(fmsbox_t *box, const fms_step_at_t *step_at)
 		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "TIMEv");
 		fmsbox_put_lsk_title(box, FMS_KEY_LSK_R2, "TIME");
-		if (step_at->time_set) {
-			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
-			    FMS_FONT_LARGE, "%02d:%02d",
-			    step_at->hrs, step_at->mins);
-		} else {
-			fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
-			    FMS_FONT_LARGE, "__:__");
-		}
+		fmsbox_put_time(box, LSK2_ROW, 0, true, &step_at->tim,
+		    true, true);
 		break;
 	case STEP_AT_POS:
 		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
@@ -783,8 +867,7 @@ fmsbox_key_step_at(fmsbox_t *box, fms_key_t key, fms_step_at_t *step_at)
 		ASSERT3U(key, ==, FMS_KEY_LSK_R2);
 
 		if (step_at->type == STEP_AT_TIME) {
-			fmsbox_scratchpad_xfer_time(box, &step_at->hrs,
-			    &step_at->mins, &step_at->time_set);
+			fmsbox_scratchpad_xfer_time(box, &step_at->tim);
 		} else {
 			fmsbox_scratchpad_xfer(box, step_at->pos,
 			    sizeof (step_at->pos), true);
@@ -797,6 +880,6 @@ fmsbox_step_at_can_send(const fms_step_at_t *step_at)
 {
 	ASSERT(step_at != NULL);
 	return (step_at->type == STEP_AT_NONE ||
-	    (step_at->type == STEP_AT_TIME && step_at->time_set) ||
+	    (step_at->type == STEP_AT_TIME && step_at->tim.set) ||
 	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
 }

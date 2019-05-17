@@ -217,7 +217,7 @@ draw_screen(void)
 
 	attron(COLOR_PAIR(color));
 	for (unsigned row_i = 0; row_i < FMSBOX_ROWS; row_i++) {
-		const fmsbox_char_t *row = fmsbox_get_screen_row(fmsbox, row_i);
+		const fms_char_t *row = fmsbox_get_screen_row(fmsbox, row_i);
 
 		move(row_i + OFF_Y, OFF_X);
 		for (unsigned col_i = 0; col_i < FMSBOX_COLS; col_i++) {

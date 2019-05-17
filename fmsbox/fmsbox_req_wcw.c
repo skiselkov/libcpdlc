@@ -87,7 +87,7 @@ verify_wcw_req(fmsbox_t *box)
 
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "WHEN", FMS_PAGE_REQ_WCW);
+	fmsbox_verify_msg(box, msg, "WHEN", FMS_PAGE_REQ_WCW, true);
 }
 
 static void
@@ -101,7 +101,7 @@ draw_main_page(fmsbox_t *box)
 		    FMS_FONT_LARGE, "-----");
 	}
 
-	if (box->wcw_req.alt.alt.alt >= 32000) {
+	if (box->wcw_req.alt.alt.alt >= CRZ_CLB_THRESHOLD) {
 		fmsbox_put_lsk_title(box, FMS_KEY_LSK_L2, "CRZ CLB");
 		fmsbox_put_altn_selector(box, LSK2_ROW, false,
 		    box->wcw_req.crz_clb, "NO", "YES", NULL);
@@ -114,22 +114,12 @@ draw_main_page(fmsbox_t *box)
 	    "NONE", "HIGHER", "LOWER", NULL);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R1, "SPD/SPD BLOCK");
-	if (box->wcw_req.spd[0].spd.spd != 0) {
-		fmsbox_put_spd(box, LSK1_ROW, FMSBOX_COLS - 7,
-		    &box->wcw_req.spd[0]);
-	} else {
-		fmsbox_put_str(box, LSK1_ROW, 4, true, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "---");
-	}
+	fmsbox_put_spd(box, LSK1_ROW, 4, true,
+	    &box->wcw_req.spd[0], false);
 	fmsbox_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_CYAN,
 	    FMS_FONT_LARGE, "/");
-	if (box->wcw_req.spd[1].spd.spd != 0) {
-		fmsbox_put_spd(box, LSK1_ROW, FMSBOX_COLS - 3,
-		    &box->wcw_req.spd[1]);
-	} else {
-		fmsbox_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "---");
-	}
+	fmsbox_put_spd(box, LSK1_ROW, 0, true,
+	    &box->wcw_req.spd[1], false);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
 	fmsbox_put_altn_selector(box, LSK2_ROW, true,
@@ -209,7 +199,7 @@ fmsbox_req_wcw_key_cb(fmsbox_t *box, fms_key_t key)
 			verify_wcw_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

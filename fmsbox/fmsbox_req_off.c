@@ -56,8 +56,8 @@ verify_off_req(fmsbox_t *box)
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
-			    &box->off_req.step_at.hrs,
-			    &box->off_req.step_at.mins);
+			    &box->off_req.step_at.tim.hrs,
+			    &box->off_req.step_at.tim.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
@@ -74,7 +74,7 @@ verify_off_req(fmsbox_t *box)
 	}
 	fmsbox_req_add_common(box, msg);
 
-	fmsbox_verify_msg(box, msg, "OFF REQ", FMS_PAGE_REQ_OFF);
+	fmsbox_verify_msg(box, msg, "OFF REQ", FMS_PAGE_REQ_OFF, true);
 }
 
 static void
@@ -138,7 +138,7 @@ fmsbox_req_off_key_cb(fmsbox_t *box, fms_key_t key)
 		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
 	} else if (KEY_IS_REQ_STEP_AT(box, key)) {
 		fmsbox_key_step_at(box, key, &box->off_req.step_at);
-	} else if (KEY_IS_REQ_FREETEXT(box, key)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

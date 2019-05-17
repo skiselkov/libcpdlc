@@ -240,7 +240,7 @@ char2fontcell(char c, int *font_x, int *font_y)
 }
 
 static void
-put_fms_char(const fmsbox_char_t *c, int scr_x, int scr_y)
+put_fms_char(const fms_char_t *c, int scr_x, int scr_y)
 {
 	cairo_surface_t *font_surf = font_bitmaps[c->size][c->color];
 	unsigned char *src = cairo_image_surface_get_data(font_surf);
@@ -276,7 +276,7 @@ render_cb(cairo_t *cr, unsigned w, unsigned h, void *userinfo)
 	cairo_paint(cr);
 
 	for (unsigned row_i = 0; row_i < FMSBOX_ROWS; row_i++) {
-		const fmsbox_char_t *row = fmsbox_get_screen_row(box, row_i);
+		const fms_char_t *row = fmsbox_get_screen_row(box, row_i);
 
 		for (unsigned col_i = 0; col_i < FMSBOX_COLS; col_i++)
 			put_fms_char(&row[col_i], col_i, row_i);
