@@ -92,8 +92,8 @@ static cairo_surface_t *font_bitmaps[FMS_FONT_LARGE + 1][FMS_COLOR_MAGENTA + 1];
 
 #define	TEXT_AREA_X	123	/* pixels */
 #define	TEXT_AREA_Y	75	/* pixels */
-#define	TEXT_CHAR_W	15	/* pixels */
-#define	TEXT_CHAR_H	22	/* pixels */
+#define	TEXT_CHAR_W	16	/* pixels */
+#define	TEXT_CHAR_H	24	/* pixels */
 
 #define	_(func)	((void (*)(fmsbox_t *, int))(func))
 static clickspot_t	clickspots[] = {
@@ -283,7 +283,7 @@ render_cb(cairo_t *cr, unsigned w, unsigned h, void *userinfo)
 	}
 
 	cairo_translate(cr, TEXT_AREA_X, TEXT_AREA_Y);
-	cairo_scale(cr, 1.465, 1.2);
+	cairo_scale(cr, 1.37, 1.1);
 	cairo_set_source_surface(cr, screen, 0, 0);
 	cairo_paint(cr);
 	cairo_identity_matrix(cr);
