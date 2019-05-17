@@ -165,8 +165,8 @@ logon_worker(void *userinfo)
 
 	while (cl->logon_status != CPDLC_LOGON_NONE && !cl->logon_failure) {
 		bool new_msgs = false;
-		cpdlc_msg_token_t *out_tokens;
-		unsigned num_out_tokens;
+		cpdlc_msg_token_t *out_tokens = NULL;
+		unsigned num_out_tokens = 0;
 
 		switch (cl->logon_status) {
 		case CPDLC_LOGON_CONNECTING_LINK:
