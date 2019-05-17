@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 void fmsbox_verify_msg(fmsbox_t *box, cpdlc_msg_t *msg, const char *title,
-    unsigned ret_page);
+    unsigned ret_page, bool is_req);
 void fmsbox_vrfy_draw_cb(fmsbox_t *box);
 bool fmsbox_vrfy_key_cb(fmsbox_t *box, fms_key_t key);
 

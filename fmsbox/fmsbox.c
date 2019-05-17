@@ -579,13 +579,13 @@ fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty)
 	case CPDLC_MSG_THR_CLOSED:
 		return ("CLOSED");
 	case CPDLC_MSG_THR_ACCEPTED:
-		return ("ACCEPTED");
+		return ("ACPT");
 	case CPDLC_MSG_THR_REJECTED:
-		return ("REJECTED");
+		return ("REJ");
 	case CPDLC_MSG_THR_TIMEDOUT:
 		return ("TIMEDOUT");
 	case CPDLC_MSG_THR_STANDBY:
-		return ("STANDBY");
+		return ("STBY");
 	case CPDLC_MSG_THR_FAILED:
 		return ("FAILED");
 	case CPDLC_MSG_THR_PENDING:
@@ -684,6 +684,13 @@ fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p)
 	}
 }
 
+static bool
+is_short_response(const cpdlc_msg_t *msg)
+{
+	int msg_type = msg->segs[0].info->msg_type;
+	return (msg_type >= CPDLC_DM0_WILCO && msg_type <= CPDLC_DM5_NEGATIVE);
+}
+
 void
 fmsbox_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
     char ***lines_p, unsigned *n_lines_p)
@@ -696,14 +703,21 @@ fmsbox_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	for (unsigned i = 0, n = cpdlc_msglist_get_thr_msg_count(msglist,
 	    thr_id); i < n; i++) {
 		const cpdlc_msg_t *msg;
+		bool sent;
 
 		cpdlc_msglist_get_thr_msg(msglist, thr_id, i, &msg, NULL,
-		    NULL, NULL, NULL);
-		fmsbox_msg2lines(msg, lines_p, n_lines_p);
-		if (i + 1 < n) {
+		    NULL, NULL, &sent);
+		/*
+		 * Skip the "WILCO" or "STANDBY" messages we sent. Those will
+		 * show up as message status at the bottom of the page.
+		 */
+		if (sent && is_short_response(msg))
+			continue;
+		if (i > 0) {
 			ADD_LINE(*lines_p, *n_lines_p,
 			    "------------------------", 24);
 		}
+		fmsbox_msg2lines(msg, lines_p, n_lines_p);
 	}
 }
 

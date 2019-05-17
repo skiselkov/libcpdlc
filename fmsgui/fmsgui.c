@@ -46,7 +46,7 @@
 #include "../fmsbox/fmsbox.h"
 #include "mtcr_mini.h"
 
-#define	EVENT_POLL_TIMEOUT	1	/* seconds */
+#define	EVENT_POLL_TIMEOUT	0.1	/* seconds */
 
 typedef struct {
 	double	x, y, w, h;
@@ -55,7 +55,7 @@ typedef struct {
 } clickspot_t;
 
 static GLFWwindow*		window = NULL;
-static time_t			dirty = 0;
+static uint64_t			dirty = 0;
 static mtcr_t			*mtcr = NULL;
 
 static fmsbox_t			*box = NULL;
@@ -535,17 +535,17 @@ main(void)
 	mtcr = mtcr_init(bgimg_w, bgimg_h, 0, NULL, render_cb, NULL, NULL);
 
 	while (!glfwWindowShouldClose(window)) {
-		time_t now = time(NULL);
+		uint64_t now = microclock();
 
 		if (clr_press_microtime != 0 &&
-		    microclock() - clr_press_microtime >= 1000000) {
+		    now - clr_press_microtime >= SEC2USEC(1)) {
 			fmsbox_push_key(box, FMS_KEY_CLR_DEL_LONG);
 			clr_press_microtime = 0;
 			cur_clickspot = -1;
 			dirty = 0;
 		}
 
-		if (now - dirty > 0) {
+		if (now - dirty > SEC2USEC(1)) {
 			mat4 pvm;
 			int win_w, win_h;
 			int opt_win_w;

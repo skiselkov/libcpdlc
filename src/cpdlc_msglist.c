@@ -333,6 +333,13 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 		return (NULL);
 	for (msg_thr_t *thr = list_tail(&msglist->thr); thr != NULL;
 	    thr = list_prev(&msglist->thr, thr)) {
+		/*
+		 * Skip manually closed threads. This allows the FMS
+		 * to force the message list to receive all uplink
+		 * messages into new threads.
+		 */
+		if (thr->status == CPDLC_MSG_THR_CLOSED)
+			continue;
 		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
 		    bucket != NULL; bucket = list_prev(&thr->buckets, bucket)) {
 			ASSERT(bucket->msg != NULL);
@@ -642,6 +649,21 @@ cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	mutex_exit(&msglist->lock);
 
 	return (result);
+}
+
+void
+cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
+{
+	msg_thr_t *thr;
+
+	ASSERT(msglist != NULL);
+	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	thr = find_msg_thr(msglist, thr_id);
+	if (!thr_status_is_final(thr->status))
+		thr->status = CPDLC_MSG_THR_CLOSED;
+	mutex_exit(&msglist->lock);
 }
 
 void

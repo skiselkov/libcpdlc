@@ -37,21 +37,28 @@ draw_thr_hdr(fmsbox_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
 	cpdlc_msg_thr_status_t st;
 	unsigned hours, mins;
 	bool sent, dirty;
-	const char *atsu;
+	const char *atsu = NULL;
+
+	/* Grab the last received message to figure out who it came from */
+	for (int n = cpdlc_msglist_get_thr_msg_count(box->msglist, thr_id),
+	    i = n - 1;
+	    i >= 0; i--) {
+		cpdlc_msglist_get_thr_msg(box->msglist, thr_id, i, &msg, NULL,
+		    NULL, NULL, &sent);
+		if (!sent) {
+			atsu = cpdlc_msg_get_from(msg);
+			break;
+		}
+	}
 
 	cpdlc_msglist_get_thr_msg(box->msglist, thr_id, 0, &msg, NULL,
 	    &hours, &mins, &sent);
 	st = cpdlc_msglist_get_thr_status(box->msglist, thr_id, &dirty);
 
-	if (sent)
-		atsu = cpdlc_msg_get_to(msg);
-	else
-		atsu = cpdlc_msg_get_from(msg);
-
 	/* Message uplink/downlink, time and sender */
 	fmsbox_put_str(box, row, 0, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
-	    "%s %02d:%02d%s%s", sent ? "v" : "^", hours, mins, sent ? "" : "-",
-	    sent ? "" : atsu);
+	    "%s %02d:%02d%s%s", sent ? "v" : "^", hours, mins,
+	    atsu != NULL ? "-" : "", atsu != NULL ? atsu : "");
 	/* Thread status */
 	fmsbox_put_str(box, row, 0, true, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 	    "%s", fmsbox_thr_status2str(st, dirty));
@@ -242,52 +249,62 @@ draw_response_section(fmsbox_t *box)
 	ASSERT(box != NULL);
 
 	fmsbox_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
-	    FMS_COLOR_WHITE, FMS_FONT_SMALL, "--------RESPONSE--------");
+	    FMS_COLOR_CYAN, FMS_FONT_SMALL, "--------RESPONSE--------");
 
-	if (msg_can_roger(box) || msg_can_wilco(box) || msg_can_affirm(box)) {
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_CYAN,
-		    "*ACPT");
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
-		    "REJ>");
-	}
-	if (msg_can_standby(box)) {
-		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "*STBY");
+	switch (cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL)) {
+	case CPDLC_MSG_THR_OPEN:
+	case CPDLC_MSG_THR_STANDBY:
+		if (msg_can_roger(box) || msg_can_wilco(box) ||
+		    msg_can_affirm(box)) {
+			fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4,
+			    FMS_COLOR_CYAN, "*ACPT");
+			fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5,
+			    FMS_COLOR_CYAN, "REJ>");
+		}
+		if (msg_can_standby(box)) {
+			fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5,
+			    FMS_COLOR_CYAN, "*STBY");
+		}
+		break;
+	case CPDLC_MSG_THR_ACCEPTED:
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4,
+		    FMS_COLOR_WHITE, "ACPT");
+		break;
+	case CPDLC_MSG_THR_REJECTED:
+		fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4,
+		    FMS_COLOR_WHITE, "REJ");
+		break;
+	default:
+		break;
 	}
 }
 
 void
 fmsbox_msg_thr_draw_cb(fmsbox_t *box)
 {
+	enum { MAX_LINES = 5 };
 	char **lines = NULL;
 	unsigned n_lines = 0;
-	unsigned max_lines;
-	bool thr_is_done;
 
 	ASSERT(box != NULL);
 	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 
-	thr_is_done = cpdlc_msglist_thr_is_done(box->msglist, box->thr_id);
-	max_lines = (thr_is_done ? 9 : 5);
 	cpdlc_msglist_thr_mark_seen(box->msglist, box->thr_id);
 
 	fmsbox_thr2lines(box->msglist, box->thr_id, &lines, &n_lines);
-	fmsbox_set_num_subpages(box, ceil(n_lines / (double)max_lines));
+	fmsbox_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
 	fmsbox_put_page_title(box, "CPDLC MESSAGE");
 	fmsbox_put_page_ind(box, FMS_COLOR_WHITE);
 	draw_thr_hdr(box, 1, box->thr_id);
-	for (unsigned i = 0; i < max_lines; i++) {
-		unsigned line = i + box->subpage * max_lines;
+	for (unsigned i = 0; i < MAX_LINES; i++) {
+		unsigned line = i + box->subpage * MAX_LINES;
 		if (line >= n_lines)
 			break;
 		fmsbox_put_str(box, 2 + i, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", lines[line]);
 	}
-
-	if (!thr_is_done) {
-		draw_response_section(box);
-	}
+	draw_response_section(box);
 
 	fmsbox_free_lines(lines, n_lines);
 }

@@ -190,6 +190,7 @@ struct fmsbox_s {
 		cpdlc_msg_t	*msg;
 		char		title[8];
 		unsigned	ret_page;
+		bool		is_req;
 	} verify;
 	struct {
 		bool		unable_or_neg;

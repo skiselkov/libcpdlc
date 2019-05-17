@@ -32,7 +32,7 @@
 
 void
 fmsbox_verify_msg(fmsbox_t *box, cpdlc_msg_t *msg, const char *title,
-    unsigned ret_page)
+    unsigned ret_page, bool is_req)
 {
 	ASSERT(box != NULL);
 	ASSERT(msg != NULL);
@@ -45,6 +45,7 @@ fmsbox_verify_msg(fmsbox_t *box, cpdlc_msg_t *msg, const char *title,
 	if (box->verify.msg != NULL)
 		cpdlc_msg_free(box->verify.msg);
 	box->verify.msg = msg;
+	box->verify.is_req = is_req;
 	fmsbox_set_page(box, FMS_PAGE_VRFY);
 }
 
@@ -86,10 +87,20 @@ fmsbox_vrfy_key_cb(fmsbox_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_R5) {
+		cpdlc_msg_thr_id_t thr_id;
+
 		ASSERT(box->verify.msg != NULL);
-		cpdlc_msglist_send(box->msglist, box->verify.msg,
+		thr_id = cpdlc_msglist_send(box->msglist, box->verify.msg,
 		    CPDLC_NO_MSG_THR_ID);
+		/* Message is consumed by msglist */
 		box->verify.msg = NULL;
+		if (box->verify.is_req) {
+			/*
+			 * On Collins FMS units, requests are self-closing.
+			 * An uplinked response will show in a new thread.
+			 */
+			cpdlc_msglist_thr_close(box->msglist, thr_id);
+		}
 		fmsbox_set_page(box, FMS_PAGE_MAIN_MENU);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fmsbox_set_page(box, box->verify.ret_page);

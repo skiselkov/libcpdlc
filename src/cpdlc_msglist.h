@@ -68,6 +68,8 @@ CPDLC_API void cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
     bool ignore_closed, cpdlc_msg_thr_id_t *thr_ids, unsigned *cap);
 CPDLC_API bool cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 
