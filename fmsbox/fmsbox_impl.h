@@ -52,6 +52,13 @@ extern "C" {
 #define	REJ_FREETEXT_LINES	3
 #define	CRZ_CLB_THRESHOLD	32000	/* feet */
 
+#define	APPEND_SNPRINTF(__buf, __len, ...) \
+	do { \
+		(__len) += snprintf(&(__buf)[(__len)], \
+		    sizeof (__buf) >= (__len) ? sizeof (__buf) - (__len) : 0, \
+		    __VA_ARGS__); \
+	} while (0)
+
 typedef struct {
 	void	(*draw_cb)(fmsbox_t *box);
 	bool	(*key_cb)(fmsbox_t *box, fms_key_t key);
@@ -99,7 +106,7 @@ typedef struct {
 	bool		set;
 	unsigned	deg;
 	unsigned	spd;
-} fms_winds_t;
+} fms_wind_t;
 
 typedef struct {
 	bool		set;
@@ -210,7 +217,7 @@ struct fmsbox_s {
 			fms_time_t	nxt_fix_time;
 			fms_pos_t	nxt_fix1;
 			fms_temp_t	temp;
-			fms_winds_t	winds_aloft;
+			fms_wind_t	winds_aloft;
 			fms_pos_t	cur_pos;
 			fms_time_t	pos_time;
 			cpdlc_arg_t	alt;
@@ -302,6 +309,7 @@ void fmsbox_put_lsk_title(fmsbox_t *box, int lsk_key_id,
 
 void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
+
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
     const cpdlc_arg_t *alt, bool req, bool units);
 void fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
@@ -316,6 +324,8 @@ void fmsbox_put_pos(fmsbox_t *box, int row, int col, bool align_right,
     const fms_pos_t *pos, bool req);
 void fmsbox_put_off(fmsbox_t *box, int row, int col, bool align_right,
     const fms_off_t *off, bool req);
+void fmsbox_put_wind(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_wind_t *wind, bool req);
 
 const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,

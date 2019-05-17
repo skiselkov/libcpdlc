@@ -53,6 +53,7 @@ void fmsbox_scratchpad_xfer_time(fmsbox_t *box, fms_time_t *t);
 void fmsbox_scratchpad_xfer_offset(fmsbox_t *box, fms_off_t *off);
 void fmsbox_scratchpad_xfer_spd(fmsbox_t *box, cpdlc_arg_t *spd);
 void fmsbox_scratchpad_xfer_temp(fmsbox_t *box, fms_temp_t *temp);
+void fmsbox_scratchpad_xfer_wind(fmsbox_t *box, fms_wind_t *wind);
 
 #ifdef	__cplusplus
 }

@@ -33,6 +33,19 @@
 #include "fmsbox_scratchpad.h"
 #include "fmsbox_vrfy.h"
 
+/*
+static void
+verify_pos_rep(fmsbox_t *box)
+{
+	int l = 0;
+	char buf[1024];
+
+	ASSERT(box != NULL);
+
+	APPEND_SNPRINTF(buf, l, "POSITION REPORT");
+}
+*/
+
 static void
 set_rpt_wpt(fmsbox_t *box, const fms_pos_t *pos)
 {
@@ -113,6 +126,10 @@ static void
 draw_page2(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "WINDS ALOFT");
+	fmsbox_put_wind(box, LSK1_ROW, 0, false, &box->pos_rep.winds_aloft,
+	    false);
+	fmsbox_put_str(box, LSK1_ROW, 7, false, FMS_COLOR_GREEN,
+	    FMS_FONT_SMALL, "T/KT");
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L2, "CURR POS");
 	fmsbox_put_pos(box, LSK2_ROW, 0, false, &box->pos_rep.cur_pos, true);
@@ -186,6 +203,7 @@ fmsbox_pos_rep_key_cb(fmsbox_t *box, fms_key_t key)
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		fmsbox_scratchpad_xfer_temp(box, &box->pos_rep.temp);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1) {
+		fmsbox_scratchpad_xfer_wind(box, &box->pos_rep.winds_aloft);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2) {
 		fmsbox_scratchpad_xfer_pos(box, &box->pos_rep.cur_pos,
 		    FMS_PAGE_POS_REP, set_cur_pos);
@@ -202,9 +220,7 @@ fmsbox_pos_rep_key_cb(fmsbox_t *box, fms_key_t key)
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (can_verify_pos_rep(box))
 			verify_pos_rep(box);
-	} else if (key == FMS_KEY_LSK_L6) {
-		fmsbox_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
+	} else if (KEY_IS_REQ_FREETEXT(box, key, 2)) {
 		fmsbox_req_key_freetext(box, key);
 	} else {
 		return (false);

@@ -34,13 +34,6 @@
 #include "fmsbox_scratchpad.h"
 #include "fmsbox_vrfy.h"
 
-#define	APPEND_SNPRINTF(__buf, __len, ...) \
-	do { \
-		(__len) += snprintf(&(__buf)[(__len)], \
-		    sizeof (__buf) >= (__len) ? sizeof (__buf) - (__len) : 0, \
-		    __VA_ARGS__); \
-	} while (0)
-
 static void
 verify_emer(fmsbox_t *box)
 {

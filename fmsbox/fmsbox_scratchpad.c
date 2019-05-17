@@ -412,3 +412,11 @@ fmsbox_scratchpad_xfer_temp(fmsbox_t *box, fms_temp_t *temp)
 		}
 	}
 }
+
+void
+fmsbox_scratchpad_xfer_wind(fmsbox_t *box, fms_wind_t *wind)
+{
+	fmsbox_scratchpad_xfer_multi(box, wind, sizeof (fms_wind_t),
+	    fmsbox_parse_wind, fmsbox_insert_wind_block,
+	    fmsbox_delete_wind, fmsbox_read_wind_block);
+}

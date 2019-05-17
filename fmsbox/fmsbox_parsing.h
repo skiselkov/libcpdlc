@@ -63,6 +63,13 @@ const char *fmsbox_insert_spd_block(fmsbox_t *box, unsigned field_nr,
 void fmsbox_read_spd_block(fmsbox_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
+const char *fmsbox_parse_wind(const char *str, unsigned field_nr, void *data);
+const char *fmsbox_insert_wind_block(fmsbox_t *box, unsigned field_nr,
+    void *data, void *userinfo);
+void fmsbox_read_wind_block(fmsbox_t *box, void *userinfo,
+    char str[READ_FUNC_BUF_SZ]);
+const char *fmsbox_delete_wind(fmsbox_t *box, void *userinfo);
+
 const char *fmsbox_delete_cpdlc_arg_block(fmsbox_t *box, void *userinfo);
 
 int fmsbox_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap);

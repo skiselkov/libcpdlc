@@ -42,7 +42,8 @@ typedef uint32_t cpdlc_msg_thr_id_t;
 
 typedef void (*cpdlc_msglist_update_cb_t)(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads);
-typedef void (*cpdlc_get_time_func_t)(unsigned *hours, unsigned *mins);
+typedef void (*cpdlc_get_time_func_t)(void *userinfo, unsigned *hours,
+    unsigned *mins);
 
 typedef enum {
 	CPDLC_MSG_THR_OPEN,

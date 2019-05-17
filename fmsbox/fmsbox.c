@@ -150,7 +150,8 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 	},
 	{	/* FMS_PAGE_POS_REP */
 		.draw_cb = fmsbox_pos_rep_draw_cb,
-		.key_cb = fmsbox_pos_rep_key_cb
+		.key_cb = fmsbox_pos_rep_key_cb,
+		.has_return = true
 	}
 };
 
@@ -497,6 +498,24 @@ fmsbox_put_off(fmsbox_t *box, int row, int col, bool align_right,
 	} else {
 		fmsbox_put_str(box, row, col, align_right,
 		    FMS_COLOR_CYAN, FMS_FONT_LARGE, req ? "____" : "----");
+	}
+}
+
+void
+fmsbox_put_wind(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_wind_t *wind, bool req)
+{
+	ASSERT(box != NULL);
+	ASSERT(wind != NULL);
+
+	if (wind->set) {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%03d %d", wind->deg, wind->spd);
+		fmsbox_put_str(box, row, col + 3, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, "/");
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, req ? "___/___" : "---/---");
 	}
 }
 

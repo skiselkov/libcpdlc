@@ -259,7 +259,7 @@ draw_response_section(fmsbox_t *box)
 			fmsbox_put_lsk_action(box, FMS_KEY_LSK_L4,
 			    FMS_COLOR_CYAN, "*ACPT");
 			fmsbox_put_lsk_action(box, FMS_KEY_LSK_R5,
-			    FMS_COLOR_CYAN, "REJ>");
+			    FMS_COLOR_WHITE, "REJ>");
 		}
 		if (msg_can_standby(box)) {
 			fmsbox_put_lsk_action(box, FMS_KEY_LSK_L5,

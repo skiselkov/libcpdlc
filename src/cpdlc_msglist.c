@@ -256,10 +256,11 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 }
 
 static void
-dfl_get_time_func(unsigned *hours, unsigned *mins)
+dfl_get_time_func(void *unused, unsigned *hours, unsigned *mins)
 {
 	time_t now = time(NULL);
 	const struct tm *tm = localtime(&now);
+	UNUSED(unused);
 	ASSERT(hours != NULL);
 	ASSERT(mins != NULL);
 	*hours = tm->tm_hour;
@@ -377,7 +378,8 @@ msg_recv_cb(cpdlc_client_t *cl)
 		bucket->msg = msg;
 		bucket->tok = CPDLC_INVALID_MSG_TOKEN;
 		ASSERT(msglist->get_time_func != NULL);
-		msglist->get_time_func(&bucket->hours, &bucket->mins);
+		msglist->get_time_func(msglist->userinfo, &bucket->hours,
+		    &bucket->mins);
 		bucket->time = time(NULL);
 		thr->dirty = true;
 
@@ -479,7 +481,8 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	bucket->tok = cpdlc_client_send_msg(msglist->cl, msg);
 	bucket->sent = true;
 	ASSERT(msglist->get_time_func != NULL);
-	msglist->get_time_func(&bucket->hours, &bucket->mins);
+	msglist->get_time_func(msglist->userinfo, &bucket->hours,
+	    &bucket->mins);
 	bucket->time = time(NULL);
 	list_insert_tail(&thr->buckets, bucket);
 

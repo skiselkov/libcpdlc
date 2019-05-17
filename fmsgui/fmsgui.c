@@ -55,6 +55,7 @@ typedef struct {
 } clickspot_t;
 
 static GLFWwindow*		window = NULL;
+static GLFWcursor		*hand_cursor = NULL;
 static uint64_t			dirty = 0;
 static mtcr_t			*mtcr = NULL;
 
@@ -348,11 +349,20 @@ static void
 mouse_hover_cb(GLFWwindow *window, double x, double y)
 {
 	int win_w, win_h;
+	bool found = false;
 
 	glfwGetWindowSize(window, &win_w, &win_h);
 
 	mouse_x = x / win_w;
 	mouse_y = y / win_h;
+
+	for (int i = 0; clickspots[i].w != 0; i++) {
+		if (clickspot_mouse_check(&clickspots[i])) {
+			found = true;
+			break;
+		}
+	}
+	glfwSetCursor(window, found ? hand_cursor : NULL);
 }
 
 static void
@@ -460,6 +470,8 @@ window_init(void)
 	window = glfwCreateWindow(bgimg_w, bgimg_h, "FANS FMSGUI", NULL, NULL);
 	if (window == NULL)
 		return (false);
+	hand_cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+	VERIFY(hand_cursor != NULL);
 	glfwMakeContextCurrent(window);
 	glfwSetKeyCallback(window, key_cb);
 	glfwSetWindowSizeCallback(window, resize_cb);
@@ -506,6 +518,10 @@ cleanup(void)
 	if (box != NULL) {
 		fmsbox_free(box);
 		box = NULL;
+	}
+	if (hand_cursor != NULL) {
+		glfwDestroyCursor(hand_cursor);
+		hand_cursor = NULL;
 	}
 	glfwTerminate();
 }

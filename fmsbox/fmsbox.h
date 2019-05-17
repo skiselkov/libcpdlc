@@ -26,6 +26,8 @@
 #ifndef	_LIBCPDLC_FMSBOX_H_
 #define	_LIBCPDLC_FMSBOX_H_
 
+#include "cpdlc_msglist.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -87,6 +89,10 @@ typedef struct {
 	fms_color_t	color;
 	fms_font_t	size;
 } fms_char_t;
+
+typedef struct {
+	cpdlc_get_time_func_t	get_time;
+} fans_funcs_t;
 
 fmsbox_t *fmsbox_alloc(const char *hostname, unsigned port,
     const char *ca_file);

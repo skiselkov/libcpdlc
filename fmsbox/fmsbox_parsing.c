@@ -271,6 +271,82 @@ fmsbox_read_spd_block(fmsbox_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 }
 
 const char *
+fmsbox_parse_wind(const char *str, unsigned field_nr, void *data)
+{
+	fms_wind_t *out_wind;
+
+	ASSERT(str != NULL);
+	ASSERT(field_nr == 0 || field_nr == 1);
+	ASSERT(data != NULL);
+	out_wind = data;
+
+	if (field_nr == 0) {
+		if (sscanf(str, "%d", &out_wind->deg) != 1 ||
+		    out_wind->deg > 360) {
+			return ("FORMAT ERROR");
+		}
+		out_wind->deg %= 360;
+	} else {
+		if (sscanf(str, "%d", &out_wind->spd) != 1 ||
+		    out_wind->spd > 999) {
+			return ("FORMAT ERROR");
+		}
+	}
+
+	return (NULL);
+}
+
+const char *
+fmsbox_insert_wind_block(fmsbox_t *box, unsigned field_nr, void *data,
+    void *userinfo)
+{
+	fms_wind_t *in_wind, *out_wind;
+
+	ASSERT(box != NULL);
+	ASSERT(data != NULL);
+	ASSERT(field_nr == 0 || field_nr == 1);
+	ASSERT(userinfo != NULL);
+
+	in_wind = data;
+	out_wind = userinfo;
+
+	if (field_nr == 0) {
+		out_wind->deg = in_wind->deg;
+		if (out_wind->spd)
+			out_wind->set = true;
+	} else {
+		out_wind->spd = in_wind->spd;
+		out_wind->set = true;
+	}
+
+	return (NULL);
+}
+
+void
+fmsbox_read_wind_block(fmsbox_t *box, void *userinfo,
+    char str[READ_FUNC_BUF_SZ])
+{
+	fms_wind_t *wind;
+
+	ASSERT(box != NULL);
+	ASSERT(userinfo != NULL);
+	wind = userinfo;
+	if (wind->set) {
+		snprintf(str, READ_FUNC_BUF_SZ, "%03d/%d",
+		    wind->deg, wind->spd);
+	}
+}
+
+const char *
+fmsbox_delete_wind(fmsbox_t *box, void *userinfo)
+{
+	ASSERT(box != NULL);
+	ASSERT(userinfo != NULL);
+	memset(userinfo, 0, sizeof (fms_wind_t));
+	return (NULL);
+}
+
+const char *
 fmsbox_delete_cpdlc_arg_block(fmsbox_t *box, void *userinfo)
 {
 	cpdlc_arg_t *outarg;
