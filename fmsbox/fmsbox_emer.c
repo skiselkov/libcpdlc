@@ -79,12 +79,13 @@ verify_emer(fmsbox_t *box)
 	if (box->emer.des.alt.alt != 0) {
 		char altbuf[128];
 		fmsbox_print_alt(&box->emer.des, altbuf, sizeof (altbuf));
-		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s.", altbuf);
+		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s%s.", altbuf,
+		    box->emer.des.alt.fl ? "" : " FT");
 	}
-	if (box->emer.offset.nm != 0) {
+	if (box->emer.off.nm != 0) {
 		APPEND_SNPRINTF(buf, l, " OFFSETTING %.0f NM %c OF ROUTE.",
-		    box->emer.offset.nm,
-		    box->emer.offset.dir == CPDLC_DIR_LEFT ? 'L' : 'R');
+		    box->emer.off.nm,
+		    box->emer.off.dir == CPDLC_DIR_LEFT ? 'L' : 'R');
 	}
 	if (box->emer.fuel.set) {
 		if (box->emer.fuel.hrs != 0) {
@@ -95,7 +96,12 @@ verify_emer(fmsbox_t *box)
 			APPEND_SNPRINTF(buf, l, " %d MINS",
 			    box->emer.fuel.mins);
 		}
-		APPEND_SNPRINTF(buf, l, " OF FUEL REMAINING.");
+		APPEND_SNPRINTF(buf, l, " OF FUEL REMAINING");
+
+		if (box->emer.souls_set)
+			APPEND_SNPRINTF(buf, l, " AND");
+		else
+			APPEND_SNPRINTF(buf, l, ".");
 	}
 	if (box->emer.souls_set)
 		APPEND_SNPRINTF(buf, l, " %d SOULS ON BOARD.", box->emer.souls);
@@ -149,25 +155,10 @@ draw_main_page(fmsbox_t *box)
 	}
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R2, "DESCEND TO");
-	if (box->emer.des.alt.alt != 0) {
-		fmsbox_put_alt(box, LSK2_ROW, 0, true, &box->emer.des);
-	} else {
-		fmsbox_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "-----");
-	}
+	fmsbox_put_alt(box, LSK2_ROW, 0, true, &box->emer.des, false, true);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R3, "OFFSET TO");
-	if (box->emer.offset.nm != 0) {
-		ASSERT(box->emer.offset.dir == CPDLC_DIR_LEFT ||
-		    box->emer.offset.dir == CPDLC_DIR_RIGHT);
-		fmsbox_put_str(box, LSK3_ROW, 0, true, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%c%.0f",
-		    box->emer.offset.dir == CPDLC_DIR_LEFT ? 'L' : 'R',
-		    box->emer.offset.nm);
-	} else {
-		fmsbox_put_str(box, LSK3_ROW, 0, true, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "---");
-	}
+	fmsbox_put_off(box, LSK3_ROW, 0, true, &box->emer.off, false);
 
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_R4, "DIVERT TO");
 	fmsbox_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
@@ -242,8 +233,7 @@ fmsbox_emer_key_cb(fmsbox_t *box, fms_key_t key)
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
 		fmsbox_scratchpad_xfer_alt(box, &box->emer.des);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R3) {
-		fmsbox_scratchpad_xfer_offset(box, &box->emer.offset.dir,
-		    &box->emer.offset.nm);
+		fmsbox_scratchpad_xfer_offset(box, &box->emer.off);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		if (fmsbox_scratchpad_is_delete(box)) {
 			fmsbox_scratchpad_clear(box);

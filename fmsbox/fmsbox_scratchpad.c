@@ -336,11 +336,14 @@ parse_dir(char *buf, cpdlc_dir_t *dir)
 }
 
 void
-fmsbox_scratchpad_xfer_offset(fmsbox_t *box, cpdlc_dir_t *dir_p, double *nm_p)
+fmsbox_scratchpad_xfer_offset(fmsbox_t *box, fms_off_t *off)
 {
 	char buf[8];
 
-	fmsbox_print_off(*dir_p, *nm_p, buf, sizeof (buf));
+	ASSERT(box != NULL);
+	ASSERT(off != NULL);
+
+	fmsbox_print_off(off, buf, sizeof (buf));
 	fmsbox_scratchpad_xfer(box, buf, sizeof (buf), true);
 	if (strlen(buf) != 0) {
 		unsigned nm;
@@ -349,15 +352,12 @@ fmsbox_scratchpad_xfer_offset(fmsbox_t *box, cpdlc_dir_t *dir_p, double *nm_p)
 		if (strlen(buf) < 2 || !parse_dir(buf, &dir) ||
 		    sscanf(buf, "%d", &nm) != 1 || nm == 0 || nm > 999) {
 			fmsbox_set_error(box, "FORMAT ERROR");
-		} else if (buf[0] == 'L') {
-			*dir_p = dir;
-			*nm_p = nm;
 		} else {
-			*dir_p = dir;
-			*nm_p = nm;
+			off->dir = dir;
+			off->nm = nm;
 		}
 	} else {
-		*nm_p = 0;
+		off->nm = 0;
 	}
 }
 

@@ -304,11 +304,12 @@ fmsbox_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap)
 }
 
 int
-fmsbox_print_off(cpdlc_dir_t dir, double nm, char *buf, size_t cap)
+fmsbox_print_off(const fms_off_t *off, char *buf, size_t cap)
 {
-	if (nm != 0) {
+	ASSERT(off != NULL);
+	if (off->nm != 0) {
 		return (snprintf(buf, cap, "%c%.0f",
-		    dir == CPDLC_DIR_LEFT ? 'L' : 'R', nm));
+		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm));
 	}
 	cpdlc_strlcpy(buf, "", cap);
 	return (1);

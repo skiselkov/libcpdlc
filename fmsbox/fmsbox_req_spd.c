@@ -66,11 +66,13 @@ static void
 draw_main_page(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "SPD/SPD BLOCK");
-	fmsbox_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0], true);
+	fmsbox_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0],
+	    true, false);
 
 	fmsbox_put_str(box, LSK1_ROW, 3, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
-	fmsbox_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1], false);
+	fmsbox_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1],
+	    false, false);
 
 	fmsbox_req_draw_due(box, false);
 }

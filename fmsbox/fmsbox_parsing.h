@@ -67,7 +67,7 @@ const char *fmsbox_delete_cpdlc_arg_block(fmsbox_t *box, void *userinfo);
 
 int fmsbox_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap);
 int fmsbox_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap);
-int fmsbox_print_off(cpdlc_dir_t dir, double nm, char *buf, size_t cap);
+int fmsbox_print_off(const fms_off_t *off, char *buf, size_t cap);
 
 void fmsbox_print_pos(const fms_pos_t *pos, char *buf, size_t cap,
     pos_print_style_t style);

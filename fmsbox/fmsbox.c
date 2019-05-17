@@ -340,23 +340,53 @@ fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
 	va_end(ap);
 }
 
+static void
+put_str_with_units(fmsbox_t *box, int row, int col, bool align_right,
+    fms_color_t color, fms_font_t font, const char *units, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	if (align_right) {
+		put_str_v(box, row, col + strlen(units) + 1, true, color,
+		    font, fmt, ap);
+		fmsbox_put_str(box, row, col, true, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%s", units);
+	} else {
+		int l = put_str_v(box, row, col, false, color, font, fmt, ap);
+		fmsbox_put_str(box, row, col + l + 1, false, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%s", units);
+	}
+	va_end(ap);
+}
+
 void
 fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *alt)
+    const cpdlc_arg_t *alt, bool req, bool units)
 {
-	char buf[8];
-
 	ASSERT(box != NULL);
 	ASSERT(alt != NULL);
 
-	fmsbox_print_alt(alt, buf, sizeof (buf));
-	fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-	    FMS_FONT_LARGE, "%s", buf);
+	if (alt->alt.alt != 0) {
+		char buf[8];
+
+		fmsbox_print_alt(alt, buf, sizeof (buf));
+		if (units && !alt->alt.fl) {
+			put_str_with_units(box, row, col, align_right,
+			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "FT", "%s", buf);
+		} else {
+			fmsbox_put_str(box, row, col, align_right,
+			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "%s", buf);
+		}
+	} else {
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		    FMS_FONT_LARGE, req ? "_____" : "-----");
+	}
 }
 
 void
 fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *spd, bool req)
+    const cpdlc_arg_t *spd, bool req, bool units)
 {
 	char buf[8];
 
@@ -365,8 +395,13 @@ fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
 
 	if (spd->spd.spd != 0) {
 		fmsbox_print_spd(spd, buf, sizeof (buf));
-		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", buf);
+		if (units && !spd->spd.mach) {
+			put_str_with_units(box, row, col, align_right,
+			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "KT", "%s", buf);
+		} else {
+			fmsbox_put_str(box, row, col, align_right,
+			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "%s", buf);
+		}
 	} else {
 		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
 		    FMS_FONT_LARGE, req ? "___" : "---");
@@ -429,20 +464,39 @@ fmsbox_put_temp(fmsbox_t *box, int row, int col, bool align_right,
 
 void
 fmsbox_put_pos(fmsbox_t *box, int row, int col, bool align_right,
-    const fms_pos_t *pos)
+    const fms_pos_t *pos, bool req)
 {
 	ASSERT(box != NULL);
 	ASSERT(pos != NULL);
 	if (pos->set) {
 		char buf[16];
-		fmsbox_print_pos(pos, buf, sizeof (buf), POS_PRINT_PRETTY);
+		fmsbox_print_pos(pos, buf, sizeof (buf), POS_PRINT_COMPACT);
 		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", buf);
 	} else {
 		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "<POS");
 		fmsbox_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "---------");
+		    FMS_FONT_LARGE, req ? "_________" : "---------");
+	}
+}
+
+void
+fmsbox_put_off(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_off_t *off, bool req)
+{
+	ASSERT(box != NULL);
+	ASSERT(off != NULL);
+
+	if (off->nm != 0) {
+		ASSERT(off->dir == CPDLC_DIR_LEFT ||
+		    off->dir == CPDLC_DIR_RIGHT);
+		fmsbox_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%c%.0f",
+		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
+	} else {
+		fmsbox_put_str(box, row, col, align_right,
+		    FMS_COLOR_CYAN, FMS_FONT_LARGE, req ? "____" : "----");
 	}
 }
 

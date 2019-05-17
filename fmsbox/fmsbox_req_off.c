@@ -39,7 +39,7 @@ static bool
 can_verify_off_req(fmsbox_t *box)
 {
 	ASSERT(box);
-	return (box->off_req.nm != 0 &&
+	return (box->off_req.off.nm != 0 &&
 	    fmsbox_step_at_can_send(&box->off_req.step_at));
 }
 
@@ -64,13 +64,13 @@ verify_off_req(fmsbox_t *box)
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    box->off_req.step_at.pos, NULL);
 		}
-		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.dir, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg, 2, &box->off_req.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.dir, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 2, &box->off_req.off.nm, NULL);
 	} else {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
-		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->off_req.dir, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->off_req.off.dir, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.nm, NULL);
 	}
 	fmsbox_req_add_common(box, msg);
 
@@ -81,16 +81,8 @@ static void
 draw_main_page(fmsbox_t *box)
 {
 	fmsbox_put_lsk_title(box, FMS_KEY_LSK_L1, "OFFSET");
-	if (box->off_req.nm == 0) {
-		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "____");
-	} else {
-		char buf[8];
-		fmsbox_print_off(box->off_req.dir, box->off_req.nm, buf,
-		    sizeof (buf));
-		fmsbox_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", buf);
-	}
+	
+	fmsbox_put_off(box, LSK1_ROW, 0, false, &box->off_req.off, true);
 
 	fmsbox_req_draw_due(box, true);
 
@@ -126,8 +118,7 @@ fmsbox_req_off_key_cb(fmsbox_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fmsbox_scratchpad_xfer_offset(box, &box->off_req.dir,
-		    &box->off_req.nm);
+		fmsbox_scratchpad_xfer_offset(box, &box->off_req.off);
 	} else if (box->subpage == 0 &&
 	    (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4)) {
 		fmsbox_req_key_due(box, key);

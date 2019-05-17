@@ -112,6 +112,11 @@ typedef struct {
 	int		temp;
 } fms_temp_t;
 
+typedef struct {
+	cpdlc_dir_t	dir;
+	double		nm;
+} fms_off_t;
+
 typedef enum {
 	CLX_REQ_NONE,
 	CLX_REQ_ARR,
@@ -167,8 +172,7 @@ struct fmsbox_s {
 			bool		maint_sep_vmc;
 		} alt_req;
 		struct {
-			cpdlc_dir_t	dir;
-			double		nm;
+			fms_off_t	off;
 			fms_step_at_t	step_at;
 		} off_req;
 		struct {
@@ -207,13 +211,12 @@ struct fmsbox_s {
 			fms_pos_t	nxt_fix1;
 			fms_temp_t	temp;
 			fms_winds_t	winds_aloft;
-			fms_pos_t	curr_pos;
+			fms_pos_t	cur_pos;
 			fms_time_t	pos_time;
 			cpdlc_arg_t	alt;
 			fms_time_t	time_at_dest;
 			cpdlc_arg_t	clb_des;
-			cpdlc_dir_t	off_dir;
-			double		off_nm;
+			fms_off_t	off;
 		} pos_rep;
 	};
 	struct {
@@ -247,10 +250,7 @@ struct fmsbox_s {
 		bool			souls_set;
 		unsigned		souls;
 		cpdlc_arg_t		des;
-		struct {
-			cpdlc_dir_t	dir;
-			double		nm;
-		} offset;
+		fms_off_t		off;
 		fms_pos_t		divert;
 		emer_reason_t		reason;
 	} emer;
@@ -303,9 +303,9 @@ void fmsbox_put_lsk_title(fmsbox_t *box, int lsk_key_id,
 void fmsbox_put_altn_selector(fmsbox_t *box, int row, bool align_right,
     int option, const char *first, ...);
 void fmsbox_put_alt(fmsbox_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *alt);
+    const cpdlc_arg_t *alt, bool req, bool units);
 void fmsbox_put_spd(fmsbox_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *spd, bool req);
+    const cpdlc_arg_t *spd, bool req, bool units);
 void fmsbox_put_hdg(fmsbox_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req);
 void fmsbox_put_time(fmsbox_t *box, int row, int col, bool align_right,
@@ -313,7 +313,9 @@ void fmsbox_put_time(fmsbox_t *box, int row, int col, bool align_right,
 void fmsbox_put_temp(fmsbox_t *box, int row, int col, bool align_right,
     const fms_temp_t *temp, bool req);
 void fmsbox_put_pos(fmsbox_t *box, int row, int col, bool align_right,
-    const fms_pos_t *pos);
+    const fms_pos_t *pos, bool req);
+void fmsbox_put_off(fmsbox_t *box, int row, int col, bool align_right,
+    const fms_off_t *off, bool req);
 
 const char *fmsbox_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fmsbox_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
