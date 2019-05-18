@@ -90,6 +90,13 @@ draw_main_page(fans_t *box)
 }
 
 void
+fans_req_off_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->off_req, 0, sizeof (box->off_req));
+}
+
+void
 fans_req_off_draw_cb(fans_t *box)
 {
 	ASSERT(box != NULL);
@@ -126,7 +133,7 @@ fans_req_off_key_cb(fans_t *box, fms_key_t key)
 		if (can_verify_off_req(box))
 			verify_off_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
+		fans_set_page(box, FMS_PAGE_REQUESTS, false);
 	} else if (KEY_IS_REQ_STEP_AT(box, key)) {
 		fans_key_step_at(box, key, &box->off_req.step_at);
 	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {

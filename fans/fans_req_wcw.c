@@ -53,9 +53,15 @@ verify_wcw_req(fans_t *box)
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt, 0);
 		} else {
-			/* FIXME: need to query current alt for proper msg */
-			seg = cpdlc_msg_add_seg(msg, true, 67,
-			    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
+			int cur_alt = fans_get_cur_alt(box);
+
+			if (box->wcw_req.alt.alt.alt >= cur_alt) {
+				seg = cpdlc_msg_add_seg(msg, true, 67,
+				    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
+			} else {
+				seg = cpdlc_msg_add_seg(msg, true, 67,
+				    CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt);
+			}
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->wcw_req.alt.alt.fl,
 		    &box->wcw_req.alt.alt.alt);
@@ -120,6 +126,13 @@ draw_main_page(fans_t *box)
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
 	fans_put_altn_selector(box, LSK2_ROW, true,
 	    !box->wcw_req.back_on_rte, "YES", "NO", NULL);
+}
+
+void
+fans_req_wcw_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->wcw_req, 0, sizeof (box->wcw_req));
 }
 
 void
@@ -194,7 +207,7 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		if (can_verify_wcw_req(box))
 			verify_wcw_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
+		fans_set_page(box, FMS_PAGE_REQUESTS, false);
 	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fans_req_key_freetext(box, key);
 	} else {

@@ -64,30 +64,32 @@ fans_requests_key_cb(fans_t *box, fms_key_t key)
 
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
-	if (key == FMS_KEY_LSK_L1) {
-		fans_set_page(box, FMS_PAGE_REQ_ALT);
-		memset(&box->alt_req, 0, sizeof (box->alt_req));
-	} else if (key == FMS_KEY_LSK_L2) {
-		fans_set_page(box, FMS_PAGE_REQ_OFF);
-		memset(&box->off_req, 0, sizeof (box->off_req));
-	} else if (key == FMS_KEY_LSK_L3) {
-		fans_set_page(box, FMS_PAGE_REQ_SPD);
-		memset(&box->spd_req, 0, sizeof (box->spd_req));
-	} else if (key == FMS_KEY_LSK_L4) {
-		fans_set_page(box, FMS_PAGE_REQ_RTE);
-		memset(&box->rte_req, 0, sizeof (box->rte_req));
-	} else if (key == FMS_KEY_LSK_R1) {
-		fans_set_page(box, FMS_PAGE_REQ_CLX);
-		memset(&box->clx_req, 0, sizeof (box->clx_req));
-	} else if (key == FMS_KEY_LSK_R2) {
-		fans_set_page(box, FMS_PAGE_REQ_VMC);
-	} else if (key == FMS_KEY_LSK_R3) {
-		fans_set_page(box, FMS_PAGE_REQ_WCW);
-		memset(&box->wcw_req, 0, sizeof (box->wcw_req));
-	} else if (key == FMS_KEY_LSK_R4) {
-		fans_set_page(box, FMS_PAGE_REQ_VOICE);
-		memset(&box->voice_req, 0, sizeof (box->voice_req));
-	} else {
+	switch (key) {
+	case FMS_KEY_LSK_L1:
+		fans_set_page(box, FMS_PAGE_REQ_ALT, true);
+		break;
+	case FMS_KEY_LSK_L2:
+		fans_set_page(box, FMS_PAGE_REQ_OFF, true);
+		break;
+	case FMS_KEY_LSK_L3:
+		fans_set_page(box, FMS_PAGE_REQ_SPD, true);
+		break;
+	case FMS_KEY_LSK_L4:
+		fans_set_page(box, FMS_PAGE_REQ_RTE, true);
+		break;
+	case FMS_KEY_LSK_R1:
+		fans_set_page(box, FMS_PAGE_REQ_CLX, true);
+		break;
+	case FMS_KEY_LSK_R2:
+		fans_set_page(box, FMS_PAGE_REQ_VMC, true);
+		break;
+	case FMS_KEY_LSK_R3:
+		fans_set_page(box, FMS_PAGE_REQ_WCW, true);
+		break;
+	case FMS_KEY_LSK_R4:
+		fans_set_page(box, FMS_PAGE_REQ_VOICE, true);
+		break;
+	default:
 		return (false);
 	}
 

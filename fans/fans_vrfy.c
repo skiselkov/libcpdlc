@@ -46,7 +46,7 @@ fans_verify_msg(fans_t *box, cpdlc_msg_t *msg, const char *title,
 		cpdlc_msg_free(box->verify.msg);
 	box->verify.msg = msg;
 	box->verify.is_req = is_req;
-	fans_set_page(box, FMS_PAGE_VRFY);
+	fans_set_page(box, FMS_PAGE_VRFY, true);
 }
 
 void
@@ -101,9 +101,9 @@ fans_vrfy_key_cb(fans_t *box, fms_key_t key)
 			 */
 			cpdlc_msglist_thr_close(box->msglist, thr_id);
 		}
-		fans_set_page(box, FMS_PAGE_MAIN_MENU);
+		fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, box->verify.ret_page);
+		fans_set_page(box, box->verify.ret_page, false);
 	} else {
 		return (false);
 	}

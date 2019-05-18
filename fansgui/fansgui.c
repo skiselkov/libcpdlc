@@ -488,7 +488,7 @@ fms_init(void)
 	const char *ca_file = "cpdlc_cert.pem";
 	int port = 0;
 
-	box = fans_alloc(hostname, port, ca_file);
+	box = fans_alloc(hostname, port, ca_file, NULL, NULL);
 	return (box != NULL);
 }
 

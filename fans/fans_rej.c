@@ -42,7 +42,7 @@ fans_rej(fans_t *box, bool unable_or_neg, unsigned ret_page)
 	memset(&box->rej, 0, sizeof (box->rej));
 	box->rej.unable_or_neg = unable_or_neg;
 	box->rej.ret_page = ret_page;
-	fans_set_page(box, FMS_PAGE_REJ);
+	fans_set_page(box, FMS_PAGE_REJ, true);
 }
 
 void
@@ -139,9 +139,9 @@ fans_rej_key_cb(fans_t *box, fms_key_t key)
 		ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 		cpdlc_msglist_send(box->msglist, msg, box->thr_id);
 
-		fans_set_page(box, box->rej.ret_page);
+		fans_set_page(box, box->rej.ret_page, false);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, box->rej.ret_page);
+		fans_set_page(box, box->rej.ret_page, false);
 	} else {
 		return (false);
 	}

@@ -60,6 +60,7 @@ extern "C" {
 	} while (0)
 
 typedef struct {
+	void	(*init_cb)(fans_t *box);
 	void	(*draw_cb)(fans_t *box);
 	bool	(*key_cb)(fans_t *box, fms_key_t key);
 	bool	has_return;
@@ -157,6 +158,8 @@ typedef void (*pos_pick_done_cb_t)(fans_t *box, const fms_pos_t *pos);
 
 struct fans_s {
 	fms_char_t		scr[FMS_ROWS][FMS_COLS];
+	fans_funcs_t		funcs;
+	void			*userinfo;
 	fms_page_t		*page;
 	unsigned		subpage;
 	unsigned		num_subpages;
@@ -290,7 +293,7 @@ enum {
 };
 
 void fans_set_thr_id(fans_t *box, cpdlc_msg_thr_id_t thr_id);
-void fans_set_page(fans_t *box, unsigned page_nr);
+void fans_set_page(fans_t *box, unsigned page_nr, bool init);
 void fans_set_num_subpages(fans_t *box, unsigned num);
 void fans_set_error(fans_t *box, const char *error);
 
@@ -340,6 +343,15 @@ cpdlc_msg_thr_id_t *fans_get_thr_ids(fans_t *box, unsigned *num_thr_ids,
 void fans_put_step_at(fans_t *box, const fms_step_at_t *step_at);
 void fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fans_step_at_can_send(const fms_step_at_t *step_at);
+
+int fans_get_time(const fans_t *box);
+int fans_get_cur_alt(const fans_t *box);
+int fans_get_sel_alt(const fans_t *box);
+bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
+bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);
+bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
+bool fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info);
+int fans_get_offset(const fans_t *box);
 
 #ifdef	__cplusplus
 }

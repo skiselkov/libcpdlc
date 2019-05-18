@@ -66,28 +66,20 @@ fans_main_menu_key_cb(fans_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
-	if (key == FMS_KEY_LSK_L1) {
-		fans_set_page(box, FMS_PAGE_LOGON_STATUS);
-	} else if (key == FMS_KEY_LSK_L2 && st == CPDLC_LOGON_COMPLETE) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
-	} else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE) {
-		fans_set_page(box, FMS_PAGE_POS_REP);
-		/* The POS REP page can send freetext as well */
-		memset(&box->pos_rep, 0, sizeof (box->pos_rep));
-		memset(&box->req_common, 0, sizeof (box->req_common));
-	} else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE) {
-		fans_set_page(box, FMS_PAGE_MSG_LOG);
-	} else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE) {
-		fans_set_page(box, FMS_PAGE_EMER);
-		memset(&box->emer, 0, sizeof (box->emer));
-		/* The EMER page can send freetext as well */
-		memset(&box->req_common, 0, sizeof (box->req_common));
-	} else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE) {
-		fans_set_page(box, FMS_PAGE_FREETEXT);
-		memset(box->freetext, 0, sizeof (box->freetext));
-	} else {
+	if (key == FMS_KEY_LSK_L1)
+		fans_set_page(box, FMS_PAGE_LOGON_STATUS, true);
+	else if (key == FMS_KEY_LSK_L2 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_REQUESTS, true);
+	else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_POS_REP, true);
+	else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_MSG_LOG, true);
+	else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_EMER, true);
+	else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_FREETEXT, true);
+	else
 		return (false);
-	}
 
 	return (true);
 }

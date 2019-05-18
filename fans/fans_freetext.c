@@ -62,6 +62,13 @@ verify_freetext_msg(fans_t *box)
 }
 
 void
+fans_freetext_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(box->freetext, 0, sizeof (box->freetext));
+}
+
+void
 fans_freetext_draw_cb(fans_t *box)
 {
 	enum { MAX_LINES = 4 };

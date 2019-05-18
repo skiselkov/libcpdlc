@@ -194,6 +194,15 @@ draw_main_page(fans_t *box)
 }
 
 void
+fans_emer_init_cb(fans_t *box)
+{
+	/* The EMER page can send freetext as well */
+	ASSERT(box != NULL);
+	memset(&box->emer, 0, sizeof (box->emer));
+	memset(&box->req_common, 0, sizeof (box->req_common));
+}
+
+void
 fans_emer_draw_cb(fans_t *box)
 {
 	ASSERT(box != NULL);

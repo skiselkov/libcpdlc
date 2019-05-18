@@ -91,10 +91,32 @@ typedef struct {
 } fms_char_t;
 
 typedef struct {
+	char		wpt_name[32];
+	unsigned	hrs, mins;
+	bool		alt_fl;
+	int		alt_ft;
+	bool		spd_mach;
+	int		spd_ft;
+} fms_wpt_info_t;
+
+typedef int (*fans_get_cur_alt_t)(void *userinfo);
+typedef int (*fans_get_sel_alt_t)(void *userinfo);
+typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
+typedef int (*fans_get_offset_t)(void *userinfo);
+
+typedef struct {
 	cpdlc_get_time_func_t	get_time;
+	fans_get_cur_alt_t	get_cur_alt;
+	fans_get_sel_alt_t	get_sel_alt;
+	fans_get_wpt_info_t	get_prev_wpt;
+	fans_get_wpt_info_t	get_next_wpt;
+	fans_get_wpt_info_t	get_next_next_wpt;
+	fans_get_wpt_info_t	get_dest_wpt;
+	fans_get_offset_t	get_offset;
 } fans_funcs_t;
 
-fans_t *fans_alloc(const char *hostname, unsigned port, const char *ca_file);
+fans_t *fans_alloc(const char *hostname, unsigned port, const char *ca_file,
+    const fans_funcs_t *funcs, void *userinfo);
 void fans_free(fans_t *box);
 
 const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);

@@ -46,17 +46,25 @@ verify_alt_req(fans_t *box)
 {
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	int clb = 0, cur_alt = fans_get_cur_alt(box);
+
+	if (box->alt_req.alt[0].alt.alt >= cur_alt + 150)
+		clb = 1;
+	else if (box->alt_req.alt[0].alt.alt <= cur_alt - 150)
+		clb = -1;
 
 	if (box->alt_req.step_at.type != STEP_AT_NONE) {
 		if (box->alt_req.step_at.type == STEP_AT_TIME) {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    CPDLC_DM13_AT_time_REQ_CLB_TO_alt, 0);
+			    clb >= 0 ? CPDLC_DM13_AT_time_REQ_CLB_TO_alt :
+			    CPDLC_DM12_AT_pos_REQ_DES_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    &box->alt_req.step_at.tim.hrs,
 			    &box->alt_req.step_at.tim.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    CPDLC_DM11_AT_pos_REQ_CLB_TO_alt, 0);
+			    clb >= 0 ? CPDLC_DM11_AT_pos_REQ_CLB_TO_alt :
+			    CPDLC_DM14_AT_time_REQ_DES_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    box->alt_req.step_at.pos, NULL);
 		}
@@ -74,6 +82,12 @@ verify_alt_req(fans_t *box)
 		if (box->alt_req.crz_clb) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM8_REQ_CRZ_CLB_TO_alt, 0);
+		} else if (clb == 1) {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM9_REQ_CLB_TO_alt, 0);
+		} else if (clb == -1) {
+			seg = cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM10_REQ_DES_TO_alt, 0);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM6_REQ_alt, 0);
@@ -122,6 +136,13 @@ draw_main_page(fans_t *box)
 	fans_put_lsk_title(box, FMS_KEY_LSK_R5, "MAINT SEP/VMC");
 	fans_put_altn_selector(box, LSK5_ROW, true,
 	    !box->alt_req.maint_sep_vmc, "YES", "NO", NULL);
+}
+
+void
+fans_req_alt_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->alt_req, 0, sizeof (box->alt_req));
 }
 
 void
@@ -185,7 +206,7 @@ fans_req_alt_key_cb(fans_t *box, fms_key_t key)
 		if (can_verify_alt_req(box))
 			verify_alt_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
+		fans_set_page(box, FMS_PAGE_REQUESTS, false);
 	} else if (KEY_IS_REQ_STEP_AT(box, key)) {
 		fans_key_step_at(box, key, &box->alt_req.step_at);
 		if (box->alt_req.step_at.type != STEP_AT_NONE) {

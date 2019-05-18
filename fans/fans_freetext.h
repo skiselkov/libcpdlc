@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+void fans_freetext_init_cb(fans_t *box);
 void fans_freetext_draw_cb(fans_t *box);
 bool fans_freetext_key_cb(fans_t *box, fms_key_t key);
 

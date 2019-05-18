@@ -120,6 +120,13 @@ draw_main_page(fans_t *box)
 }
 
 void
+fans_req_clx_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->clx_req, 0, sizeof (box->clx_req));
+}
+
+void
 fans_req_clx_draw_cb(fans_t *box)
 {
 	ASSERT(box != NULL);
@@ -166,7 +173,7 @@ fans_req_clx_key_cb(fans_t *box, fms_key_t key)
 		if (can_verify_clx_req(box))
 			verify_clx_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
+		fans_set_page(box, FMS_PAGE_REQUESTS, true);
 	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fans_req_key_freetext(box, key);
 	} else {

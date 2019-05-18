@@ -132,7 +132,7 @@ fans_msg_log_key_cb(fans_t *box, fms_key_t key)
 
 		if (thr_nr < num_thr_ids) {
 			fans_set_thr_id(box, thr_ids[thr_nr]);
-			fans_set_page(box, FMS_PAGE_MSG_THR);
+			fans_set_page(box, FMS_PAGE_MSG_THR, true);
 		}
 		free(thr_ids);
 	} else if (key == FMS_KEY_LSK_R5) {
@@ -315,7 +315,7 @@ fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_MSG_LOG);
+		fans_set_page(box, FMS_PAGE_MSG_LOG, false);
 	} else if (key == FMS_KEY_LSK_L4) {
 		if (msg_can_roger(box))
 			send_roger(box);

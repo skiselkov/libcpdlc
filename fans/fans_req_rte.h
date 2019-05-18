@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+void fans_req_rte_init_cb(fans_t *box);
 void fans_req_rte_draw_cb(fans_t *box);
 bool fans_req_rte_key_cb(fans_t *box, fms_key_t key);
 

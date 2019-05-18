@@ -23,6 +23,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <string.h>
+
 #include "../src/cpdlc_assert.h"
 
 #include "fans_req.h"
@@ -78,6 +80,13 @@ draw_main_page(fans_t *box)
 }
 
 void
+fans_req_spd_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->spd_req, 0, sizeof (box->spd_req));
+}
+
+void
 fans_req_spd_draw_cb(fans_t *box)
 {
 	ASSERT(box != NULL);
@@ -117,7 +126,7 @@ fans_req_spd_key_cb(fans_t *box, fms_key_t key)
 		if (can_verify_spd_req(box))
 			verify_spd_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
-		fans_set_page(box, FMS_PAGE_REQUESTS);
+		fans_set_page(box, FMS_PAGE_REQUESTS, false);
 	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {
 		fans_req_key_freetext(box, key);
 	} else {

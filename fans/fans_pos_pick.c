@@ -49,7 +49,7 @@ fans_pos_pick_start(fans_t *box, pos_pick_done_cb_t done_cb,
 	box->pos_pick.ret_page = ret_page;
 	box->pos_pick.done_cb = done_cb;
 
-	fans_set_page(box, FMS_PAGE_POS_PICK);
+	fans_set_page(box, FMS_PAGE_POS_PICK, true);
 }
 
 void
@@ -114,7 +114,7 @@ fans_pos_pick_key_cb(fans_t *box, fms_key_t key)
 		ASSERT(box->pos_pick.done_cb != NULL);
 		if (box->pos_pick.pos.set || box->pos_pick.was_set)
 			box->pos_pick.done_cb(box, &box->pos_pick.pos);
-		fans_set_page(box, box->pos_pick.ret_page);
+		fans_set_page(box, box->pos_pick.ret_page, false);
 	} else {
 		return (false);
 	}

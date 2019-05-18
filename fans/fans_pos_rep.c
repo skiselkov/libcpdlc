@@ -155,6 +155,15 @@ draw_page2(fans_t *box)
 }
 
 void
+fans_pos_rep_init_cb(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
+	/* The POS REP page can send freetext as well */
+	memset(&box->req_common, 0, sizeof (box->req_common));
+}
+
+void
 fans_pos_rep_draw_cb(fans_t *box)
 {
 	ASSERT(box != NULL);
