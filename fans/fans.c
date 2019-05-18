@@ -374,23 +374,39 @@ put_str_with_units(fans_t *box, int row, int col, bool align_right,
 	va_end(ap);
 }
 
+#define	DATA_PICK(__type, __name, __test, __userdata, __autodata) \
+	__type __name; \
+	fms_color_t color; \
+	fms_font_t font; \
+	if (__test) { \
+		__name = (__userdata); \
+		color = FMS_COLOR_WHITE; \
+		font = FMS_FONT_LARGE; \
+	} else { \
+		__name = (__autodata); \
+		color = FMS_COLOR_GREEN; \
+		font = FMS_FONT_SMALL; \
+	}
+
 void
 fans_put_alt(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *alt, bool req, bool units)
+    const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
+    bool req, bool units)
 {
 	ASSERT(box != NULL);
-	ASSERT(alt != NULL);
+	DATA_PICK(const cpdlc_arg_t *, alt, useralt->alt.alt != 0,
+	    useralt, autoalt);
 
-	if (alt->alt.alt != 0) {
+	if (alt != NULL && alt->alt.alt != 0) {
 		char buf[8];
 
 		fans_print_alt(alt, buf, sizeof (buf));
 		if (units && !alt->alt.fl) {
 			put_str_with_units(box, row, col, align_right,
-			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "FT", "%s", buf);
+			    color, font, "FT", "%s", buf);
 		} else {
 			fans_put_str(box, row, col, align_right,
-			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "%s", buf);
+			    color, font, "%s", buf);
 		}
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
@@ -400,21 +416,22 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_spd(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *spd, bool req, bool units)
+    const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
+    bool req, bool units)
 {
 	char buf[8];
 
 	ASSERT(box != NULL);
-	ASSERT(spd != NULL);
+	DATA_PICK(const cpdlc_arg_t *, spd, userspd->spd.spd != 0,
+	    userspd, autospd);
 
-	if (spd->spd.spd != 0) {
-		fans_print_spd(spd, buf, sizeof (buf));
+	if (spd != NULL && spd->spd.spd != 0) {
 		if (units && !spd->spd.mach) {
 			put_str_with_units(box, row, col, align_right,
-			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "KT", "%s", buf);
+			    color, font, "KT", "%s", buf);
 		} else {
 			fans_put_str(box, row, col, align_right,
-			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "%s", buf);
+			    color, font, "%s", buf);
 		}
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
@@ -428,6 +445,7 @@ fans_put_hdg(fans_t *box, int row, int col, bool align_right,
 {
 	ASSERT(box != NULL);
 	ASSERT(hdg != NULL);
+
 	if (hdg->set) {
 		fans_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%03d", hdg->hdg);
@@ -441,16 +459,18 @@ fans_put_hdg(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_time(fans_t *box, int row, int col, bool align_right,
-    const fms_time_t *t, bool req, bool colon)
+    const fms_time_t *usertime, const fms_time_t *autotime,
+    bool req, bool colon)
 {
 	ASSERT(box != NULL);
-	if (t->set) {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%02d%s%02d", t->hrs, colon ? " " : "",
-		    t->mins);
+	DATA_PICK(const fms_time_t *, t, usertime->set, usertime, autotime);
+
+	if (t != NULL && t->set) {
+		fans_put_str(box, row, col, align_right, color, font,
+		    "%02d%s%02d", t->hrs, colon ? " " : "", t->mins);
 		if (colon) {
 			fans_put_str(box, row, col + 2, align_right,
-			    FMS_COLOR_CYAN, FMS_FONT_LARGE, ":");
+			    FMS_COLOR_CYAN, font, ":");
 		}
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
@@ -461,13 +481,13 @@ fans_put_time(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_temp(fans_t *box, int row, int col, bool align_right,
-    const fms_temp_t *temp, bool req)
+    const fms_temp_t *usertemp, const fms_temp_t *autotemp, bool req)
 {
 	ASSERT(box != NULL);
-	ASSERT(temp != NULL);
-	if (temp->set) {
-		fans_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%+d", temp->temp);
+	DATA_PICK(const fms_temp_t *, temp, usertemp->set, usertemp, autotemp);
+	if (temp != NULL && temp->set) {
+		fans_put_str(box, row, col + 2, align_right, color,
+		    font, "%+d", temp->temp);
 		fans_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "`C");
 	} else {
@@ -478,15 +498,15 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_pos(fans_t *box, int row, int col, bool align_right,
-    const fms_pos_t *pos, bool req)
+    const fms_pos_t *userpos, const fms_pos_t *autopos, bool req)
 {
 	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
-	if (pos->set) {
+	DATA_PICK(const fms_pos_t *, pos, userpos->set, userpos, autopos);
+	if (pos != NULL && pos->set) {
 		char buf[16];
 		fans_print_pos(pos, buf, sizeof (buf), POS_PRINT_COMPACT);
-		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", buf);
+		fans_put_str(box, row, col, align_right, color,
+		    font, "%s", buf);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "<POS");
@@ -497,16 +517,15 @@ fans_put_pos(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_off(fans_t *box, int row, int col, bool align_right,
-    const fms_off_t *off, bool req)
+    const fms_off_t *useroff, const fms_off_t *autooff, bool req)
 {
 	ASSERT(box != NULL);
-	ASSERT(off != NULL);
+	DATA_PICK(const fms_off_t *, off, useroff->nm != 0, useroff, autooff);
 
-	if (off->nm != 0) {
+	if (off != NULL && off->nm != 0) {
 		ASSERT(off->dir == CPDLC_DIR_LEFT ||
 		    off->dir == CPDLC_DIR_RIGHT);
-		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%c%.0f",
+		fans_put_str(box, row, col, align_right, color, font, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
 	} else {
 		fans_put_str(box, row, col, align_right,
@@ -516,16 +535,16 @@ fans_put_off(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_wind(fans_t *box, int row, int col, bool align_right,
-    const fms_wind_t *wind, bool req)
+    const fms_wind_t *userwind, const fms_wind_t *autowind, bool req)
 {
 	ASSERT(box != NULL);
-	ASSERT(wind != NULL);
+	DATA_PICK(const fms_wind_t *, wind, userwind->set, userwind, autowind);
 
-	if (wind->set) {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%03d %d", wind->deg, wind->spd);
+	if (wind != NULL && wind->set) {
+		fans_put_str(box, row, col, align_right, color, font,
+		    "%03d %d", wind->deg, wind->spd);
 		fans_put_str(box, row, col + 3, align_right, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "/");
+		    font, "/");
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
 		    FMS_FONT_LARGE, req ? "___/___" : "---/---");
@@ -925,7 +944,7 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "TIMEv");
 		fans_put_lsk_title(box, FMS_KEY_LSK_R2, "TIME");
-		fans_put_time(box, LSK2_ROW, 0, true, &step_at->tim,
+		fans_put_time(box, LSK2_ROW, 0, true, &step_at->tim, NULL,
 		    true, true);
 		break;
 	case STEP_AT_POS:
@@ -957,7 +976,7 @@ fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 		ASSERT3U(key, ==, FMS_KEY_LSK_R2);
 
 		if (step_at->type == STEP_AT_TIME) {
-			fans_scratchpad_xfer_time(box, &step_at->tim);
+			fans_scratchpad_xfer_time(box, &step_at->tim, NULL);
 		} else {
 			fans_scratchpad_xfer(box, step_at->pos,
 			    sizeof (step_at->pos), true);
@@ -977,19 +996,21 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 int
 fans_get_cur_alt(const fans_t *box)
 {
+	int alt = 2000;
 	ASSERT(box != NULL);
 	if (box->funcs.get_cur_alt != NULL)
-		return (box->funcs.get_cur_alt(box->userinfo));
-	return (0);
+		alt = box->funcs.get_cur_alt(box->userinfo);
+	return (MAX(alt, 1000));
 }
 
 int
 fans_get_sel_alt(const fans_t *box)
 {
+	int alt = 1000;
 	ASSERT(box != NULL);
 	if (box->funcs.get_sel_alt != NULL)
-		return (box->funcs.get_sel_alt(box->userinfo));
-	return (0);
+		alt = box->funcs.get_sel_alt(box->userinfo);
+	return (MAX(alt, 1000));
 }
 
 bool
@@ -1035,4 +1056,15 @@ fans_get_offset(const fans_t *box)
 	if (box->funcs.get_offset != NULL)
 		return (box->funcs.get_offset(box->userinfo));
 	return (0);
+}
+
+bool
+fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins)
+{
+	ASSERT(box != NULL);
+	ASSERT(hrs != NULL);
+	ASSERT(mins != NULL);
+	if (box->funcs.get_fuel != NULL)
+		return (box->funcs.get_fuel(box->userinfo, hrs, mins));
+	return (false);
 }

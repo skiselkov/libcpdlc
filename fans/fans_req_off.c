@@ -82,7 +82,7 @@ draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "OFFSET");
 	
-	fans_put_off(box, LSK1_ROW, 0, false, &box->off_req.off, true);
+	fans_put_off(box, LSK1_ROW, 0, false, &box->off_req.off, NULL, true);
 
 	fans_req_draw_due(box, true);
 
@@ -125,7 +125,7 @@ fans_req_off_key_cb(fans_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_offset(box, &box->off_req.off);
+		fans_scratchpad_xfer_offset(box, &box->off_req.off, NULL);
 	} else if (box->subpage == 0 &&
 	    (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4)) {
 		fans_req_key_due(box, key);

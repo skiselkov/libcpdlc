@@ -89,25 +89,42 @@ fans_scratchpad_pm(fans_t *box)
 }
 
 void
-fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap, bool allow_mod)
+fans_scratchpad_xfer_auto(fans_t *box, char *dest, const char *autobuf,
+    size_t cap, bool allow_mod)
 {
 	if (!allow_mod) {
 		if (box->scratchpad[0] == '\0') {
-			cpdlc_strlcpy(box->scratchpad, dest,
-			    sizeof (box->scratchpad));
+			if (dest[0] != '\0') {
+				cpdlc_strlcpy(box->scratchpad, dest,
+				    sizeof (box->scratchpad));
+			} else if (autobuf != NULL) {
+				cpdlc_strlcpy(box->scratchpad, autobuf,
+				    sizeof (box->scratchpad));
+			}
 		}
 		return;
 	}
-	if (strcmp(box->scratchpad, "DELETE") == 0) {
+	if (fans_scratchpad_is_delete(box)) {
 		memset(dest, 0, cap);
 		memset(box->scratchpad, 0, sizeof (box->scratchpad));
 	} else if (box->scratchpad[0] == '\0') {
-		cpdlc_strlcpy(box->scratchpad, dest,
-		    sizeof (box->scratchpad));
+		if (dest[0] != '\0') {
+			cpdlc_strlcpy(box->scratchpad, dest,
+			    sizeof (box->scratchpad));
+		} else if (autobuf != NULL) {
+			cpdlc_strlcpy(box->scratchpad, autobuf,
+			    sizeof (box->scratchpad));
+		}
 	} else {
 		cpdlc_strlcpy(dest, box->scratchpad, cap);
 		memset(box->scratchpad, 0, sizeof (box->scratchpad));
 	}
+}
+
+void
+fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap, bool allow_mod)
+{
+	fans_scratchpad_xfer_auto(box, dest, NULL, cap, allow_mod);
 }
 
 bool
@@ -213,20 +230,24 @@ fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg)
 }
 
 void
-fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *alt)
+fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
+    const cpdlc_arg_t *autoalt)
 {
-	char buf[8] = { 0 };
+	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
 	ASSERT(box != NULL);
-	ASSERT(alt != NULL);
+	ASSERT(useralt != NULL);
 
-	if (alt->alt.alt != 0)
-		fans_print_alt(alt, buf, sizeof (buf));
-	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
-	if (strlen(buf) != 0)
-		fans_set_error(box, fans_parse_alt(buf, 0, alt));
+	if (useralt->alt.alt != 0)
+		fans_print_alt(useralt, userbuf, sizeof (userbuf));
+	if (autoalt != NULL && autoalt->alt.alt != 0)
+		fans_print_alt(autoalt, autobuf, sizeof (autobuf));
+	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
+	    true);
+	if (strlen(userbuf) != 0)
+		fans_set_error(box, fans_parse_alt(userbuf, 0, useralt));
 	else
-		memset(alt, 0, sizeof (*alt));
+		memset(useralt, 0, sizeof (*useralt));
 }
 
 void
@@ -283,27 +304,35 @@ fans_scratchpad_xfer_uint(fans_t *box, unsigned *value, bool *set,
 }
 
 void
-fans_scratchpad_xfer_time(fans_t *box, fms_time_t *t)
+fans_scratchpad_xfer_time(fans_t *box, fms_time_t *usertime,
+    const fms_time_t *autotime)
 {
-	char buf[8] = { 0 };
+	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	int hrs, mins;
 
 	ASSERT(box != NULL);
-	ASSERT(t != NULL);
+	ASSERT(usertime != NULL);
 
-	if (t->set)
-		snprintf(buf, sizeof (buf), "%02d%02d", t->hrs, t->mins);
-	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
-	if (strlen(buf) != 0) {
-		if (!fans_parse_time(buf, &hrs, &mins)) {
+	if (usertime->set) {
+		snprintf(userbuf, sizeof (userbuf), "%02d%02d", usertime->hrs,
+		    usertime->mins);
+	}
+	if (autotime != NULL && autotime->set) {
+		snprintf(autobuf, sizeof (autobuf), "%02d%02d", autotime->hrs,
+		    autotime->mins);
+	}
+	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
+	    true);
+	if (strlen(userbuf) != 0) {
+		if (!fans_parse_time(userbuf, &hrs, &mins)) {
 			fans_set_error(box, "FORMAT ERROR");
 		} else {
-			t->hrs = hrs;
-			t->mins = mins;
-			t->set = true;
+			usertime->hrs = hrs;
+			usertime->mins = mins;
+			usertime->set = true;
 		}
 	} else {
-		t->set = false;
+		usertime->set = false;
 	}
 }
 
@@ -336,80 +365,95 @@ parse_dir(char *buf, cpdlc_dir_t *dir)
 }
 
 void
-fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *off)
+fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
+    const fms_off_t *autooff)
 {
-	char buf[8];
+	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
 	ASSERT(box != NULL);
-	ASSERT(off != NULL);
+	ASSERT(useroff != NULL);
 
-	fans_print_off(off, buf, sizeof (buf));
-	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
-	if (strlen(buf) != 0) {
+	fans_print_off(useroff, userbuf, sizeof (userbuf));
+	if (autooff != NULL)
+		fans_print_off(autooff, autobuf, sizeof (autobuf));
+	
+	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
+	    true);
+	if (strlen(userbuf) != 0) {
 		unsigned nm;
 		cpdlc_dir_t dir;
 
-		if (strlen(buf) < 2 || !parse_dir(buf, &dir) ||
-		    sscanf(buf, "%d", &nm) != 1 || nm == 0 || nm > 999) {
+		if (strlen(userbuf) < 2 || !parse_dir(userbuf, &dir) ||
+		    sscanf(userbuf, "%d", &nm) != 1 || nm == 0 || nm > 999) {
 			fans_set_error(box, "FORMAT ERROR");
 		} else {
-			off->dir = dir;
-			off->nm = nm;
+			useroff->dir = dir;
+			useroff->nm = nm;
 		}
 	} else {
-		off->nm = 0;
+		useroff->nm = 0;
 	}
 }
 
 void
-fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *spd)
+fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
+    const cpdlc_arg_t *autospd)
 {
-	char buf[8] = { 0 };
-	cpdlc_arg_t new_spd = { .spd.spd = 0 };
-	const char *error;
+	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
 	ASSERT(box != NULL);
-	ASSERT(spd != NULL);
+	ASSERT(userspd != NULL);
 
-	if (spd->spd.spd != 0)
-		fans_print_spd(spd, buf, sizeof (buf));
-	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
-	error = fans_parse_spd(buf, 0, &new_spd);
-	fans_set_error(box, error);
-	if (error == NULL)
-		memcpy(spd, &new_spd, sizeof (new_spd));
+	if (userspd->spd.spd != 0)
+		fans_print_spd(userspd, userbuf, sizeof (userbuf));
+	if (autospd != NULL && autospd->spd.spd != 0)
+		fans_print_spd(autospd, autobuf, sizeof (autobuf));
+	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
+	    true);
+	if (strlen(userbuf) != 0) {
+		cpdlc_arg_t new_spd = { .spd.spd = 0 };
+		const char *error = fans_parse_spd(userbuf, 0, &new_spd);
+
+		fans_set_error(box, error);
+		if (error == NULL)
+			memcpy(userspd, &new_spd, sizeof (new_spd));
+	}
 }
 
 void
-fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *temp)
+fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *usertemp,
+    const fms_temp_t *autotemp)
 {
-	char buf[8] = { 0 };
+	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	int new_temp;
 
 	ASSERT(box != NULL);
-	ASSERT(temp != NULL);
+	ASSERT(usertemp != NULL);
 
-	if (temp->set)
-		snprintf(buf, sizeof (buf), "%d", temp->temp);
-	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
-	if (strlen(buf) == 0) {
-		temp->set = false;
-	} else {
+	if (usertemp->set)
+		snprintf(userbuf, sizeof (userbuf), "%d", usertemp->temp);
+	if (autotemp != NULL && autotemp->set)
+		snprintf(autobuf, sizeof (autobuf), "%d", autotemp->temp);
+	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
+	    true);
+	if (strlen(userbuf) != 0) {
 		int mult = 1;
 
-		if (buf[0] == 'P' || buf[0] == 'M') {
-			if (buf[0] == 'M')
+		if (userbuf[0] == 'P' || userbuf[0] == 'M') {
+			if (userbuf[0] == 'M')
 				mult = -1;
-			memmove(&buf[0], &buf[1], sizeof (buf) - 1);
+			memmove(&userbuf[0], &userbuf[1], sizeof (userbuf) - 1);
 		}
 
-		if (sscanf(buf, "%d", &new_temp) == 1 &&
+		if (sscanf(userbuf, "%d", &new_temp) == 1 &&
 		    new_temp >= TEMP_MIN && new_temp <= TEMP_MAX) {
-			temp->set = true;
-			temp->temp = new_temp * mult;
+			usertemp->set = true;
+			usertemp->temp = new_temp * mult;
 		} else {
 			fans_set_error(box, "FORMAT ERROR");
 		}
+	} else {
+		usertemp->set = false;
 	}
 }
 

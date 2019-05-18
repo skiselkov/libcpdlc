@@ -48,9 +48,9 @@ verify_alt_req(fans_t *box)
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 	int clb = 0, cur_alt = fans_get_cur_alt(box);
 
-	if (box->alt_req.alt[0].alt.alt >= cur_alt + 150)
+	if (box->alt_req.alt[0].alt.alt >= cur_alt + LVL_ALT_THRESH)
 		clb = 1;
-	else if (box->alt_req.alt[0].alt.alt <= cur_alt - 150)
+	else if (box->alt_req.alt[0].alt.alt <= cur_alt - LVL_ALT_THRESH)
 		clb = -1;
 
 	if (box->alt_req.step_at.type != STEP_AT_NONE) {
@@ -112,18 +112,18 @@ static void
 draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
-	fans_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0],
+	fans_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0], NULL,
 	    true, false);
 	fans_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
-	fans_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1],
+	fans_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1], NULL,
 	    false, false);
 
 	fans_req_draw_due(box, false);
 
 	fans_put_step_at(box, &box->alt_req.step_at);
 
-	if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESHOLD) {
+	if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH) {
 		fans_put_lsk_title(box, FMS_KEY_LSK_L4, "CRZ CLB");
 		fans_put_altn_selector(box, LSK4_ROW, false,
 		    box->alt_req.crz_clb, "NO", "YES", NULL);
@@ -183,7 +183,7 @@ fans_req_alt_key_cb(fans_t *box, fms_key_t key)
 			box->alt_req.step_at.type = STEP_AT_NONE;
 			box->alt_req.crz_clb = false;
 		}
-		if (box->alt_req.alt[0].alt.alt < CRZ_CLB_THRESHOLD ||
+		if (box->alt_req.alt[0].alt.alt < CRZ_CLB_THRESH ||
 		    box->alt_req.alt[1].alt.alt != 0) {
 			/*
 			 * If the altitude is below the CRZ CLB threshold,
@@ -195,7 +195,7 @@ fans_req_alt_key_cb(fans_t *box, fms_key_t key)
 	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {
 		fans_req_key_due(box, key);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESHOLD) {
+		if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH) {
 			box->alt_req.crz_clb = !box->alt_req.crz_clb;
 			/* cruise climbs cannot be block or STEP AT requests */
 			memset(&box->alt_req.alt[1], 0,

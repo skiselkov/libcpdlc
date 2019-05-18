@@ -103,6 +103,7 @@ typedef int (*fans_get_cur_alt_t)(void *userinfo);
 typedef int (*fans_get_sel_alt_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
 typedef int (*fans_get_offset_t)(void *userinfo);
+typedef bool (*fans_get_fuel_t)(void *userinfo, unsigned *hrs, unsigned *mins);
 
 typedef struct {
 	cpdlc_get_time_func_t	get_time;
@@ -113,6 +114,7 @@ typedef struct {
 	fans_get_wpt_info_t	get_next_next_wpt;
 	fans_get_wpt_info_t	get_dest_wpt;
 	fans_get_offset_t	get_offset;
+	fans_get_fuel_t		get_fuel;
 } fans_funcs_t;
 
 fans_t *fans_alloc(const char *hostname, unsigned port, const char *ca_file,

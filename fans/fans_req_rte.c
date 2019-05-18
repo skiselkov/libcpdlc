@@ -39,10 +39,11 @@ draw_main_page(fans_t *box)
 	ASSERT(box != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "DIRECT TO");
-	fans_put_pos(box, LSK1_ROW, 0, false, &box->rte_req.dct, false);
+	fans_put_pos(box, LSK1_ROW, 0, false, &box->rte_req.dct, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "WX DEV TO");
-	fans_put_pos(box, LSK2_ROW, 0, false, &box->rte_req.wx_dev, false);
+	fans_put_pos(box, LSK2_ROW, 0, false, &box->rte_req.wx_dev,
+	    false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "HEADING");
 	fans_put_hdg(box, LSK1_ROW, 0, true, &box->rte_req.hdg, false);

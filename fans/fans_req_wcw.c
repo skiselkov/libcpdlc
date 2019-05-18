@@ -101,9 +101,9 @@ draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALTITUDE");
 	fans_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt,
-	    false, true);
+	    false, true, false);
 
-	if (box->wcw_req.alt.alt.alt >= CRZ_CLB_THRESHOLD) {
+	if (box->wcw_req.alt.alt.alt >= CRZ_CLB_THRESH) {
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "CRZ CLB");
 		fans_put_altn_selector(box, LSK2_ROW, false,
 		    box->wcw_req.crz_clb, "NO", "YES", NULL);
@@ -116,12 +116,12 @@ draw_main_page(fans_t *box)
 	    "NONE", "HIGHER", "LOWER", NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "SPD/SPD BLOCK");
-	fans_put_spd(box, LSK1_ROW, 4, true,
-	    &box->wcw_req.spd[0], false, false);
+	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0],
+	    false, false, false);
 	fans_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_CYAN,
 	    FMS_FONT_LARGE, "/");
-	fans_put_spd(box, LSK1_ROW, 0, true,
-	    &box->wcw_req.spd[1], false, false);
+	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1],
+	    false, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
 	fans_put_altn_selector(box, LSK2_ROW, true,

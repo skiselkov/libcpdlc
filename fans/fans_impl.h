@@ -50,7 +50,15 @@ extern "C" {
 #define	MAX_FREETEXT_LINES	8
 #define	REQ_FREETEXT_LINES	4
 #define	REJ_FREETEXT_LINES	3
-#define	CRZ_CLB_THRESHOLD	32000	/* feet */
+#define	CRZ_CLB_THRESH		32000	/* feet */
+#define	LVL_ALT_THRESH		150	/* feet */
+
+#ifndef	MAX
+#define	MAX(__x, __y)	((__x) >= (__y) ? (__x) : (__y))
+#endif
+#ifndef	MIN
+#define	MIN(__x, __y)	((__x) <= (__y) ? (__x) : (__y))
+#endif
 
 #define	APPEND_SNPRINTF(__buf, __len, ...) \
 	do { \
@@ -67,9 +75,9 @@ typedef struct {
 } fms_page_t;
 
 typedef struct {
-	bool	set;
-	int	hrs;
-	int	mins;
+	bool		set;
+	unsigned	hrs;
+	unsigned	mins;
 } fms_time_t;
 
 typedef enum {
@@ -256,9 +264,11 @@ struct fans_s {
 	} pos_pick;
 	struct {
 		bool			pan;
+		fms_time_t		fuel_auto;
 		fms_time_t		fuel;
 		bool			souls_set;
 		unsigned		souls;
+		cpdlc_arg_t		des_auto;
 		cpdlc_arg_t		des;
 		fms_off_t		off;
 		fms_pos_t		divert;
@@ -314,21 +324,24 @@ void fans_put_altn_selector(fans_t *box, int row, bool align_right,
     int option, const char *first, ...);
 
 void fans_put_alt(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *alt, bool req, bool units);
+    const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
+    bool req, bool units);
 void fans_put_spd(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *spd, bool req, bool units);
+    const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
+    bool req, bool units);
 void fans_put_hdg(fans_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req);
 void fans_put_time(fans_t *box, int row, int col, bool align_right,
-    const fms_time_t *t, bool req, bool colon);
+    const fms_time_t *usertime, const fms_time_t *autotime,
+    bool req, bool colon);
 void fans_put_temp(fans_t *box, int row, int col, bool align_right,
-    const fms_temp_t *temp, bool req);
+    const fms_temp_t *usertemp, const fms_temp_t *autotemp, bool req);
 void fans_put_pos(fans_t *box, int row, int col, bool align_right,
-    const fms_pos_t *pos, bool req);
+    const fms_pos_t *userpos, const fms_pos_t *autopos, bool req);
 void fans_put_off(fans_t *box, int row, int col, bool align_right,
-    const fms_off_t *off, bool req);
+    const fms_off_t *useroff, const fms_off_t *autooff, bool req);
 void fans_put_wind(fans_t *box, int row, int col, bool align_right,
-    const fms_wind_t *wind, bool req);
+    const fms_wind_t *userwind, const fms_wind_t *autowind, bool req);
 
 const char *fans_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
@@ -352,6 +365,7 @@ bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info);
 int fans_get_offset(const fans_t *box);
+bool fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins);
 
 #ifdef	__cplusplus
 }

@@ -41,6 +41,8 @@ verify_emer(fans_t *box)
 	unsigned l = 0;
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_arg_t des;
+	fms_time_t fuel;
 
 	if (box->emer.pan)
 		APPEND_SNPRINTF(buf, l, "PAN PAN PAN.");
@@ -69,26 +71,25 @@ verify_emer(fans_t *box)
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	}
-	if (box->emer.des.alt.alt != 0) {
+	des = (box->emer.des.alt.alt != 0 ? box->emer.des : box->emer.des_auto);
+	if (des.alt.alt != 0) {
 		char altbuf[128];
-		fans_print_alt(&box->emer.des, altbuf, sizeof (altbuf));
+		fans_print_alt(&des, altbuf, sizeof (altbuf));
 		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s%s.", altbuf,
-		    box->emer.des.alt.fl ? "" : " FT");
+		    des.alt.fl ? "" : " FT");
 	}
 	if (box->emer.off.nm != 0) {
 		APPEND_SNPRINTF(buf, l, " OFFSETTING %.0f NM %c OF ROUTE.",
 		    box->emer.off.nm,
 		    box->emer.off.dir == CPDLC_DIR_LEFT ? 'L' : 'R');
 	}
-	if (box->emer.fuel.set) {
-		if (box->emer.fuel.hrs != 0) {
-			APPEND_SNPRINTF(buf, l, " %d HRS", box->emer.fuel.hrs);
-		}
+	fuel = (box->emer.fuel.set ? box->emer.fuel : box->emer.fuel_auto);
+	if (fuel.set) {
+		if (fuel.hrs != 0)
+			APPEND_SNPRINTF(buf, l, " %d HRS", fuel.hrs);
 		/* Handles the 00:00 fuel figure */
-		if (box->emer.fuel.mins != 0 || box->emer.fuel.hrs == 0) {
-			APPEND_SNPRINTF(buf, l, " %d MINS",
-			    box->emer.fuel.mins);
-		}
+		if (fuel.mins != 0 || fuel.hrs == 0)
+			APPEND_SNPRINTF(buf, l, " %d MINS", fuel.mins);
 		APPEND_SNPRINTF(buf, l, " OF FUEL REMAINING");
 
 		if (box->emer.souls_set)
@@ -134,7 +135,8 @@ draw_main_page(fans_t *box)
 	    "MAYDAY", "PAN", NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "FUEL");
-	fans_put_time(box, LSK3_ROW, 0, false, &box->emer.fuel, false, true);
+	fans_put_time(box, LSK3_ROW, 0, false, &box->emer.fuel,
+	    &box->emer.fuel_auto, false, true);
 	fans_put_str(box, LSK3_ROW, 6, false, FMS_COLOR_GREEN,
 	    FMS_FONT_SMALL, "HH:MM");
 
@@ -148,24 +150,15 @@ draw_main_page(fans_t *box)
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "DESCEND TO");
-	fans_put_alt(box, LSK2_ROW, 0, true, &box->emer.des, false, true);
+	fans_put_alt(box, LSK2_ROW, 0, true, &box->emer.des,
+	    &box->emer.des_auto, false, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "OFFSET TO");
-	fans_put_off(box, LSK3_ROW, 0, true, &box->emer.off, false);
+	fans_put_off(box, LSK3_ROW, 0, true, &box->emer.off,
+	    false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "DIVERT TO");
-	fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
-	    FMS_FONT_LARGE, "POS>");
-	if (box->emer.divert.set) {
-		char buf[16];
-		fans_print_pos(&box->emer.divert, buf, sizeof (buf),
-		    POS_PRINT_COMPACT);
-		fans_put_str(box, LSK4_ROW, 5, true, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "%s", buf);
-	} else {
-		fans_put_str(box, LSK4_ROW, 5, true, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "----------");
-	}
+	fans_put_pos(box, LSK4_ROW, 0, true, &box->emer.divert, NULL, false);
 
 	switch (box->emer.reason) {
 	case EMER_REASON_NONE:
@@ -196,10 +189,20 @@ draw_main_page(fans_t *box)
 void
 fans_emer_init_cb(fans_t *box)
 {
+	int cur_alt, sel_alt;
+
 	/* The EMER page can send freetext as well */
 	ASSERT(box != NULL);
 	memset(&box->emer, 0, sizeof (box->emer));
 	memset(&box->req_common, 0, sizeof (box->req_common));
+
+	cur_alt = fans_get_cur_alt(box);
+	sel_alt = fans_get_sel_alt(box);
+
+	box->emer.fuel_auto.set = fans_get_fuel(box, &box->emer.fuel_auto.hrs,
+	    &box->emer.fuel_auto.mins);
+	if (cur_alt >= sel_alt + LVL_ALT_THRESH)
+		box->emer.des_auto.alt.alt = sel_alt;
 }
 
 void
@@ -228,14 +231,16 @@ fans_emer_key_cb(fans_t *box, fms_key_t key)
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->emer.pan = !box->emer.pan;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
-		fans_scratchpad_xfer_time(box, &box->emer.fuel);
+		fans_scratchpad_xfer_time(box, &box->emer.fuel,
+		    &box->emer.fuel_auto);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
 		fans_scratchpad_xfer_uint(box, &box->emer.souls,
 		    &box->emer.souls_set, 1, 999);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_alt(box, &box->emer.des);
+		fans_scratchpad_xfer_alt(box, &box->emer.des,
+		    &box->emer.des_auto);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R3) {
-		fans_scratchpad_xfer_offset(box, &box->emer.off);
+		fans_scratchpad_xfer_offset(box, &box->emer.off, NULL);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		if (fans_scratchpad_is_delete(box)) {
 			fans_scratchpad_clear(box);

@@ -37,22 +37,28 @@ void fans_update_scratchpad(fans_t *box);
 bool fans_scratchpad_is_delete(fans_t *box);
 void fans_scratchpad_clear(fans_t *box);
 void fans_scratchpad_pm(fans_t *box);
-void fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap,
-    bool allow_mod);
+void fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap, bool allow_mod);
+void fans_scratchpad_xfer_auto(fans_t *box, char *dest, const char *autobuf,
+    size_t cap, bool allow_mod);
 bool fans_scratchpad_xfer_multi(fans_t *box, void *userinfo, size_t buf_sz,
     fans_parse_func_t parse_func, fans_insert_func_t insert_func,
     fans_delete_func_t delete_func, fans_read_func_t read_func);
 void fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg);
-void fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *alt);
 void fans_scratchpad_xfer_pos(fans_t *box, fms_pos_t *pos,
     unsigned fms_page, pos_pick_done_cb_t done_cb);
 void fans_scratchpad_xfer_pos_impl(fans_t *box, fms_pos_t *pos);
 void fans_scratchpad_xfer_uint(fans_t *box, unsigned *value, bool *set,
     unsigned minval, unsigned maxval);
-void fans_scratchpad_xfer_time(fans_t *box, fms_time_t *t);
-void fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *off);
-void fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *spd);
-void fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *temp);
+void fans_scratchpad_xfer_time(fans_t *box, fms_time_t *usertime,
+    const fms_time_t *autotime);
+void fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
+    const fms_off_t *autooff);
+void fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
+    const cpdlc_arg_t *autoalt);
+void fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
+    const cpdlc_arg_t *autospd);
+void fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *usertemp,
+    const fms_temp_t *autotemp);
 void fans_scratchpad_xfer_wind(fans_t *box, fms_wind_t *wind);
 
 #ifdef	__cplusplus
