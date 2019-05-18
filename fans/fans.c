@@ -936,7 +936,7 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "%s", step_at->pos);
 		} else {
-			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
+			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_CYAN,
 			    FMS_FONT_LARGE, "_____");
 		}
 		break;
