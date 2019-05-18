@@ -34,7 +34,7 @@
 #include "../src/cpdlc_assert.h"
 #include "../src/cpdlc_client.h"
 #include "../src/cpdlc_msglist.h"
-#include "../fmsbox/fmsbox.h"
+#include "../fans/fans.h"
 
 #define	POLL_INTVAL	1000	/* ms */
 #define	DEL_CHAR	0x7f
@@ -42,7 +42,7 @@
 #define	OFF_Y		1
 
 static WINDOW *win = NULL;
-static fmsbox_t *fmsbox = NULL;
+static fans_t *fans = NULL;
 static bool lsk_right = false;
 static int lsk_nr = 0;
 
@@ -50,8 +50,8 @@ static void
 handle_signal(int signum)
 {
 	UNUSED(signum);
-	if (fmsbox != NULL)
-		fmsbox_free(fmsbox);
+	if (fans != NULL)
+		fans_free(fans);
 	if (win != NULL)
 		endwin();
 	exit(EXIT_SUCCESS);
@@ -104,11 +104,11 @@ static void
 proc_input(int c)
 {
 	if (c == KEY_BACKSPACE || c == KEY_DC) {
-		fmsbox_push_key(fmsbox, FMS_KEY_CLR_DEL);
+		fans_push_key(fans, FMS_KEY_CLR_DEL);
 	} else if (is_fms_entry_key(c)) {
-		fmsbox_push_char(fmsbox, c);
+		fans_push_char(fans, c);
 	} else if (c == '+' || c == '-') {
-		fmsbox_push_key(fmsbox, FMS_KEY_PLUS_MINUS);
+		fans_push_key(fans, FMS_KEY_PLUS_MINUS);
 	} else if (c == KEY_LEFT || c == KEY_RIGHT) {
 		lsk_right = !lsk_right;
 	} else if (c == KEY_UP) {
@@ -120,13 +120,13 @@ proc_input(int c)
 		lsk_nr = (lsk_nr + 1) % 6;
 	} else if (c == KEY_ENTER || c == '\n') {
 		if (lsk_right)
-			fmsbox_push_key(fmsbox, FMS_KEY_LSK_R1 + lsk_nr);
+			fans_push_key(fans, FMS_KEY_LSK_R1 + lsk_nr);
 		else
-			fmsbox_push_key(fmsbox, FMS_KEY_LSK_L1 + lsk_nr);
+			fans_push_key(fans, FMS_KEY_LSK_L1 + lsk_nr);
 	} else if (c == KEY_NPAGE) {
-		fmsbox_push_key(fmsbox, FMS_KEY_NEXT);
+		fans_push_key(fans, FMS_KEY_NEXT);
 	} else if (c == KEY_PPAGE) {
-		fmsbox_push_key(fmsbox, FMS_KEY_PREV);
+		fans_push_key(fans, FMS_KEY_PREV);
 	}
 }
 
@@ -216,11 +216,11 @@ draw_screen(void)
 	fms_color_t color = FMS_COLOR_WHITE;
 
 	attron(COLOR_PAIR(color));
-	for (unsigned row_i = 0; row_i < FMSBOX_ROWS; row_i++) {
-		const fms_char_t *row = fmsbox_get_screen_row(fmsbox, row_i);
+	for (unsigned row_i = 0; row_i < FMS_ROWS; row_i++) {
+		const fms_char_t *row = fans_get_screen_row(fans, row_i);
 
 		move(row_i + OFF_Y, OFF_X);
-		for (unsigned col_i = 0; col_i < FMSBOX_COLS; col_i++) {
+		for (unsigned col_i = 0; col_i < FMS_COLS; col_i++) {
 			const char *str;
 
 			if (row[col_i].color != color) {
@@ -244,13 +244,13 @@ draw_screen(void)
 
 	move(0, OFF_X - 1);
 	printw("+------------------------+");
-	for (int i = 0; i < FMSBOX_ROWS; i++) {
+	for (int i = 0; i < FMS_ROWS; i++) {
 		move(OFF_Y + i, OFF_X - 1);
 		printw("|");
-		move(OFF_Y + i, OFF_X + FMSBOX_COLS);
+		move(OFF_Y + i, OFF_X + FMS_COLS);
 		printw("|");
 	}
-	move(FMSBOX_ROWS + OFF_Y, OFF_X - 1);
+	move(FMS_ROWS + OFF_Y, OFF_X - 1);
 	printw("+------------------------+");
 	for (int i = 0; i < 6; i++) {
 		if (!lsk_right && lsk_nr == i)
@@ -262,13 +262,13 @@ draw_screen(void)
 
 		if (lsk_right && lsk_nr == i)
 			attron(COLOR_PAIR(FMS_COLOR_WHITE_INV));
-		move(2 * i + 2 + OFF_Y, OFF_X + FMSBOX_COLS + 1);
+		move(2 * i + 2 + OFF_Y, OFF_X + FMS_COLS + 1);
 		printw("[R%d]", i + 1);
 		if (lsk_right && lsk_nr == i)
 			attroff(COLOR_PAIR(FMS_COLOR_WHITE_INV));
 	}
 
-	move(OFF_Y + FMSBOX_ROWS + 2, 0);
+	move(OFF_Y + FMS_ROWS + 2, 0);
 
 	refresh();
 }
@@ -283,8 +283,8 @@ main(void)
 
 	init_term();
 
-	fmsbox = fmsbox_alloc(hostname, port, ca_file);
-	ASSERT(fmsbox != NULL);
+	fans = fans_alloc(hostname, port, ca_file);
+	ASSERT(fans != NULL);
 
 	draw_screen();
 	for (;;) {
@@ -292,11 +292,11 @@ main(void)
 
 		if (res == 1)
 			read_input();
-		fmsbox_update(fmsbox);
+		fans_update(fans);
 		draw_screen();
 	}
 
-	fmsbox_free(fmsbox);
+	fans_free(fans);
 	echo();
 	endwin();
 

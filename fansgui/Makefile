@@ -22,46 +22,28 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-ifeq ($(shell uname),Linux)
-	PLATFORM_DEFS=-DLIN=1 -DIBM=0 -DAPL=0
-	PLATFORM_NAME=linux-64
-	PLATFORM_LIBNAME=lin64
-else
-	PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=1
-	PLATFORM_NAME=mac-64
-	PLATFORM_LIBNAME=mac64
-endif
+include ../Makefile.vars
+include ../Makefile.com
 
-SRCPREFIX=../src
-FANS=../fans
+CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O2 -g -DDEBUG \
+	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
+	$(shell pkg-config gnutls --cflags)
+LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
+	$(shell pkg-config gnutls --libs) \
+	-lGL -lX11 -ldl -lpthread -lm
 
-CORE_SRC_OBJS=\
-	$(SRCPREFIX)/cpdlc_assert.o \
-	$(SRCPREFIX)/cpdlc_client.o \
-	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o \
-	$(SRCPREFIX)/cpdlc_msglist.o \
-	$(SRCPREFIX)/minilist.o \
+OBJS = \
+	mtcr_mini.o \
+	fansgui.o \
+	$(CORE_SRC_OBJS) \
+	$(FANS_OBJS)
 
-FANS_OBJS=\
-	$(FANS)/fans.o \
-	$(FANS)/fans_emer.o \
-	$(FANS)/fans_freetext.o \
-	$(FANS)/fans_main_menu.o \
-	$(FANS)/fans_msg.o \
-	$(FANS)/fans_logon_status.o \
-	$(FANS)/fans_parsing.o \
-	$(FANS)/fans_pos_pick.o \
-	$(FANS)/fans_pos_rep.o \
-	$(FANS)/fans_rej.o \
-	$(FANS)/fans_req.o \
-	$(FANS)/fans_req_alt.o \
-	$(FANS)/fans_req_clx.o \
-	$(FANS)/fans_req_off.o \
-	$(FANS)/fans_req_rte.o \
-	$(FANS)/fans_req_spd.o \
-	$(FANS)/fans_req_vmc.o \
-	$(FANS)/fans_req_wcw.o \
-	$(FANS)/fans_req_voice.o \
-	$(FANS)/fans_scratchpad.o \
-	$(FANS)/fans_vrfy.o
+all : fansgui
+
+fansgui : $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+clean :
+	rm -f fansgui $(OBJS)

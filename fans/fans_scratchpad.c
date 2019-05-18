@@ -1,0 +1,422 @@
+/*
+ * Copyright 2019 Saso Kiselkov
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../src/cpdlc_alloc.h"
+#include "../src/cpdlc_assert.h"
+#include "../src/cpdlc_string.h"
+
+#include "fans.h"
+#include "fans_impl.h"
+#include "fans_parsing.h"
+#include "fans_pos_pick.h"
+#include "fans_scratchpad.h"
+
+#define	TEMP_MAX	99
+#define	TEMP_MIN	-99
+
+void
+fans_update_scratchpad(fans_t *box)
+{
+	fans_put_str(box, SCRATCHPAD_ROW, 0, false, FMS_COLOR_CYAN,
+	    FMS_FONT_LARGE, "[");
+	fans_put_str(box, SCRATCHPAD_ROW, 1, false, FMS_COLOR_WHITE,
+	    FMS_FONT_LARGE, "%s", box->scratchpad);
+	fans_put_str(box, SCRATCHPAD_ROW, 0, true, FMS_COLOR_CYAN,
+	    FMS_FONT_LARGE, "]");
+}
+
+bool
+fans_scratchpad_is_delete(fans_t *box)
+{
+	ASSERT(box != NULL);
+	return (strcmp(box->scratchpad, "DELETE") == 0);
+}
+
+void
+fans_scratchpad_clear(fans_t *box)
+{
+	ASSERT(box != NULL);
+	memset(box->scratchpad, 0, sizeof (box->scratchpad));
+}
+
+void
+fans_scratchpad_pm(fans_t *box)
+{
+	int n;
+
+	ASSERT(box != NULL);
+
+	n = strlen(box->scratchpad);
+	if (n == 0) {
+		cpdlc_strlcpy(box->scratchpad, "+", sizeof (box->scratchpad));
+	} else {
+		if (box->scratchpad[n - 1] == '+') {
+			box->scratchpad[n - 1] = '-';
+		} else if (box->scratchpad[n - 1] == '-') {
+			box->scratchpad[n - 1] = '+';
+		} else if (n + 1 < (int)sizeof (box->scratchpad)) {
+			strncat(box->scratchpad, "+",
+			    sizeof (box->scratchpad) - 1);
+		}
+	}
+}
+
+void
+fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap, bool allow_mod)
+{
+	if (!allow_mod) {
+		if (box->scratchpad[0] == '\0') {
+			cpdlc_strlcpy(box->scratchpad, dest,
+			    sizeof (box->scratchpad));
+		}
+		return;
+	}
+	if (strcmp(box->scratchpad, "DELETE") == 0) {
+		memset(dest, 0, cap);
+		memset(box->scratchpad, 0, sizeof (box->scratchpad));
+	} else if (box->scratchpad[0] == '\0') {
+		cpdlc_strlcpy(box->scratchpad, dest,
+		    sizeof (box->scratchpad));
+	} else {
+		cpdlc_strlcpy(dest, box->scratchpad, cap);
+		memset(box->scratchpad, 0, sizeof (box->scratchpad));
+	}
+}
+
+bool
+fans_scratchpad_xfer_multi(fans_t *box, void *userinfo, size_t buf_sz,
+    fans_parse_func_t parse_func, fans_insert_func_t insert_func,
+    fans_delete_func_t delete_func, fans_read_func_t read_func)
+{
+	const char *error = NULL;
+
+	ASSERT(box != NULL);
+	ASSERT(buf_sz != 0);
+	ASSERT(parse_func != NULL);
+	ASSERT(insert_func != NULL);
+	ASSERT(delete_func != NULL);
+
+	if (strlen(box->scratchpad) == 0) {
+		if (read_func != NULL) {
+			char str[READ_FUNC_BUF_SZ] = { 0 };
+
+			read_func(box, userinfo, str);
+			if (strlen(str) == 0) {
+				error = "NO DATA";
+			} else {
+				cpdlc_strlcpy(box->scratchpad, str,
+				    sizeof (box->scratchpad));
+			}
+		}
+	} else if (strcmp(box->scratchpad, "DELETE") == 0) {
+		error = delete_func(box, userinfo);
+		memset(box->scratchpad, 0, sizeof (box->scratchpad));
+	} else {
+		const char *start = box->scratchpad;
+		const char *end = start + strlen(start);
+		void *data_buf = safe_malloc(buf_sz);
+
+		for (unsigned field_nr = 0; start < end; field_nr++) {
+			char substr[SCRATCHPAD_MAX + 1];
+			const char *sep = strchr(start, '/');
+
+			if (sep == NULL)
+				sep = end;
+			cpdlc_strlcpy(substr, start, (sep - start) + 1);
+			start = sep + 1;
+
+			if (strlen(substr) == 0)
+				continue;
+			memset(data_buf, 0, buf_sz);
+			error = parse_func(substr, field_nr, data_buf);
+			if (error != NULL)
+				break;
+			error = insert_func(box, field_nr, data_buf, userinfo);
+			if (error != NULL)
+				break;
+		}
+		free(data_buf);
+		memset(box->scratchpad, 0, sizeof (box->scratchpad));
+	}
+
+	fans_set_error(box, error);
+
+	return (error == NULL);
+}
+
+void
+fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg)
+{
+	char buf[8] = { 0 };
+	int new_hdg;
+	const char *error = NULL;
+
+	ASSERT(box != NULL);
+	ASSERT(hdg != NULL);
+
+	if (hdg->set) {
+		if (hdg->tru)
+			snprintf(buf, sizeof (buf), "%03dT", hdg->hdg);
+		else
+			snprintf(buf, sizeof (buf), "%03d", hdg->hdg);
+	}
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) == 0) {
+		hdg->set = false;
+	} else if (sscanf(buf, "%d", &new_hdg) == 1 && new_hdg >= 0 &&
+	    new_hdg <= 360) {
+		char last = buf[strlen(buf) - 1];
+		hdg->set = true;
+		hdg->hdg = new_hdg % 360;
+		if (!isdigit(last)) {
+			if (last == 'T')
+				hdg->tru = true;
+			else if (last == 'M')
+				hdg->tru = false;
+			else
+				error = "FORMAT ERROR";
+		} else {
+			hdg->tru = false;
+		}
+	} else {
+		error = "FORMAT ERROR";
+	}
+
+	fans_set_error(box, error);
+}
+
+void
+fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *alt)
+{
+	char buf[8] = { 0 };
+
+	ASSERT(box != NULL);
+	ASSERT(alt != NULL);
+
+	if (alt->alt.alt != 0)
+		fans_print_alt(alt, buf, sizeof (buf));
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0)
+		fans_set_error(box, fans_parse_alt(buf, 0, alt));
+	else
+		memset(alt, 0, sizeof (*alt));
+}
+
+void
+fans_scratchpad_xfer_pos_impl(fans_t *box, fms_pos_t *pos)
+{
+	char buf[32];
+
+	fans_print_pos(pos, buf, sizeof (buf), POS_PRINT_NORM);
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	fans_set_error(box, fans_parse_pos(buf, pos));
+}
+
+void
+fans_scratchpad_xfer_pos(fans_t *box, fms_pos_t *pos,
+    unsigned ret_page, pos_pick_done_cb_t done_cb)
+{
+	ASSERT(box != NULL);
+	ASSERT(pos != NULL);
+	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	ASSERT(done_cb != NULL);
+
+	if (pos->set)
+		fans_scratchpad_xfer_pos_impl(box, pos);
+	else
+		fans_pos_pick_start(box, done_cb, ret_page, pos);
+}
+
+void
+fans_scratchpad_xfer_uint(fans_t *box, unsigned *value, bool *set,
+    unsigned minval, unsigned maxval)
+{
+	char buf[16] = { 0 };
+
+	ASSERT(box != NULL);
+	ASSERT(value != NULL);
+	ASSERT(set != NULL);
+
+	if (*set)
+		snprintf(buf, sizeof (buf), "%d", *value);
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		unsigned tmp;
+
+		if (sscanf(buf, "%d", &tmp) != 1 || tmp < minval ||
+		    tmp > maxval) {
+			fans_set_error(box, "FORMAT ERROR");
+		} else {
+			*value = tmp;
+			*set = true;
+		}
+	} else {
+		*set = false;
+	}
+}
+
+void
+fans_scratchpad_xfer_time(fans_t *box, fms_time_t *t)
+{
+	char buf[8] = { 0 };
+	int hrs, mins;
+
+	ASSERT(box != NULL);
+	ASSERT(t != NULL);
+
+	if (t->set)
+		snprintf(buf, sizeof (buf), "%02d%02d", t->hrs, t->mins);
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		if (!fans_parse_time(buf, &hrs, &mins)) {
+			fans_set_error(box, "FORMAT ERROR");
+		} else {
+			t->hrs = hrs;
+			t->mins = mins;
+			t->set = true;
+		}
+	} else {
+		t->set = false;
+	}
+}
+
+static bool
+parse_dir(char *buf, cpdlc_dir_t *dir)
+{
+	char first, last, c;
+
+	ASSERT(buf != NULL);
+	ASSERT(strlen(buf) != 0);
+	ASSERT(dir != NULL);
+
+	first = buf[0];
+	last = buf[strlen(buf) - 1];
+	if (!isdigit(first)) {
+		c = first;
+		memmove(&buf[0], &buf[1], strlen(buf));
+	} else if (!isdigit(last)) {
+		c = last;
+	} else {
+		return (false);
+	}
+	if (c == 'L')
+		*dir = CPDLC_DIR_LEFT;
+	else if (c == 'R')
+		*dir = CPDLC_DIR_RIGHT;
+	else
+		return (false);
+	return (true);
+}
+
+void
+fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *off)
+{
+	char buf[8];
+
+	ASSERT(box != NULL);
+	ASSERT(off != NULL);
+
+	fans_print_off(off, buf, sizeof (buf));
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) != 0) {
+		unsigned nm;
+		cpdlc_dir_t dir;
+
+		if (strlen(buf) < 2 || !parse_dir(buf, &dir) ||
+		    sscanf(buf, "%d", &nm) != 1 || nm == 0 || nm > 999) {
+			fans_set_error(box, "FORMAT ERROR");
+		} else {
+			off->dir = dir;
+			off->nm = nm;
+		}
+	} else {
+		off->nm = 0;
+	}
+}
+
+void
+fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *spd)
+{
+	char buf[8] = { 0 };
+	cpdlc_arg_t new_spd = { .spd.spd = 0 };
+	const char *error;
+
+	ASSERT(box != NULL);
+	ASSERT(spd != NULL);
+
+	if (spd->spd.spd != 0)
+		fans_print_spd(spd, buf, sizeof (buf));
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	error = fans_parse_spd(buf, 0, &new_spd);
+	fans_set_error(box, error);
+	if (error == NULL)
+		memcpy(spd, &new_spd, sizeof (new_spd));
+}
+
+void
+fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *temp)
+{
+	char buf[8] = { 0 };
+	int new_temp;
+
+	ASSERT(box != NULL);
+	ASSERT(temp != NULL);
+
+	if (temp->set)
+		snprintf(buf, sizeof (buf), "%d", temp->temp);
+	fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+	if (strlen(buf) == 0) {
+		temp->set = false;
+	} else {
+		int mult = 1;
+
+		if (buf[0] == 'P' || buf[0] == 'M') {
+			if (buf[0] == 'M')
+				mult = -1;
+			memmove(&buf[0], &buf[1], sizeof (buf) - 1);
+		}
+
+		if (sscanf(buf, "%d", &new_temp) == 1 &&
+		    new_temp >= TEMP_MIN && new_temp <= TEMP_MAX) {
+			temp->set = true;
+			temp->temp = new_temp * mult;
+		} else {
+			fans_set_error(box, "FORMAT ERROR");
+		}
+	}
+}
+
+void
+fans_scratchpad_xfer_wind(fans_t *box, fms_wind_t *wind)
+{
+	fans_scratchpad_xfer_multi(box, wind, sizeof (fms_wind_t),
+	    fans_parse_wind, fans_insert_wind_block,
+	    fans_delete_wind, fans_read_wind_block);
+}

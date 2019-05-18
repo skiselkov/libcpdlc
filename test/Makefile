@@ -24,13 +24,10 @@
 
 include ../Makefile.com
 
-CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG $(PLATFORM_DEFS) \
-    $(shell pkg-config gnutls --cflags)
+CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG -I$(SRCPREFIX) \
+    $(PLATFORM_DEFS) $(shell pkg-config gnutls --cflags)
 LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
 CLIENT_TEST_LIBS += -lncursesw
-
-SRCPREFIX=../src
-FMSBOX=../fmsbox
 
 MSGTEST_OBJS = \
 	msgtest.o \
@@ -39,7 +36,7 @@ MSGTEST_OBJS = \
 CLIENT_TEST_OBJS = \
 	client_test.o \
 	$(CORE_SRC_OBJS) \
-	$(FMSBOX_OBJS)
+	$(FANS_OBJS)
 
 all : msgtest client_test
 
