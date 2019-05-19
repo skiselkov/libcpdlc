@@ -1353,13 +1353,14 @@ tls_init(void)
 	    tls_certfile, tls_keyfile, GNUTLS_X509_FMT_PEM,
 	    tls_keyfile_pass, tls_keyfile_enctype));
 #if	GNUTLS_VERSION_NUMBER >= 0x030506
-	TLS_CHK(gnutls_priority_init2(&prio_cache, NULL, NULL,
-	    GNUTLS_PRIORITY_INIT_DEF_APPEND));
 	gnutls_certificate_set_known_dh_params(x509_creds,
 	    GNUTLS_SEC_PARAM_HIGH);
-#else	/* GNUTLS_VERSION_NUMBER */
-	TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
 #endif	/* GNUTLS_VERSION_NUMBER */
+#if	GNUTLS_VERSION_NUMBER >= 0x030603
+	TLS_CHK(gnutls_priority_init2(&prio_cache, NULL, NULL,
+#else
+	TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
+#endif
 
 	return (true);
 #undef	TLS_CHK

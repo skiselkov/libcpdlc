@@ -25,6 +25,16 @@
 include ../Makefile.vars
 include ../Makefile.com
 
+ifeq ($(PLATFORM_NAME),linux-64)
+	PLATFORM_LIBS = -lGL -lX11 -ldl
+else
+	PLATFORM_LIBS = \
+	    -framework OpenGL \
+	    -framework IOKit \
+	    -framework CoreVideo \
+	    -framework Cocoa
+endif
+
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O2 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
@@ -32,7 +42,12 @@ CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O2 -g -DDEBUG \
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
 	$(shell pkg-config gnutls --libs) \
-	-lGL -lX11 -ldl -lpthread -lm
+	$(PLATFORM_LIBS) -lpthread -lm
+
+# clang doesn't properly support optimized debug code.
+ifeq ($(PLATFORM_NAME),mac-64)
+	CFLAGS += -O0
+endif
 
 OBJS = \
 	mtcr_mini.o \

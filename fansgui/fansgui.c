@@ -467,9 +467,12 @@ window_init(void)
 {
 	if (!glfwInit())
 		return (false);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	window = glfwCreateWindow(bgimg_w, bgimg_h, "FANS GUI", NULL, NULL);
-	if (window == NULL)
-		return (false);
+	VERIFY(window != NULL);
 	hand_cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
 	VERIFY(hand_cursor != NULL);
 	glfwMakeContextCurrent(window);
@@ -526,6 +529,34 @@ cleanup(void)
 	glfwTerminate();
 }
 
+static void
+window_draw(void)
+{
+	mat4 pvm;
+	int win_w, win_h, opt_win_w;
+	float xscale, yscale;
+
+	glfwGetWindowContentScale(window, &xscale, &yscale);
+
+	glfwGetWindowSize(window, &win_w, &win_h);
+	opt_win_w = win_ratio * win_h;
+
+	if (win_w != opt_win_w) {
+		/* Keep the window aspect ratio */
+		win_w = opt_win_w;
+		glfwSetWindowSize(window, win_w, win_h);
+	}
+
+	glViewport(0, 0, win_w * xscale, win_h * yscale);
+	glm_ortho(0, win_w, 0, win_h, 0, 1, pvm);
+
+	glClear(GL_COLOR_BUFFER_BIT);
+	mtcr_once_wait(mtcr);
+	mtcr_draw(mtcr, ZERO_VECT2, VECT2(win_w, win_h), (GLfloat *)pvm);
+
+	glfwSwapBuffers(window);
+}
+
 int
 main(void)
 {
@@ -541,6 +572,7 @@ main(void)
 	if (!fms_init())
 		goto errout;
 
+	glewExperimental = GL_TRUE;
 	err = glewInit();
 	if (err != GLEW_OK) {
 		/* Problem: glewInit failed, something is seriously wrong. */
@@ -562,28 +594,7 @@ main(void)
 		}
 
 		if (now - dirty > SEC2USEC(1)) {
-			mat4 pvm;
-			int win_w, win_h;
-			int opt_win_w;
-
-			glfwGetWindowSize(window, &win_w, &win_h);
-			opt_win_w = win_ratio * win_h;
-
-			if (win_w != opt_win_w) {
-				/* Keep the window aspect ratio */
-				win_w = opt_win_w;
-				glfwSetWindowSize(window, win_w, win_h);
-			}
-
-			glViewport(0, 0, win_w, win_h);
-			glm_ortho(0, win_w, 0, win_h, 0, 1, pvm);
-
-			glClear(GL_COLOR_BUFFER_BIT);
-			mtcr_once_wait(mtcr);
-			mtcr_draw(mtcr, ZERO_VECT2, VECT2(win_w, win_h),
-			    (GLfloat *)pvm);
-
-			glfwSwapBuffers(window);
+			window_draw();
 			dirty = now;
 		}
 		fans_update(box);
