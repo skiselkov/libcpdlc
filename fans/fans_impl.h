@@ -52,6 +52,8 @@ extern "C" {
 #define	REJ_FREETEXT_LINES	3
 #define	CRZ_CLB_THRESH		32000	/* feet */
 #define	LVL_ALT_THRESH		150	/* feet */
+#define	MAX_ALT			60000	/* feet */
+#define	MAX_WIND		300	/* knots */
 
 #ifndef	MAX
 #define	MAX(__x, __y)	((__x) >= (__y) ? (__x) : (__y))
@@ -221,14 +223,23 @@ struct fans_s {
 		} voice_req;
 		struct {
 			fms_pos_t	rpt_wpt;
+			fms_pos_t	rpt_wpt_auto;
 			fms_time_t	wpt_time;
+			fms_time_t	wpt_time_auto;
 			cpdlc_arg_t	wpt_alt;
-			cpdlc_arg_t	spd;
+			cpdlc_arg_t	wpt_alt_auto;
+			cpdlc_arg_t	wpt_spd;
+			cpdlc_arg_t	wpt_spd_auto;
 			fms_pos_t	nxt_fix;
+			fms_pos_t	nxt_fix_auto;
 			fms_time_t	nxt_fix_time;
+			fms_time_t	nxt_fix_time_auto;
 			fms_pos_t	nxt_fix1;
+			fms_pos_t	nxt_fix1_auto;
 			fms_temp_t	temp;
+			fms_temp_t	temp_auto;
 			fms_wind_t	winds_aloft;
+			fms_wind_t	winds_aloft_auto;
 			fms_pos_t	cur_pos;
 			fms_time_t	pos_time;
 			cpdlc_arg_t	alt;
@@ -358,6 +369,7 @@ void fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
 int fans_get_time(const fans_t *box);
+void fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
 int fans_get_cur_alt(const fans_t *box);
 int fans_get_sel_alt(const fans_t *box);
 bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
@@ -366,6 +378,13 @@ bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info);
 int fans_get_offset(const fans_t *box);
 bool fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins);
+void fans_get_sat(const fans_t *box, fms_temp_t *temp);
+void fans_get_wind(const fans_t *box, fms_wind_t *wind);
+
+void fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos);
+void fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim);
+void fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt);
+void fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd);
 
 #ifdef	__cplusplus
 }

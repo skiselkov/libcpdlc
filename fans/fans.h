@@ -92,29 +92,38 @@ typedef struct {
 
 typedef struct {
 	char		wpt_name[32];
+	bool		time_set;
 	unsigned	hrs, mins;
+	bool		alt_set;
 	bool		alt_fl;
 	int		alt_ft;
+	bool		spd_set;
 	bool		spd_mach;
-	int		spd_ft;
+	unsigned	spd;
 } fms_wpt_info_t;
 
-typedef int (*fans_get_cur_alt_t)(void *userinfo);
-typedef int (*fans_get_sel_alt_t)(void *userinfo);
+typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd);
+typedef int (*fans_get_alt_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
 typedef int (*fans_get_offset_t)(void *userinfo);
 typedef bool (*fans_get_fuel_t)(void *userinfo, unsigned *hrs, unsigned *mins);
+typedef bool (*fans_get_temp_t)(void *userinfo, int *temp);
+typedef bool (*fans_get_wind_t)(void *userinfo, unsigned *deg_true,
+    unsigned *knots);
 
 typedef struct {
 	cpdlc_get_time_func_t	get_time;
-	fans_get_cur_alt_t	get_cur_alt;
-	fans_get_sel_alt_t	get_sel_alt;
+	fans_get_spd_t		get_cur_spd;
+	fans_get_alt_t		get_cur_alt;
+	fans_get_alt_t		get_sel_alt;
 	fans_get_wpt_info_t	get_prev_wpt;
 	fans_get_wpt_info_t	get_next_wpt;
 	fans_get_wpt_info_t	get_next_next_wpt;
 	fans_get_wpt_info_t	get_dest_wpt;
 	fans_get_offset_t	get_offset;
 	fans_get_fuel_t		get_fuel;
+	fans_get_temp_t		get_sat;
+	fans_get_wind_t		get_wind;
 } fans_funcs_t;
 
 fans_t *fans_alloc(const char *hostname, unsigned port, const char *ca_file,

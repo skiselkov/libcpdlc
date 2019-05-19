@@ -730,11 +730,6 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				}
 			} else {
 				arg->spd.spd = atoi(start);
-				if (arg->spd.spd < 0) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid airspeed\n");
-					return (false);
-				}
 			}
 			break;
 		case CPDLC_ARG_TIME:

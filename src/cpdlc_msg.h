@@ -353,17 +353,17 @@ typedef enum {
 
 typedef union {
 	struct {
-		bool	fl;	/* flight level? */
-		bool	met;	/* metric? */
-		int	alt;	/* feet */
+		bool		fl;	/* flight level? */
+		bool		met;	/* metric? */
+		int		alt;	/* feet */
 	} alt;
 	struct {
-		bool	mach;
-		int	spd;	/* knots or 1/1000th of Mach */
+		bool		mach;
+		unsigned	spd;	/* knots or 1/1000th of Mach */
 	} spd;
 	struct {
-		int	hrs;
-		int	mins;
+		int		hrs;
+		int		mins;
 	} time;
 	char		pos[24];
 	cpdlc_dir_t	dir;

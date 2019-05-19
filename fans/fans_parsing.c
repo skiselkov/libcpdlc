@@ -288,7 +288,7 @@ fans_parse_wind(const char *str, unsigned field_nr, void *data)
 		out_wind->deg %= 360;
 	} else {
 		if (sscanf(str, "%d", &out_wind->spd) != 1 ||
-		    out_wind->spd > 999) {
+		    out_wind->spd > MAX_WIND) {
 			return ("FORMAT ERROR");
 		}
 	}

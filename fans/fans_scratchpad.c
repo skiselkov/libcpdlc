@@ -417,6 +417,8 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
 		fans_set_error(box, error);
 		if (error == NULL)
 			memcpy(userspd, &new_spd, sizeof (new_spd));
+	} else {
+		memset(userspd, 0, sizeof (*userspd));
 	}
 }
 
