@@ -68,9 +68,15 @@ typedef void (*cpdlc_msg_recv_cb_t)(cpdlc_client_t *client);
 typedef void (*cpdlc_msg_sent_cb_t)(cpdlc_client_t *client,
     const cpdlc_msg_token_t *token, unsigned num_tokens);
 
-CPDLC_API cpdlc_client_t *cpdlc_client_alloc(const char *server_hostname,
-    unsigned server_port, const char *ca_file, bool is_atc);
+CPDLC_API cpdlc_client_t *cpdlc_client_alloc(bool is_atc);
 CPDLC_API void cpdlc_client_free(cpdlc_client_t *cl);
+
+CPDLC_API void cpdlc_client_set_host(cpdlc_client_t *cl, const char *host);
+CPDLC_API const char *cpdlc_client_get_host(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_set_port(cpdlc_client_t *cl, unsigned port);
+CPDLC_API unsigned cpdlc_client_get_port(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_set_ca_file(cpdlc_client_t *cl, const char *cafile);
+CPDLC_API const char *cpdlc_client_get_ca_file(cpdlc_client_t *cl);
 
 CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
     const char *key_file, const char *key_pass,
@@ -84,7 +90,8 @@ CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_logon_status_t cpdlc_client_get_logon_status(
-    const cpdlc_client_t *cl, bool *logon_failure);
+    const cpdlc_client_t *cl, char logon_failure[128]);
+CPDLC_API void cpdlc_client_reset_logon_failure(cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg);

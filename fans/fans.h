@@ -126,9 +126,10 @@ typedef struct {
 	fans_get_wind_t		get_wind;
 } fans_funcs_t;
 
-fans_t *fans_alloc(const char *hostname, unsigned port, const char *ca_file,
-    const fans_funcs_t *funcs, void *userinfo);
+fans_t *fans_alloc(const fans_funcs_t *funcs, void *userinfo);
 void fans_free(fans_t *box);
+
+cpdlc_client_t *fans_get_client(const fans_t *fans);
 
 const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);
 

@@ -35,7 +35,7 @@ else
 	    -framework Cocoa
 endif
 
-CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O2 -g -DDEBUG \
+CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
 	$(shell pkg-config gnutls --cflags)

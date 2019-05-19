@@ -484,15 +484,17 @@ window_init(void)
 	return (true);
 }
 
-static bool
+static void
 fms_init(void)
 {
-	const char *hostname = "localhost";
-	const char *ca_file = "cpdlc_cert.pem";
-	int port = 0;
+	cpdlc_client_t *cl;
 
-	box = fans_alloc(hostname, port, ca_file, NULL, NULL);
-	return (box != NULL);
+	box = fans_alloc(NULL, NULL);
+	VERIFY(box != NULL);
+
+	cl = fans_get_client(box);
+	ASSERT(cl != NULL);
+	cpdlc_client_set_ca_file(cl, "cpdlc_cert.pem");
 }
 
 static void
@@ -569,8 +571,7 @@ main(void)
 		goto errout;
 	if (!window_init())
 		goto errout;
-	if (!fms_init())
-		goto errout;
+	fms_init();
 
 	glewExperimental = GL_TRUE;
 	err = glewInit();

@@ -583,19 +583,16 @@ update_error_msg(fans_t *box)
 }
 
 fans_t *
-fans_alloc(const char *hostname, unsigned port, const char *ca_file,
-    const fans_funcs_t *funcs, void *userinfo)
+fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 {
 	fans_t *box = safe_calloc(1, sizeof (*box));
-
-	ASSERT(hostname != NULL);
-	ASSERT3U(port, <=, UINT16_MAX);
-	ASSERT(ca_file != NULL);
 
 	if (funcs != NULL)
 		memcpy(&box->funcs, funcs, sizeof (*funcs));
 	box->userinfo = userinfo;
-	box->cl = cpdlc_client_alloc(hostname, port, ca_file, false);
+	box->cl = cpdlc_client_alloc(false);
+	ASSERT(box->cl != NULL);
+	cpdlc_client_set_host(box->cl, "localhost");
 	box->msglist = cpdlc_msglist_alloc(box->cl);
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
@@ -617,6 +614,13 @@ fans_free(fans_t *box)
 	cpdlc_msglist_free(box->msglist);
 	cpdlc_client_free(box->cl);
 	free(box);
+}
+
+cpdlc_client_t *
+fans_get_client(const fans_t *box)
+{
+	ASSERT(box != NULL);
+	return (box->cl);
 }
 
 const fms_char_t *

@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdlib.h>
 
 #ifdef	_WIN32
@@ -61,6 +62,7 @@
 
 #define	WORKER_POLL_INTVAL	100	/* ms */
 #define	READBUF_SZ		4096	/* bytes */
+#define	DEFAULT_PORT		17622
 
 #ifndef	PATH_MAX
 #define	PATH_MAX		256	/* chars */
@@ -86,9 +88,14 @@ typedef struct inmsgbuf_s {
  */
 struct cpdlc_client_s {
 	/* immutable */
-	char				server_hostname[PATH_MAX];
-	int				server_port;
 	bool				is_atc;
+
+	mutex_t				lock;
+	bool				bg_shutdown;
+
+	/* protected by `lock' */
+	char				host[PATH_MAX];
+	int				port;
 	char				*cafile;
 	char				*key_file;
 	char				*key_pass;
@@ -97,13 +104,10 @@ struct cpdlc_client_s {
 	char				*key_pem_data;
 	char				*cert_pem_data;
 
-	mutex_t				lock;
-	bool				bg_shutdown;
-	/* protected by `lock' */
 	thread_t			worker;
 	bool				worker_started;
 	cpdlc_logon_status_t		logon_status;
-	bool				logon_failure;
+	char				logon_failure[128];
 	int				sock;
 	gnutls_session_t		session;
 	bool				handshake_completed;
@@ -144,6 +148,23 @@ static bool poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg, bool track_sent);
 
+static void set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
+    PRINTF_ATTR(2);
+
+static void
+set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
+{
+	if (fmt != NULL) {
+		va_list ap;
+		va_start(ap, fmt);
+		vsnprintf(cl->logon_failure, sizeof (cl->logon_failure),
+		    fmt, ap);
+		va_end(ap);
+	} else {
+		memset(cl->logon_failure, 0, sizeof (cl->logon_failure));
+	}
+}
+
 static bool
 set_fd_nonblock(int fd)
 {
@@ -163,7 +184,8 @@ logon_worker(void *userinfo)
 
 	init_conn(cl);
 
-	while (cl->logon_status != CPDLC_LOGON_NONE && !cl->logon_failure) {
+	while (cl->logon_status != CPDLC_LOGON_NONE &&
+	    cl->logon_failure[0] == '\0') {
 		bool new_msgs = false;
 		cpdlc_msg_token_t *out_tokens = NULL;
 		unsigned num_out_tokens = 0;
@@ -223,24 +245,12 @@ logon_worker(void *userinfo)
 }
 
 cpdlc_client_t *
-cpdlc_client_alloc(const char *server_hostname, unsigned server_port,
-    const char *cafile, bool is_atc)
+cpdlc_client_alloc(bool is_atc)
 {
 	cpdlc_client_t *cl = safe_calloc(1, sizeof (*cl));
 
 	mutex_init(&cl->lock);
 
-	ASSERT(server_hostname != NULL);
-	if (server_port == 0)
-		server_port = 17622;
-	else
-		ASSERT3U(server_port, <, UINT16_MAX);
-
-	cpdlc_strlcpy(cl->server_hostname, server_hostname,
-	    sizeof (cl->server_hostname));
-	if (cafile != NULL)
-		cl->cafile = secure_strdup(cafile);
-	cl->server_port = server_port;
 	cl->is_atc = is_atc;
 
 	cl->sock = -1;
@@ -302,7 +312,62 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	free(cl->logon.data);
 	free(cl->logon.from);
 	free(cl->logon.to);
+	memset(cl, 0, sizeof (*cl));
 	free(cl);
+}
+
+void
+cpdlc_client_set_host(cpdlc_client_t *cl, const char *host)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	if (host != NULL)
+		cpdlc_strlcpy(cl->host, host, sizeof (cl->host));
+	else
+		memset(cl->host, 0, sizeof (cl->host));
+	mutex_exit(&cl->lock);
+}
+
+const char *
+cpdlc_client_get_host(cpdlc_client_t *cl)
+{
+	ASSERT(cl != NULL);
+	return (cl->host);
+}
+
+void
+cpdlc_client_set_port(cpdlc_client_t *cl, unsigned port)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->port = port;
+	mutex_exit(&cl->lock);
+}
+
+unsigned
+cpdlc_client_get_port(cpdlc_client_t *cl)
+{
+	ASSERT(cl != NULL);
+	return (cl->port);
+}
+
+void
+cpdlc_client_set_ca_file(cpdlc_client_t *cl, const char *cafile)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	free(cl->cafile);
+	cl->cafile = NULL;
+	if (cafile != NULL)
+		cl->cafile = strdup(cafile);
+	mutex_exit(&cl->lock);
+}
+
+const char *
+cpdlc_client_get_ca_file(cpdlc_client_t *cl)
+{
+	ASSERT(cl != NULL);
+	return (cl->cafile);
 }
 
 void
@@ -364,7 +429,7 @@ reset_link_state(cpdlc_client_t *cl)
 	if (cl->session != NULL) {
 		if (cl->handshake_completed) {
 			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
-			cl->handshake_completed = true;
+			cl->handshake_completed = false;
 		}
 		gnutls_deinit(cl->session);
 		cl->session = NULL;
@@ -412,32 +477,52 @@ init_conn(cpdlc_client_t *cl)
 	    .ai_protocol = IPPROTO_TCP
 	};
 	cpdlc_logon_status_t new_status;
+	int port = (cl->port != 0 ? cl->port : DEFAULT_PORT);
+	char *host = NULL;
 
 	ASSERT(cl != NULL);
 	ASSERT3S(cl->sock, ==, -1);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
-	snprintf(portbuf, sizeof (portbuf), "%d", cl->server_port);
-	result = getaddrinfo(cl->server_hostname, portbuf, &hints, &ai);
+	if (cl->host == NULL) {
+		set_logon_failure(cl, "no host specified");
+		goto out;
+	}
+	host = strdup(cl->host);
+	snprintf(portbuf, sizeof (portbuf), "%d", port);
+
+	/*
+	 * getaddrinfo can block for network traffic, so we need to drop
+	 * the lock here to avoid blocking API callers.
+	 */
+	mutex_exit(&cl->lock);
+	result = getaddrinfo(cl->host, portbuf, &hints, &ai);
+	mutex_enter(&cl->lock);
+
 	if (result != 0) {
-		fprintf(stderr, "Can't resolve %s: %s\n", cl->server_hostname,
+		fprintf(stderr, "Can't resolve %s: %s\n", host,
 		    gai_strerror(result));
+		set_logon_failure(cl, "%s", gai_strerror(result));
 		goto out;
 	}
 	ASSERT(ai != NULL);
 	sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (sock == -1) {
-		perror("Cannot create socket");
+		set_logon_failure(cl, "%s", strerror(errno));
 		goto out;
 	}
 	if (!set_fd_nonblock(sock)) {
-		perror("Cannot socket to non-blocking");
+		set_logon_failure(cl, "%s", strerror(errno));
 		close(sock);
 		goto out;
 	}
+	/*
+	 * No need to drop locks here, we are non-blocking, so connection
+	 * attempt will continue async.
+	 */
 	if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
 		if (errno != EINPROGRESS) {
-			perror("Cannot connect socket");
+			set_logon_failure(cl, "%s", strerror(errno));
 			close(sock);
 			goto out;
 		}
@@ -451,6 +536,7 @@ init_conn(cpdlc_client_t *cl)
 out:
 	if (ai != NULL)
 		freeaddrinfo(ai);
+	free(host);
 }
 
 static void
@@ -477,20 +563,18 @@ complete_conn(cpdlc_client_t *cl)
 		/* Connection attempt completed. Let's see about the result. */
 		if (getsockopt(cl->sock, SOL_SOCKET, SO_ERROR, &so_error,
 		    &so_error_len) < 0) {
-			perror("Error during getsockopt");
+			set_logon_failure(cl, "%s", strerror(errno));
 			goto errout;
 		}
 		if (so_error != 0) {
-			fprintf(stderr, "Error connecting to server %s:%d: %s",
-			    cl->server_hostname, cl->server_port,
-			    strerror(so_error));
+			set_logon_failure(cl, "%s", strerror(so_error));
 			goto errout;
 		}
 		/* Success! */
 		cl->logon_status = CPDLC_LOGON_HANDSHAKING_LINK;
 		return;
 	default:
-		perror("Error polling on socket during connection");
+		set_logon_failure(cl, "%s", strerror(errno));
 		goto errout;
 	}
 errout:
@@ -539,12 +623,11 @@ tls_handshake(cpdlc_client_t *cl)
 		}
 		TLS_CHK(gnutls_init(&cl->session, GNUTLS_CLIENT));
 		TLS_CHK(gnutls_server_name_set(cl->session, GNUTLS_NAME_DNS,
-		    cl->server_hostname, strlen(cl->server_hostname)));
+		    cl->host, strlen(cl->host)));
 		TLS_CHK(gnutls_set_default_priority(cl->session));
 		TLS_CHK(gnutls_credentials_set(cl->session,
 		    GNUTLS_CRD_CERTIFICATE, cl->xcred));
-		gnutls_session_set_verify_cert(cl->session,
-		    cl->server_hostname, 0);
+		gnutls_session_set_verify_cert(cl->session, cl->host, 0);
 		ASSERT(cl->sock != -1);
 		gnutls_transport_set_int(cl->session, cl->sock);
 		gnutls_handshake_set_timeout(cl->session,
@@ -622,10 +705,10 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 			if (strcmp(logon_data, "SUCCESS") == 0) {
 				cl->logon_status = CPDLC_LOGON_COMPLETE;
-				cl->logon_failure = false;
+				set_logon_failure(cl, NULL);
 			} else {
 				cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
-				cl->logon_failure = true;
+				set_logon_failure(cl, "Logon denied");
 			}
 			cpdlc_msg_free(msg);
 		} else {
@@ -849,7 +932,7 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 		cl->logon.to = strdup(to);
 	else
 		cl->logon.to = NULL;
-	cl->logon_failure = false;
+	set_logon_failure(cl, NULL);
 
 	if (!cl->worker_started) {
 		cl->worker_started = true;
@@ -865,17 +948,26 @@ cpdlc_client_logoff(cpdlc_client_t *cl)
 	ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->logon_status = CPDLC_LOGON_NONE;
-	cl->logon_failure = false;
+	set_logon_failure(cl, NULL);
 	mutex_exit(&cl->lock);
 }
 
 cpdlc_logon_status_t
-cpdlc_client_get_logon_status(const cpdlc_client_t *cl, bool *logon_failure)
+cpdlc_client_get_logon_status(const cpdlc_client_t *cl, char logon_failure[128])
 {
 	ASSERT(cl != NULL);
 	if (logon_failure != NULL)
-		*logon_failure = cl->logon_failure;
+		cpdlc_strlcpy(logon_failure, cl->logon_failure, 128);
 	return (cl->logon_status);
+}
+
+void
+cpdlc_client_reset_logon_failure(cpdlc_client_t *cl)
+{
+	ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	set_logon_failure(cl, NULL);
+	mutex_exit(&cl->lock);
 }
 
 static cpdlc_msg_token_t
