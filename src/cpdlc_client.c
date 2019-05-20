@@ -718,6 +718,37 @@ send_logon(cpdlc_client_t *cl)
 	cl->logon_status = CPDLC_LOGON_IN_PROG;
 }
 
+static void
+handle_end_svc(cpdlc_client_t *cl)
+{
+	/*
+	 * If we have an NDA loaded, we can try recycling the link
+	 * and logging onto the NDA. Otherwise, we tear down the
+	 * link. This message IS passed on to the uppper layers, as
+	 * it needs to be displayed to the flight crew.
+	 */
+	if (cl->logon.nda != NULL)
+		cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
+	else
+		cl->logon_status = CPDLC_LOGON_NONE;
+}
+
+static void
+handle_nda(cpdlc_client_t *cl, cpdlc_msg_t *msg, unsigned i)
+{
+	char nda[128], name[128];
+
+	ASSERT(cl->logon.to != NULL);
+
+	free(cl->logon.nda);
+	cl->logon.nda = NULL;
+
+	cpdlc_msg_seg_get_arg(msg, i, 0, nda, sizeof (nda), name);
+	if (strcmp(nda, cl->logon.to) != 0)
+		cl->logon.nda = strdup(nda);
+	cpdlc_msg_del_seg(msg, i);
+}
+
 static bool
 queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
@@ -726,22 +757,8 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	ASSERT(cl != NULL);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_COMPLETE);
 	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
 
-	if (msg->segs[0].info->msg_type == CPDLC_UM161_END_SVC) {
-		cpdlc_msg_free(msg);
-		/*
-		 * If we have an NDA loaded, we can try recycling the link
-		 * and logging onto the NDA. Otherwise, we tear down the
-		 * link.
-		 */
-		if (cl->logon.nda != NULL)
-			cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
-		else
-			cl->logon_status = CPDLC_LOGON_NONE;
-		return (false);
-	} else if (!cl->is_atc &&
-	    strcmp(cpdlc_msg_get_from(msg), cl->logon.to) != 0) {
+	if (!cl->is_atc && strcmp(cpdlc_msg_get_from(msg), cl->logon.to) != 0) {
 		cpdlc_msg_t *errmsg = cpdlc_msg_alloc();
 
 		cpdlc_msg_set_mrn(errmsg, cpdlc_msg_get_min(msg));
@@ -754,20 +771,28 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		cpdlc_msg_free(errmsg);
 
 		return (false);
-	} else if (!cl->is_atc &&
-	    msg->segs[0].info->msg_type == CPDLC_UM160_NEXT_DATA_AUTHORITY_id) {
-		char nda[128], name[128];
+	}
 
-		ASSERT(cl->logon.to != NULL);
-
-		free(cl->logon.nda);
-		cl->logon.nda = NULL;
-
-		cpdlc_msg_seg_get_arg(msg, 0, 0, nda, sizeof (nda), name);
-		if (strcmp(nda, cl->logon.to) != 0)
-			cl->logon.nda = strdup(nda);
+	if (!cl->is_atc) {
+		for (unsigned i = 0; i < msg->num_segs;) {
+			ASSERT(msg->segs[i].info != NULL);
+			if (msg->segs[i].info->msg_type ==
+			    CPDLC_UM161_END_SVC) {
+				handle_end_svc(cl);
+				cpdlc_msg_free(msg);
+				return (false);
+			}
+			if (msg->segs[i].info->msg_type ==
+			    CPDLC_UM160_NEXT_DATA_AUTHORITY_id) {
+				/* this deletes the segment, so don't incr i */
+				handle_nda(cl, msg, i);
+				continue;
+			}
+			i++;
+		}
+	}
+	if (cpdlc_msg_get_num_segs(msg) == 0) {
 		cpdlc_msg_free(msg);
-
 		return (false);
 	}
 

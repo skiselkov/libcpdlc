@@ -392,7 +392,7 @@ typedef union {
 enum {
     CPDLC_MAX_ARGS = 5,
     CPDLC_MAX_RESP_MSGS = 4,
-    CPDLC_MAX_MSG_SEGS = 5,
+    CPDLC_MAX_MSG_SEGS = 8,
     CPDLC_MAX_VERSION_NR = 1,
     CPDLC_CALLSIGN_LEN = 16
 };
@@ -458,6 +458,7 @@ CPDLC_API void cpdlc_msg_set_logon_data(cpdlc_msg_t *msg,
 CPDLC_API unsigned cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg);
 CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl,
     unsigned msg_type, unsigned char msg_subtype);
+CPDLC_API void cpdlc_msg_del_seg(cpdlc_msg_t *msg, unsigned seg_nr);
 
 CPDLC_API unsigned cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg,
     unsigned seg_nr);

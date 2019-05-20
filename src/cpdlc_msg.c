@@ -1225,6 +1225,21 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 	return (msg->num_segs++);
 }
 
+void
+cpdlc_msg_del_seg(cpdlc_msg_t *msg, unsigned seg_nr)
+{
+	ASSERT(msg != NULL);
+	ASSERT3U(seg_nr, <, msg->num_segs);
+	/*
+	 * Simply shift all the message segments after this one,
+	 * forward by one step.
+	 */
+	memmove(&msg->segs[seg_nr], &msg->segs[seg_nr + 1],
+	    (msg->num_segs - seg_nr - 1) * sizeof (cpdlc_msg_seg_t));
+	memset(&msg->segs[msg->num_segs], 0, sizeof (cpdlc_msg_seg_t));
+	msg->num_segs--;
+}
+
 unsigned
 cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg, unsigned seg_nr)
 {

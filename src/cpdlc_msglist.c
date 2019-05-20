@@ -163,6 +163,16 @@ msg_is_rgr(const cpdlc_msg_t *msg)
 }
 
 static bool
+msg_is_link_mgmt(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return (!msg->segs[0].info->is_dl &&
+	    (msg->segs[0].info->msg_type == CPDLC_UM161_END_SVC ||
+	    msg->segs[0].info->msg_type == CPDLC_UM160_NEXT_DATA_AUTHORITY_id));
+}
+
+static bool
 is_disregard_msg(const cpdlc_msg_t *msg)
 {
 	ASSERT(msg != NULL);
@@ -237,7 +247,7 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		thr->status = CPDLC_MSG_THR_ACCEPTED;
 	} else if (msg_is_reject(last->msg)) {
 		thr->status = CPDLC_MSG_THR_REJECTED;
-	} else if (msg_is_rgr(last->msg)) {
+	} else if (msg_is_rgr(last->msg) || msg_is_link_mgmt(last->msg)) {
 		thr->status = CPDLC_MSG_THR_CLOSED;
 	} else if (msg_is_ul_req(last->msg) &&
 	    thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
