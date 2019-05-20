@@ -213,13 +213,9 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%sNOW",
 			    readable ? "" : " ");
 		} else {
-			if (readable) {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%02d:%02d", arg->time.hrs, arg->time.mins);
-			} else {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " %02d%02d", arg->time.hrs, arg->time.mins);
-			}
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%s%02d%02dZ", readable ? "" : " ",
+			    arg->time.hrs, arg->time.mins);
 		}
 		break;
 	case CPDLC_ARG_POSITION:
@@ -740,7 +736,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 
 				arg_end = find_arg_end(start, end);
 
-				if (arg_end - start != 4) {
+				if (arg_end - start != 5) {
 					fprintf(stderr, "Malformed message: "
 					    "invalid time\n");
 					return (false);
@@ -752,7 +748,8 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				if (sscanf(hrs, "%d", &arg->time.hrs) != 1 ||
 				    sscanf(mins, "%d", &arg->time.mins) != 1 ||
 				    arg->time.hrs < 0 || arg->time.hrs > 23 ||
-				    arg->time.mins < 0 || arg->time.mins > 59) {
+				    arg->time.mins < 0 || arg->time.mins > 59 ||
+				    start[4] != 'Z') {
 					fprintf(stderr, "Malformed message: "
 					    "invalid time\n");
 					return (false);

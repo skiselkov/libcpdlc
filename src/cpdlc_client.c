@@ -1109,12 +1109,19 @@ cpdlc_client_logoff(cpdlc_client_t *cl)
 }
 
 cpdlc_logon_status_t
-cpdlc_client_get_logon_status(const cpdlc_client_t *cl, char logon_failure[128])
+cpdlc_client_get_logon_status(cpdlc_client_t *cl, char logon_failure[128])
 {
+	cpdlc_logon_status_t st;
+
 	ASSERT(cl != NULL);
+
+	mutex_enter(&cl->lock);
 	if (logon_failure != NULL)
 		cpdlc_strlcpy(logon_failure, cl->logon_failure, 128);
-	return (cl->logon_status);
+	st = cl->logon_status;
+	mutex_exit(&cl->lock);
+
+	return (st);
 }
 
 void

@@ -40,9 +40,8 @@ fans_main_menu_draw_cb(fans_t *box)
 	fans_put_page_title(box, "FANS  MAIN MENU");
 	fans_put_lsk_action(box, FMS_KEY_LSK_L1, FMS_COLOR_WHITE,
 	    "<LOGON/STATUS");
+	fans_put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE, "MSG LOG>");
 	if (st == CPDLC_LOGON_COMPLETE) {
-		fans_put_lsk_action(box, FMS_KEY_LSK_R1, FMS_COLOR_WHITE,
-		    "MSG LOG>");
 		fans_put_lsk_action(box, FMS_KEY_LSK_L2, FMS_COLOR_WHITE,
 		    "<REQUESTS");
 		fans_put_lsk_action(box, FMS_KEY_LSK_R2, FMS_COLOR_WHITE,
@@ -54,8 +53,6 @@ fans_main_menu_draw_cb(fans_t *box)
 		fans_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE,
 		    "<FREE TEXT");
 	}
-
-	fans_put_atc_status(box);
 }
 
 bool
@@ -72,7 +69,7 @@ fans_main_menu_key_cb(fans_t *box, fms_key_t key)
 		fans_set_page(box, FMS_PAGE_REQUESTS, true);
 	else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE)
 		fans_set_page(box, FMS_PAGE_POS_REP, true);
-	else if (key == FMS_KEY_LSK_R1 && st == CPDLC_LOGON_COMPLETE)
+	else if (key == FMS_KEY_LSK_R1)
 		fans_set_page(box, FMS_PAGE_MSG_LOG, true);
 	else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE)
 		fans_set_page(box, FMS_PAGE_EMER, true);

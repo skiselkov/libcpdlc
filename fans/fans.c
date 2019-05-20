@@ -75,6 +75,7 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 		.key_cb = fans_main_menu_key_cb
 	},
 	{	/* FMS_PAGE_LOGON_STATUS */
+		.init_cb = fans_logon_status_init_cb,
 		.draw_cb = fans_logon_status_draw_cb,
 		.key_cb = fans_logon_status_key_cb,
 		.has_return = true
@@ -460,18 +461,19 @@ fans_put_hdg(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_time(fans_t *box, int row, int col, bool align_right,
-    const fms_time_t *usertime, const fms_time_t *autotime,
-    bool req, bool colon)
+    const fms_time_t *usertime, const fms_time_t *autotime, bool req,
+    bool colon)
 {
 	ASSERT(box != NULL);
 	DATA_PICK(const fms_time_t *, t, usertime->set, usertime, autotime);
 
 	if (t != NULL && t->set) {
-		fans_put_str(box, row, col, align_right, color, font,
-		    "%02d%s%02d", t->hrs, colon ? " " : "", t->mins);
 		if (colon) {
-			fans_put_str(box, row, col + 2, align_right,
-			    FMS_COLOR_CYAN, font, ":");
+			fans_put_str(box, row, col, align_right, color, font,
+			    "%02d:%02d", t->hrs, t->mins);
+		} else {
+			fans_put_str(box, row, col, align_right, color, font,
+			    "%02d%02dZ", t->hrs, t->mins);
 		}
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
@@ -738,8 +740,11 @@ fans_update(fans_t *box)
 	ASSERT(box->page->draw_cb != NULL);
 	box->page->draw_cb(box);
 	draw_atc_msg_lsk(box);
-	if (box->page->has_return)
-		fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
+	if (box->page->has_return) {
+		fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE,
+		    "<RETURN");
+	}
+	fans_put_atc_status(box);
 	put_cur_time(box);
 	fans_update_scratchpad(box);
 	update_error_msg(box);
@@ -778,7 +783,7 @@ put_cur_time(fans_t *box)
 
 	now = time(NULL);
 	tm = localtime(&now);
-	fans_put_str(box, LSK6_ROW, 8, false, FMS_COLOR_CYAN, FMS_FONT_SMALL,
+	fans_put_str(box, LSK6_ROW, 8, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
 	    "%02d%02dZ", tm->tm_hour, tm->tm_min);
 }
 
@@ -827,6 +832,8 @@ fans_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty)
 		return ("DISREGARD");
 	case CPDLC_MSG_THR_ERROR:
 		return ("ERROR");
+	case CPDLC_MSG_THR_CONN_ENDED:
+		return ("CONN ENDED");
 	default:
 		VERIFY_MSG(0, "Invalid thread status %x", st);
 	}
@@ -978,8 +985,8 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "TIMEv");
 		fans_put_lsk_title(box, FMS_KEY_LSK_R2, "TIME");
-		fans_put_time(box, LSK2_ROW, 0, true, &step_at->tim, NULL,
-		    true, true);
+		fans_put_time(box, LSK2_ROW, 0, true, &step_at->tim,
+		    NULL, true, false);
 		break;
 	case STEP_AT_POS:
 		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,

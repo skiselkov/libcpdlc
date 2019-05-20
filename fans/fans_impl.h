@@ -176,8 +176,9 @@ struct fans_s {
 	char			scratchpad[SCRATCHPAD_MAX + 1];
 	char			error_msg[128];
 
-	char			flt_id[12];
-	char			to[8];
+	char			flt_id_auto[8];
+	char			flt_id[8];
+	char			to[5];
 
 	cpdlc_msg_thr_id_t	thr_id;
 	bool			msg_log_open;
@@ -343,8 +344,8 @@ void fans_put_spd(fans_t *box, int row, int col, bool align_right,
 void fans_put_hdg(fans_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req);
 void fans_put_time(fans_t *box, int row, int col, bool align_right,
-    const fms_time_t *usertime, const fms_time_t *autotime,
-    bool req, bool colon);
+    const fms_time_t *usertime, const fms_time_t *autotime, bool req,
+    bool colon);
 void fans_put_temp(fans_t *box, int row, int col, bool align_right,
     const fms_temp_t *usertemp, const fms_temp_t *autotemp, bool req);
 void fans_put_pos(fans_t *box, int row, int col, bool align_right,

@@ -95,7 +95,7 @@ CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_logon_status_t cpdlc_client_get_logon_status(
-    const cpdlc_client_t *cl, char logon_failure[128]);
+    cpdlc_client_t *cl, char logon_failure[128]);
 CPDLC_API void cpdlc_client_reset_logon_failure(cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,

@@ -102,6 +102,7 @@ typedef struct {
 	unsigned	spd;
 } fms_wpt_info_t;
 
+typedef bool (*fans_get_flt_id_t)(void *userinfo, char flt_id[8]);
 typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd);
 typedef int (*fans_get_alt_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
@@ -112,6 +113,7 @@ typedef bool (*fans_get_wind_t)(void *userinfo, unsigned *deg_true,
     unsigned *knots);
 
 typedef struct {
+	fans_get_flt_id_t	get_flt_id;
 	cpdlc_get_time_func_t	get_time;
 	fans_get_spd_t		get_cur_spd;
 	fans_get_alt_t		get_cur_alt;

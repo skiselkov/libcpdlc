@@ -37,7 +37,8 @@ static bool
 can_send_logon(const fans_t *box, cpdlc_logon_status_t st)
 {
 	ASSERT(box != NULL);
-	return (box->flt_id[0] != '\0' && box->to[0] != '\0' &&
+	return ((box->flt_id[0] != '\0' || box->flt_id_auto[0] != '\0') &&
+	    box->to[0] != '\0' &&
 	    (st == CPDLC_LOGON_NONE || st == CPDLC_LOGON_LINK_AVAIL));
 }
 
@@ -89,9 +90,12 @@ draw_page1(fans_t *box, cpdlc_logon_status_t st)
 			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
 			    FMS_FONT_SMALL, "%s", box->flt_id);
 		}
+	} else if (box->flt_id_auto[0] != '\0') {
+		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%s", box->flt_id_auto);
 	} else {
 		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_CYAN,
-		    FMS_FONT_LARGE, "________");
+		    FMS_FONT_LARGE, "_______");
 	}
 	fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, true,
 	    FMS_COLOR_WHITE, FMS_FONT_SMALL, "LOGON TO");
@@ -145,6 +149,15 @@ draw_page2(fans_t *box)
 }
 
 void
+fans_logon_status_init_cb(fans_t *box)
+{
+	if (box->funcs.get_flt_id != NULL &&
+	    !box->funcs.get_flt_id(box->userinfo, box->flt_id_auto)) {
+		memset(box->flt_id_auto, 0, sizeof (box->flt_id_auto));
+	}
+}
+
+void
 fans_logon_status_draw_cb(fans_t *box)
 {
 	char logon_failure[128];
@@ -186,8 +199,6 @@ fans_logon_status_draw_cb(fans_t *box)
 		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "LOGON REQUIRED");
 	}
 
-	fans_put_atc_status(box);
-
 	if (box->subpage == 0)
 		draw_page1(box, st);
 	else
@@ -202,8 +213,8 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 	ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer(box, box->flt_id, sizeof (box->flt_id),
-		    st <= CPDLC_LOGON_LINK_AVAIL);
+		fans_scratchpad_xfer_auto(box, box->flt_id, box->flt_id_auto,
+		    sizeof (box->flt_id), st <= CPDLC_LOGON_LINK_AVAIL);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		fans_scratchpad_xfer(box, box->to, sizeof (box->to),
 		    st <= CPDLC_LOGON_LINK_AVAIL);

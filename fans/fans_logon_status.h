@@ -32,6 +32,7 @@
 extern "C" {
 #endif
 
+void fans_logon_status_init_cb(fans_t *box);
 void fans_logon_status_draw_cb(fans_t *box);
 bool fans_logon_status_key_cb(fans_t *box, fms_key_t key);
 

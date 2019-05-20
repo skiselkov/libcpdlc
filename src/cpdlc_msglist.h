@@ -55,7 +55,8 @@ typedef enum {
 	CPDLC_MSG_THR_FAILED,
 	CPDLC_MSG_THR_PENDING,
 	CPDLC_MSG_THR_DISREGARD,
-	CPDLC_MSG_THR_ERROR
+	CPDLC_MSG_THR_ERROR,
+	CPDLC_MSG_THR_CONN_ENDED
 } cpdlc_msg_thr_status_t;
 
 CPDLC_API cpdlc_msglist_t *cpdlc_msglist_alloc(cpdlc_client_t *cl);

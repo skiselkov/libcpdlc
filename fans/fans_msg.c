@@ -57,7 +57,7 @@ draw_thr_hdr(fans_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
 
 	/* Message uplink/downlink, time and sender */
 	fans_put_str(box, row, 0, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
-	    "%s %02d:%02d%s%s", sent ? "v" : "^", hours, mins,
+	    "%s %02d%02dZ%s%s", sent ? "v" : "^", hours, mins,
 	    atsu != NULL ? "-" : "", atsu != NULL ? atsu : "");
 	/* Thread status */
 	fans_put_str(box, row, 0, true, FMS_COLOR_GREEN, FMS_FONT_SMALL,
@@ -168,6 +168,10 @@ static bool
 msg_can_resp(fans_t *box, cpdlc_resp_type_t resp)
 {
 	const cpdlc_msg_t *msg;
+
+	if (cpdlc_client_get_logon_status(box->cl, NULL) !=
+	    CPDLC_LOGON_COMPLETE)
+		return (false);
 
 	ASSERT(box != NULL);
 	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);

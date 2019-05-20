@@ -44,10 +44,12 @@ fans_parse_time(const char *buf, int *hrs_p, int *mins_p)
 	ASSERT(buf != NULL);
 
 	len = strlen(buf);
-	for (int i = 0; i < len; i++) {
+	for (int i = 0; i < MIN(len, 4); i++) {
 		if (!isdigit(buf[i]))
 			return (false);
 	}
+	if (!isdigit(buf[len - 1]) && buf[len - 1] != 'Z')
+		return false;
 	if (sscanf(buf, "%d", &num) != 1)
 		return (false);
 	switch (len) {
@@ -61,6 +63,7 @@ fans_parse_time(const char *buf, int *hrs_p, int *mins_p)
 		mins = (num % 10) * 10;
 		break;
 	case 4:
+	case 5:
 		hrs = num / 100;
 		mins = num % 100;
 		break;

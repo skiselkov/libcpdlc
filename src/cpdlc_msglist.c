@@ -187,7 +187,7 @@ thr_status_is_final(cpdlc_msg_thr_status_t st)
 	return (st == CPDLC_MSG_THR_CLOSED || st == CPDLC_MSG_THR_ACCEPTED ||
 	    st == CPDLC_MSG_THR_REJECTED || st == CPDLC_MSG_THR_TIMEDOUT ||
 	    st == CPDLC_MSG_THR_DISREGARD || st == CPDLC_MSG_THR_FAILED ||
-	    st == CPDLC_MSG_THR_ERROR);
+	    st == CPDLC_MSG_THR_ERROR || st == CPDLC_MSG_THR_CONN_ENDED);
 }
 
 static unsigned
@@ -262,6 +262,10 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		thr->status = CPDLC_MSG_THR_DISREGARD;
 	} else if (is_error_msg(last->msg)) {
 		thr->status = CPDLC_MSG_THR_ERROR;
+	} else if (cpdlc_client_get_logon_status(msglist->cl, NULL) !=
+	    CPDLC_LOGON_COMPLETE) {
+		thr->dirty = false;
+		thr->status = CPDLC_MSG_THR_CONN_ENDED;
 	}
 }
 

@@ -100,7 +100,7 @@ draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "WPT TIME");
 	fans_put_time(box, LSK1_ROW, 0, true, &box->pos_rep.wpt_time,
-	    &box->pos_rep.wpt_time_auto, false, true);
+	    &box->pos_rep.wpt_time_auto, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "WPT ALT");
 	fans_put_alt(box, LSK2_ROW, 0, false, &box->pos_rep.wpt_alt,
@@ -120,7 +120,7 @@ draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "NXT FIX TIME");
 	fans_put_time(box, LSK3_ROW, 0, true, &box->pos_rep.nxt_fix_time,
-	    &box->pos_rep.nxt_fix_time_auto, false, true);
+	    &box->pos_rep.nxt_fix_time_auto, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "TEMP");
 	fans_put_temp(box, LSK4_ROW, 0, true, &box->pos_rep.temp,
@@ -145,16 +145,16 @@ draw_page2(fans_t *box)
 	    true, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L4, "CLB/DES");
-	fans_put_alt(box, LSK4_ROW, 0, false, &box->pos_rep.clb_des, NULL,
-	    false, true);
+	fans_put_alt(box, LSK4_ROW, 0, false, &box->pos_rep.clb_des,
+	    NULL, false, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "POS TIME");
-	fans_put_time(box, LSK2_ROW, 0, true, &box->pos_rep.pos_time, NULL,
-	    true, true);
+	fans_put_time(box, LSK2_ROW, 0, true, &box->pos_rep.pos_time,
+	    NULL, true, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "TIME AT DEST");
 	fans_put_time(box, LSK3_ROW, 0, true, &box->pos_rep.time_at_dest,
-	    NULL, false, true);
+	    NULL, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "OFFSET");
 	fans_put_off(box, LSK4_ROW, 0, true, &box->pos_rep.off, NULL, false);
