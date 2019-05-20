@@ -111,6 +111,8 @@ struct cpdlc_client_s {
 	cpdlc_logon_status_t		logon_status;
 	char				logon_failure[128];
 	int				sock;
+	struct addrinfo			*ai;
+	struct addrinfo			*ai_cur;
 	gnutls_session_t		session;
 	bool				handshake_completed;
 	gnutls_certificate_credentials_t xcred;
@@ -142,6 +144,7 @@ struct cpdlc_client_s {
 };
 
 static void reset_link_state(cpdlc_client_t *cl);
+static bool resolve_host(cpdlc_client_t *cl);
 static void init_conn(cpdlc_client_t *cl);
 static void complete_conn(cpdlc_client_t *cl);
 static void tls_handshake(cpdlc_client_t *cl);
@@ -185,7 +188,8 @@ logon_worker(void *userinfo)
 
 	mutex_enter(&cl->lock);
 
-	init_conn(cl);
+	if (resolve_host(cl))
+		init_conn(cl);
 
 	while (cl->logon_status != CPDLC_LOGON_NONE &&
 	    cl->logon_failure[0] == '\0') {
@@ -307,6 +311,8 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	list_destroy(&cl->inmsgbufs);
 
 	free(cl->cafile);
+	if (cl->ai != NULL)
+		freeaddrinfo(cl->ai);
 
 	clear_key_data(cl);
 
@@ -473,30 +479,33 @@ reset_link_state(cpdlc_client_t *cl)
 	}
 }
 
-static void
-init_conn(cpdlc_client_t *cl)
+static bool
+resolve_host(cpdlc_client_t *cl)
 {
 	struct addrinfo *ai = NULL;
-	int result, sock;
+	int result;
 	char portbuf[8];
 	struct addrinfo hints = {
 	    .ai_family = AF_UNSPEC,
 	    .ai_socktype = SOCK_STREAM,
 	    .ai_protocol = IPPROTO_TCP
 	};
-	cpdlc_logon_status_t new_status;
 	int port = (cl->port != 0 ? cl->port : DEFAULT_PORT);
-	char *host = NULL;
+	char host[PATH_MAX];
 
 	ASSERT(cl != NULL);
 	ASSERT3S(cl->sock, ==, -1);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
+	if (cl->ai != NULL) {
+		freeaddrinfo(cl->ai);
+		cl->ai = cl->ai_cur = NULL;
+	}
 	if (cl->host[0] == '\0') {
 		set_logon_failure(cl, "no host specified");
-		goto out;
+		return (false);
 	}
-	host = strdup(cl->host);
+	cpdlc_strlcpy(host, cl->host, sizeof (host));
 	snprintf(portbuf, sizeof (portbuf), "%d", port);
 
 	/*
@@ -504,25 +513,52 @@ init_conn(cpdlc_client_t *cl)
 	 * the lock here to avoid blocking API callers.
 	 */
 	mutex_exit(&cl->lock);
-	result = getaddrinfo(cl->host, portbuf, &hints, &ai);
+	result = getaddrinfo(host, portbuf, &hints, &ai);
 	mutex_enter(&cl->lock);
 
 	if (result != 0) {
 		fprintf(stderr, "Can't resolve %s: %s\n", host,
 		    gai_strerror(result));
-		set_logon_failure(cl, "%s", gai_strerror(result));
-		goto out;
+		set_logon_failure(cl, "%s: %s", host, gai_strerror(result));
+		return (false);
 	}
 	ASSERT(ai != NULL);
+	cl->ai_cur = cl->ai = ai;
+
+	return (true);
+}
+
+static void
+init_conn(cpdlc_client_t *cl)
+{
+	struct addrinfo *ai;
+	int sock;
+	cpdlc_logon_status_t new_status;
+
+	ASSERT(cl != NULL);
+	ASSERT3S(cl->sock, ==, -1);
+	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
+	ASSERT(cl->ai != NULL);
+
+	/* No more addresses to try */
+	if (cl->ai_cur == NULL)
+		return;
+
+	ai = cl->ai_cur;
+	cl->ai_cur = cl->ai_cur->ai_next;
+
 	sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 	if (sock == -1) {
 		set_logon_failure(cl, "%s", strerror(errno));
-		goto out;
+		/* Try the next address in line, if one is available */
+		init_conn(cl);
+		return;
 	}
 	if (!set_fd_nonblock(sock)) {
-		set_logon_failure(cl, "%s", strerror(errno));
 		close(sock);
-		goto out;
+		set_logon_failure(cl, "%s", strerror(errno));
+		init_conn(cl);
+		return;
 	}
 	/*
 	 * No need to drop locks here, we are non-blocking, so connection
@@ -530,9 +566,10 @@ init_conn(cpdlc_client_t *cl)
 	 */
 	if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
 		if (errno != EINPROGRESS) {
-			set_logon_failure(cl, "%s", strerror(errno));
 			close(sock);
-			goto out;
+			set_logon_failure(cl, "%s", strerror(errno));
+			init_conn(cl);
+			return;
 		}
 		new_status = CPDLC_LOGON_CONNECTING_LINK;
 	} else {
@@ -541,10 +578,7 @@ init_conn(cpdlc_client_t *cl)
 
 	cl->sock = sock;
 	cl->logon_status = new_status;
-out:
-	if (ai != NULL)
-		freeaddrinfo(ai);
-	free(host);
+	set_logon_failure(cl, NULL);
 }
 
 static void
@@ -587,6 +621,10 @@ complete_conn(cpdlc_client_t *cl)
 	}
 errout:
 	cl->logon_status = CPDLC_LOGON_NONE;
+	close(cl->sock);
+	cl->sock = -1;
+	/* Try the next socket in line, if one is available */
+	init_conn(cl);
 }
 
 /*
