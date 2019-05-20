@@ -55,6 +55,8 @@
 		if (error < GNUTLS_E_SUCCESS) { \
 			fprintf(stderr, "GnuTLS error performing " #__op__ \
 			    ": %s\n", gnutls_strerror(error)); \
+			set_logon_failure(cl, "TLS setup error: %s", \
+			    gnutls_strerror(error)); \
 			cl->logon_status = CPDLC_LOGON_NONE; \
 			return; \
 		} \
@@ -638,8 +640,11 @@ tls_handshake(cpdlc_client_t *cl)
 
 	ret = gnutls_handshake(cl->session);
 	if (ret < GNUTLS_E_SUCCESS) {
-		if (ret != GNUTLS_E_AGAIN)
+		if (ret != GNUTLS_E_AGAIN) {
+			set_logon_failure(cl, "TLS handshake error: %s",
+			    gnutls_strerror(ret));
 			cl->logon_status = CPDLC_LOGON_NONE;
+		}
 		return;
 	} else {
 		cl->handshake_completed = true;

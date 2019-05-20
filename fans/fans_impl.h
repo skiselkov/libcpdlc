@@ -37,7 +37,7 @@ extern "C" {
 
 #define	SCRATCHPAD_MAX		22
 #define	SCRATCHPAD_ROW		13
-#define	ERROR_MSG_MAX		19
+#define	ERROR_MSG_MAX		24
 #define	ERROR_MSG_ROW		14
 #define	LSK1_ROW		2
 #define	LSK2_ROW		4
@@ -174,7 +174,7 @@ struct fans_s {
 	unsigned		subpage;
 	unsigned		num_subpages;
 	char			scratchpad[SCRATCHPAD_MAX + 1];
-	char			error_msg[ERROR_MSG_MAX + 1];
+	char			error_msg[128];
 
 	char			flt_id[12];
 	char			to[8];

@@ -639,7 +639,13 @@ del_key(fans_t *box)
 	ASSERT(box != NULL);
 
 	if (box->error_msg[0] != '\0') {
-		memset(box->error_msg, 0, sizeof (box->error_msg));
+		if (strlen(box->error_msg) > ERROR_MSG_MAX) {
+			memmove(box->error_msg,
+			    &box->error_msg[ERROR_MSG_MAX],
+			    strlen(&box->error_msg[ERROR_MSG_MAX]) + 1);
+		} else {
+			box->error_msg[0] = '\0';
+		}
 		return;
 	}
 	l = strlen(box->scratchpad);
