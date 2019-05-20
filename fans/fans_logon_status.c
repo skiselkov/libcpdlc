@@ -61,38 +61,43 @@ send_logoff(fans_t *box)
 static void
 draw_page1(fans_t *box, cpdlc_logon_status_t st)
 {
+	char cda[32], nda[32];
+
+	cpdlc_client_get_cda(box->cl, cda, sizeof (cda));
+	cpdlc_client_get_nda(box->cl, nda, sizeof (nda));
+
 	fans_put_str(box, 1, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL,
 	    "CDA");
-	if (st == CPDLC_LOGON_COMPLETE) {
-		fans_put_str(box, 1, 5, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%s", box->to);
-	} else {
-		fans_put_str(box, 1, 5, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "--------");
-	}
+	fans_put_str(box, 1, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL, "%s",
+	    (st == CPDLC_LOGON_COMPLETE && cda[0] != '\0' ? cda : "--------"));
+
 	fans_put_str(box, 2, 1, false, FMS_COLOR_WHITE, FMS_FONT_SMALL,
 	    "NDA");
-	fans_put_str(box, 2, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
-	    "--------");
+	fans_put_str(box, 2, 5, false, FMS_COLOR_GREEN, FMS_FONT_SMALL, "%s",
+	    (nda[0] != '\0' ? nda : "--------"));
+
 	fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE,
 	    "------------------------");
-	fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false, FMS_COLOR_WHITE,
-	    FMS_FONT_SMALL, "FLT ID");
-	if (box->flt_id[0] != '\0') {
-		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", box->flt_id);
-	} else {
-		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "________");
-	}
-	fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, true, FMS_COLOR_WHITE,
-	    FMS_FONT_SMALL, "LOGON TO");
-	if (box->to[0] != '\0') {
-		fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", box->to);
-	} else {
-		fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "____");
+
+	if (st == CPDLC_LOGON_NONE) {
+		fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
+		    FMS_COLOR_WHITE, FMS_FONT_SMALL, "FLT ID");
+		if (box->flt_id[0] != '\0') {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%s", box->flt_id);
+		} else {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_CYAN,
+			    FMS_FONT_LARGE, "________");
+		}
+		fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, true,
+		    FMS_COLOR_WHITE, FMS_FONT_SMALL, "LOGON TO");
+		if (box->to[0] != '\0') {
+			fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%s", box->to);
+		} else {
+			fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_CYAN,
+			    FMS_FONT_LARGE, "____");
+		}
 	}
 }
 

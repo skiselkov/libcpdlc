@@ -125,8 +125,8 @@ struct cpdlc_client_s {
 	} outmsgbufs;
 
 	/* protected by `lock' */
-	char			*inbuf;
-	unsigned		inbuf_sz;
+	char		*inbuf;
+	unsigned	inbuf_sz;
 	list_t		inmsgbufs;
 
 	struct {
@@ -135,6 +135,7 @@ struct cpdlc_client_s {
 		char	*data;
 		char	*from;
 		char	*to;
+		char	*nda;
 	} logon;
 };
 
@@ -312,6 +313,7 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	free(cl->logon.data);
 	free(cl->logon.from);
 	free(cl->logon.to);
+	free(cl->logon.nda);
 	memset(cl, 0, sizeof (*cl));
 	free(cl);
 }
@@ -657,6 +659,10 @@ send_logon(cpdlc_client_t *cl)
 
 	cpdlc_msg_set_logon_data(msg, cl->logon.data);
 	cpdlc_msg_set_from(msg, cl->logon.from);
+	if (cl->logon.nda != NULL) {
+		cl->logon.to = cl->logon.nda;
+		cl->logon.nda = NULL;
+	}
 	if (cl->logon.to != NULL)
 		cpdlc_msg_set_to(msg, cl->logon.to);
 	send_msg_impl(cl, msg, false);
@@ -665,7 +671,7 @@ send_logon(cpdlc_client_t *cl)
 	cl->logon_status = CPDLC_LOGON_IN_PROG;
 }
 
-static void
+static bool
 queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
 	inmsgbuf_t *inmsgbuf;
@@ -677,13 +683,47 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 	if (msg->segs[0].info->msg_type == CPDLC_UM161_END_SVC) {
 		cpdlc_msg_free(msg);
-		cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
-		return;
+		/*
+		 * If we have an NDA loaded, we can try recycling the link
+		 * and logging onto the NDA. Otherwise, we tear down the
+		 * link.
+		 */
+		if (cl->logon.nda != NULL)
+			cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
+		else
+			cl->logon_status = CPDLC_LOGON_NONE;
+		return (false);
+	} else if (!cl->is_atc &&
+	    strcmp(cpdlc_msg_get_from(msg), cl->logon.to) != 0) {
+		cpdlc_msg_t *errmsg = cpdlc_msg_alloc();
+
+		cpdlc_msg_set_mrn(errmsg, cpdlc_msg_get_min(msg));
+		cpdlc_msg_set_to(errmsg, cpdlc_msg_get_from(msg));
+		cpdlc_msg_add_seg(errmsg, true,
+		    CPDLC_DM63_NOT_CURRENT_DATA_AUTHORITY, 0);
+		send_msg_impl(cl, errmsg, false);
+
+		cpdlc_msg_free(msg);
+		cpdlc_msg_free(errmsg);
+
+		return (false);
+	} else if (!cl->is_atc &&
+	    msg->segs[0].info->msg_type == CPDLC_UM160_NEXT_DATA_AUTHORITY_id) {
+		char nda[128], name[128];
+
+		free(cl->logon.nda);
+		cpdlc_msg_seg_get_arg(msg, 0, 0, nda, sizeof (nda), name);
+		cl->logon.nda = strdup(nda);
+		cpdlc_msg_free(msg);
+
+		return (false);
 	}
 
 	inmsgbuf = safe_calloc(1, sizeof (*inmsgbuf));
 	inmsgbuf->msg = msg;
 	list_insert_tail(&cl->inmsgbufs, inmsgbuf);
+
+	return (true);
 }
 
 static bool
@@ -721,8 +761,7 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 			/* Spurious logon message? Why? */
 			cpdlc_msg_free(msg);
 		} else {
-			queue_incoming_msg(cl, msg);
-			new_msgs = true;
+			new_msgs |= queue_incoming_msg(cl, msg);
 		}
 		break;
 	default:
@@ -912,6 +951,44 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	return (new_msgs);
 }
 
+size_t
+cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf, size_t cap)
+{
+	size_t n = 0;
+
+	ASSERT(cl != NULL);
+
+	mutex_enter(&cl->lock);
+	if (cl->logon.to != NULL) {
+		n = strlen(cl->logon.to);
+		cpdlc_strlcpy(buf, cl->logon.to, cap);
+	} else {
+		cpdlc_strlcpy(buf, "", cap);
+	}
+	mutex_exit(&cl->lock);
+
+	return (n);
+}
+
+size_t
+cpdlc_client_get_nda(cpdlc_client_t *cl, char *buf, size_t cap)
+{
+	size_t n = 0;
+
+	ASSERT(cl != NULL);
+
+	mutex_enter(&cl->lock);
+	if (cl->logon.nda != NULL) {
+		n = strlen(cl->logon.nda);
+		cpdlc_strlcpy(buf, cl->logon.nda, cap);
+	} else {
+		cpdlc_strlcpy(buf, "", cap);
+	}
+	mutex_exit(&cl->lock);
+
+	return (n);
+}
+
 void
 cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to)
@@ -928,6 +1005,8 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 	cl->logon.do_logon = true;
 	cl->logon.data = strdup(logon_data);
 	cl->logon.from = strdup(from);
+	free(cl->logon.nda);
+	cl->logon.nda = NULL;
 	if (to != NULL)
 		cl->logon.to = strdup(to);
 	else

@@ -891,6 +891,16 @@ store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
 	return (true);
 }
 
+static bool
+msg_is_not_cda(const cpdlc_msg_t *msg)
+{
+	ASSERT(msg != NULL);
+	ASSERT(msg->segs[0].info != NULL);
+	return (msg->num_segs == 1 && msg->segs[0].info->is_dl &&
+	    msg->segs[0].info->msg_type ==
+	    CPDLC_DM63_NOT_CURRENT_DATA_AUTHORITY);
+}
+
 static void
 conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 {
@@ -914,7 +924,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	}
 
 	if (msg->to[0] != '\0') {
-		if (!conn->is_atc) {
+		if (!conn->is_atc && !msg_is_not_cda(msg)) {
 			send_error_msg(conn, msg,
 			    "MESSAGE CANNOT CONTAIN TO= HEADER");
 			return;

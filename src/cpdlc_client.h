@@ -85,6 +85,11 @@ CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
     const char *key_pem_data, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_pem_data);
 
+CPDLC_API size_t cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf,
+    size_t cap);
+CPDLC_API size_t cpdlc_client_get_nda(cpdlc_client_t *cl, char *buf,
+    size_t cap);
+
 CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to);
 CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
