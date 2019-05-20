@@ -101,6 +101,8 @@ fans_scratchpad_xfer_auto(fans_t *box, char *dest, const char *autobuf,
 				cpdlc_strlcpy(box->scratchpad, autobuf,
 				    sizeof (box->scratchpad));
 			}
+		} else {
+			fans_set_error(box, "MOD NOT ALLOWED");
 		}
 		return;
 	}

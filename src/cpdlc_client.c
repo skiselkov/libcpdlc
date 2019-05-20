@@ -711,9 +711,14 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	    msg->segs[0].info->msg_type == CPDLC_UM160_NEXT_DATA_AUTHORITY_id) {
 		char nda[128], name[128];
 
+		ASSERT(cl->logon.to != NULL);
+
 		free(cl->logon.nda);
+		cl->logon.nda = NULL;
+
 		cpdlc_msg_seg_get_arg(msg, 0, 0, nda, sizeof (nda), name);
-		cl->logon.nda = strdup(nda);
+		if (strcmp(nda, cl->logon.to) != 0)
+			cl->logon.nda = strdup(nda);
 		cpdlc_msg_free(msg);
 
 		return (false);

@@ -707,6 +707,20 @@ fans_push_char(fans_t *box, char c)
 	fans_update(box);
 }
 
+static void
+update_cda(fans_t *box)
+{
+	cpdlc_logon_status_t st;
+
+	ASSERT(box != NULL);
+	st = cpdlc_client_get_logon_status(box->cl, NULL);
+	if (st == CPDLC_LOGON_COMPLETE) {
+		char cda[8];
+		cpdlc_client_get_cda(box->cl, cda, sizeof (cda));
+		cpdlc_strlcpy(box->to, cda, sizeof (box->to));
+	}
+}
+
 void
 fans_update(fans_t *box)
 {
@@ -723,6 +737,7 @@ fans_update(fans_t *box)
 	put_cur_time(box);
 	fans_update_scratchpad(box);
 	update_error_msg(box);
+	update_cda(box);
 }
 
 void
