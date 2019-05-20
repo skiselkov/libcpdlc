@@ -486,7 +486,7 @@ init_conn(cpdlc_client_t *cl)
 	ASSERT3S(cl->sock, ==, -1);
 	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
-	if (cl->host == NULL) {
+	if (cl->host[0] == '\0') {
 		set_logon_failure(cl, "no host specified");
 		goto out;
 	}
