@@ -2055,6 +2055,12 @@ static const cpdlc_msg_info_t dl_infos[] = {
     },
     {
 	.is_dl = true,
+	.msg_type = CPDLC_DM69_REQ_VMC_DES,
+	.text = "REQUEST VMC DESCENT",
+	.resp = CPDLC_RESP_Y
+    },
+    {
+	.is_dl = true,
 	.msg_type = CPDLC_DM70_REQ_HDG_deg,
 	.text = "REQUEST HEADING [degrees]",
 	.num_args = 1,

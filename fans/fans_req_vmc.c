@@ -32,11 +32,9 @@
 static void
 verify_vmc_req(fans_t *box)
 {
-	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc();
 
-	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM67_FREETEXT_NORMAL_text, 0);
-	cpdlc_msg_seg_set_arg(msg, seg, 0, "REQUEST VMC DESCENT", NULL);
+	cpdlc_msg_add_seg(msg, true, CPDLC_DM69_REQ_VMC_DES, 0);
 	fans_req_add_common(box, msg);
 	fans_verify_msg(box, msg, "VMC REQ", FMS_PAGE_REQ_VMC, true);
 }
