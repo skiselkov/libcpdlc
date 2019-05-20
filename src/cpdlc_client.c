@@ -432,6 +432,8 @@ reset_link_state(cpdlc_client_t *cl)
 	cl->logon_status = CPDLC_LOGON_NONE;
 	free(cl->logon.nda);
 	cl->logon.nda = NULL;
+	free(cl->logon.to);
+	cl->logon.to = NULL;
 	if (cl->session != NULL) {
 		if (cl->handshake_completed) {
 			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
