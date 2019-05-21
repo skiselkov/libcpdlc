@@ -8,3 +8,4 @@ cpdlcd/test.conf
 test/cpdlc_cert.pem
 fansgui/cpdlc_cert.pem
 fansgui/fansgui
+openssl.cnf
