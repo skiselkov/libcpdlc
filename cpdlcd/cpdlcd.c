@@ -69,7 +69,13 @@
 #define	MAX_BUF_SZ		8192
 #define	MAX_BUF_SZ_NO_LOGON	128
 #define	POLL_TIMEOUT		1000	/* ms */
-#define	QUEUED_MSG_TIMEOUT	3600	/* seconds */
+/*
+ * This value is tuned to be greater + a sufficient margin above the longest
+ * possible message validity timeout (LONG_TIMEOUT in cpdlc_infos.c). This is
+ * ATM 300 seconds (for low-priority instructions), so a 600 second timeout is
+ * enough margin to definitely get those through within the validity period.
+ */
+#define	QUEUED_MSG_TIMEOUT	600	/* seconds */
 #define	LOGON_GRACE_TIME	30	/* seconds */
 
 typedef enum {
@@ -171,6 +177,10 @@ static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
 static void conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg);
 
+/*
+ * Writes a single byte into the main thread wakeup pipe. This forces
+ * the main thread to wake up and perform its other regular tasks.
+ */
 static void
 wake_up_main_thread(void)
 {
@@ -178,6 +188,9 @@ wake_up_main_thread(void)
 	(void) write(poll_wakeup_pipe[1], buf, sizeof (buf));
 }
 
+/*
+ * Sets a file descriptor to non-blocking mode.
+ */
 static bool
 set_fd_nonblock(int fd)
 {
@@ -187,6 +200,9 @@ set_fd_nonblock(int fd)
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
 }
 
+/*
+ * Connection AVL tree (conns) comparator.
+ */
 static int
 conn_compar(const void *a, const void *b)
 {
@@ -205,6 +221,9 @@ conn_compar(const void *a, const void *b)
 	return (0);
 }
 
+/*
+ * Listen socket AVL tree (listen_socks) comparator.
+ */
 static int
 listen_sock_compar(const void *a, const void *b)
 {
@@ -223,6 +242,9 @@ listen_sock_compar(const void *a, const void *b)
 	return (0);
 }
 
+/*
+ * Initializes our global data structures.
+ */
 static void
 init_structs(void)
 {
@@ -240,6 +262,9 @@ init_structs(void)
 	set_fd_nonblock(poll_wakeup_pipe[1]);
 }
 
+/*
+ * Destroys and cleans up our global data structures.
+ */
 static void
 fini_structs(void)
 {
@@ -285,6 +310,12 @@ print_usage(const char *progname, FILE *fp)
 	fprintf(fp, "Usage: %s [-h] [-c <conffile>]\n", progname);
 }
 
+/*
+ * Adds a listen socket to the server's list of incoming sockets.
+ * @param name_port String specifying the "hostname:port" combo to listen on.
+ * @return true if the socket was added successfully, false on error.
+ *	The error reason is printed to the log.
+ */
 static bool
 add_listen_sock(const char *name_port)
 {
@@ -377,6 +408,10 @@ errout:
 	return (false);
 }
 
+/*
+ * Converts the string value of the "tls/keyfile_enctype" config key into
+ * a key encryption type suitable for GnuTLS.
+ */
 static gnutls_pkcs_encrypt_flags_t
 str2encflags(const char *value)
 {
@@ -421,6 +456,16 @@ parse_bytes(const char *str)
 	return (value);
 }
 
+/*
+ * Parses the server's configuration file. The config file is arranged
+ * as a sequence of "key = value" pairs, using the config file syntax
+ * of libacfutils' conf.h class.
+ *
+ * @param conf_path Config file path.
+ *
+ * @return true if the config file was parsed successfully, false on error.
+ *	The error reason is printed to the log.
+ */
 static bool
 parse_config(const char *conf_path)
 {
@@ -499,6 +544,11 @@ errout:
 	return (false);
 }
 
+/*
+ * In the absence of a config file, performs minimal server auto-configuration.
+ *
+ * @return true on success, false on error.
+ */
 static bool
 auto_config(void)
 {
@@ -507,6 +557,17 @@ auto_config(void)
 	return (add_listen_sock("localhost"));
 }
 
+/*
+ * Puts the daemon into the background (forks and shuts down the foreground
+ * copy).
+ *
+ * @param do_chdir If true, the daemon chdir()s to "/" after forking.
+ * @param do_close If true, the daemon closes its stdin to decouple from
+ *	an attached terminals.
+ *
+ * @return true on success, false on failure (error reason is printed to
+ *	the log).
+ */
 static bool
 daemonize(bool do_chdir, bool do_close)
 {
@@ -536,6 +597,13 @@ daemonize(bool do_chdir, bool do_close)
 	return (true);
 }
 
+/*
+ * Handles an new incoming connections on a listen socket. Connections
+ * are accepted until there are no more pending connections. The function
+ * then returns.
+ *
+ * @param ls Listen socket on which to accept connections.
+ */
 static void
 handle_accepts(listen_sock_t *ls)
 {
@@ -550,14 +618,19 @@ handle_accepts(listen_sock_t *ls)
 		conn->addr_family = ls->addr_family;
 		if (conn->fd == -1) {
 			free(conn);
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				logMsg("Error accepting connection: %s",
-				    strerror(errno));
-				continue;
-			} else {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				/* No more pending connections, we're done. */
 				break;
 			}
+			/* Genuine accept() error */
+			logMsg("Error accepting connection: %s",
+			    strerror(errno));
+			continue;
 		}
+		/*
+		 * Interrogate the blocklist as early as possible, so we're
+		 * not wasting any resources on blocked hosts.
+		 */
 		if (!blocklist_check(conn->addr, conn->addr_len,
 		    conn->addr_family)) {
 			logMsg("Incoming connection blocked: address on "
@@ -566,7 +639,10 @@ handle_accepts(listen_sock_t *ls)
 			free(conn);
 			continue;
 		}
-
+		/*
+		 * Set the socket as non-blocking and check for duplicate
+		 * connections (this would indicate a kernel bug, really).
+		 */
 		set_fd_nonblock(conn->fd);
 		conn->logoff_time = time(NULL);
 		old_conn = avl_find(&conns, conn, &where);
@@ -577,12 +653,15 @@ handle_accepts(listen_sock_t *ls)
 			free(conn);
 			continue;
 		}
-
+		/*
+		 * Start the TLS handshake process.
+		 */
 		VERIFY0(gnutls_init(&conn->session,
 		    GNUTLS_SERVER | GNUTLS_NONBLOCK | GNUTLS_NO_SIGNAL));
 		VERIFY0(gnutls_priority_set(conn->session, prio_cache));
 		VERIFY0(gnutls_credentials_set(conn->session,
 		    GNUTLS_CRD_CERTIFICATE, x509_creds));
+		/* If client certs are required, request one. */
 		gnutls_certificate_server_set_request(conn->session,
 		    req_client_cert ? GNUTLS_CERT_REQUIRE : GNUTLS_CERT_IGNORE);
 		gnutls_handshake_set_timeout(conn->session,
@@ -595,6 +674,11 @@ handle_accepts(listen_sock_t *ls)
 	}
 }
 
+/*
+ * Resets the logon status of a connection. This de-associates the
+ * connection from its "FROM" identity and prevents any further message
+ * submissions without a new logon.
+ */
 static void
 conn_reset_logon(conn_t *conn)
 {
@@ -604,13 +688,19 @@ conn_reset_logon(conn_t *conn)
 
 	mutex_enter(&conn->lock);
 
+	/*
+	 * If a background auth session has been started, kill it.
+	 */
 	if (conn->logon_status == LOGON_STARTED) {
 		auth_sess_kill(conn->auth_key);
 		goto out;
 	}
 	if (conn->logon_status != LOGON_COMPLETE)
 		goto out;
-
+	/*
+	 * If the logon has completed, we MUST have had this connection
+	 * inserted in the conns_by_from hashtable.
+	 */
 	l = htbl_lookup_multi(&conns_by_from, conn->from);
 	ASSERT(l != NULL);
 	for (void *mv = list_head(l); mv != NULL; mv = list_next(l, mv)) {
@@ -629,12 +719,17 @@ conn_reset_logon(conn_t *conn)
 out:
 	conn->logon_status = LOGON_NONE;
 	conn->logon_success = false;
+
 	mutex_exit(&conn->lock);
 }
 
+/*
+ * Closes a network connection and kills all associated state with it.
+ */
 static void
 close_conn(conn_t *conn)
 {
+	ASSERT(conn != NULL);
 	/*
 	 * Must be done before unlinking the connection from any list,
 	 * because we can be called in the background to complete a logon.
@@ -644,14 +739,21 @@ close_conn(conn_t *conn)
 	avl_remove(&conns, conn);
 	if (conn->tls_handshake_complete)
 		gnutls_bye(conn->session, GNUTLS_SHUT_WR);
+	ASSERT(conn->fd != -1);
 	close(conn->fd);
 	gnutls_deinit(conn->session);
 	mutex_destroy(&conn->lock);
 	free(conn->inbuf);
 	free(conn->outbuf);
+	memset(conn, 0, sizeof (*conn));
 	free(conn);
 }
 
+/*
+ * Asynchronous logon authentication completion callback. This is called
+ * by the background authenticator to confirm if a particular connection
+ * is authenticated or not.
+ */
 static void
 logon_done_cb(bool result, bool is_atc, void *userinfo)
 {
@@ -659,7 +761,9 @@ logon_done_cb(bool result, bool is_atc, void *userinfo)
 
 	ASSERT(userinfo != NULL);
 	conn = userinfo;
-
+	/*
+	 * Simply record the results and wake up the main thread.
+	 */
 	mutex_enter(&conn->lock);
 	ASSERT3U(conn->logon_status, ==, LOGON_STARTED);
 	conn->logon_status = LOGON_COMPLETING;
@@ -670,6 +774,11 @@ logon_done_cb(bool result, bool is_atc, void *userinfo)
 	wake_up_main_thread();
 }
 
+/*
+ * Main thread processing done in response to a completed login.
+ * This is invoked after logon_done_cb has given us the results
+ * of the authentication callback.
+ */
 static void
 complete_logon(conn_t *conn)
 {
@@ -709,6 +818,10 @@ complete_logon(conn_t *conn)
 	mutex_exit(&conn->lock);
 }
 
+/*
+ * Runs through all connections and any that have pending logon
+ * authentication results will send the required response to the client.
+ */
 static void
 complete_logons(void)
 {
@@ -717,6 +830,11 @@ complete_logons(void)
 		complete_logon(conn);
 }
 
+/*
+ * Processes an incoming LOGON message. When all conditions to continue
+ * with the logon are met, this function fires off a background
+ * authentication thread in auth.h to do the actual auth process.
+ */
 static void
 process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
@@ -750,11 +868,20 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	/* This is async */
 	conn->auth_key = auth_sess_open(msg, conn->addr, conn->addr_family,
 	    logon_done_cb, conn);
-	/* Mustn't touch logon status after this */
+	/*
+	 * Mustn't touch logon status after this, as logon_done_cb might
+	 * have already been called (auth.c does this if it has no
+	 * external authenticator configured).
+	 */
 
 	mutex_exit(&conn->lock);
 }
 
+/*
+ * Prepares a new buffer for transmission to a particular connection.
+ * The buffer is queued on the connections `outbuf'. This is later
+ * processed by the master output functions.
+ */
 static void
 conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
 {
@@ -772,6 +899,10 @@ conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
 	mutex_exit(&conn->lock);
 }
 
+/*
+ * Takes a message, encodes it into a sendable format and schedules it for
+ * sending to a client. The caller retains ownership of the `msg' object.
+ */
 static void
 conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
@@ -801,6 +932,19 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	}
 }
 
+/*
+ * Generic error-response function for sending errors to clients.
+ *
+ * @param conn The connection over which to send the error.
+ * @param orig_msg If not NULL, the error message will be formatted so as
+ *	to respond to this message. If `orig_msg' was an uplink message,
+ *	the error message code will be an uplink error message. Otherwise
+ *	it will be a downlink error message. The error message will also
+ *	have its MRN set appropriately to mark it as a response to
+ *	`orig_msg'.
+ * @param fmt A printf-style format string (+ arguments) for the free text
+ *	details in the error message body.
+ */
 static void
 send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 {
@@ -842,6 +986,12 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 	cpdlc_msg_free(msg);
 }
 
+/*
+ * Sends a UM162 SERVICE UNAVAILABLE message into a connection.
+ *
+ * @param conn Connection on which to send the message.
+ * @param orig_min Original message MIN that caused this error to occur.
+ */
 static void
 send_svc_unavail_msg(conn_t *conn, unsigned orig_min)
 {
@@ -853,6 +1003,22 @@ send_svc_unavail_msg(conn_t *conn, unsigned orig_min)
 	cpdlc_msg_free(msg);
 }
 
+/*
+ * Stores a message for later delivery. The message is accounted for
+ * in the global memory and individual message quota trackers.
+ *
+ * @param msg The message to store. The message is stored in encoded
+ *	form, so the caller retains ownership of the `msg' object.
+ * @param to Recipient ID.
+ * @param is_atc True if sender is an ATC station, false if it is an
+ *	aircraft station. ATC stations do not have individual quota
+ *	applied to their stored messages.
+ *
+ * @return True if the message was stored for later delivery. False
+ *	if storing the message couldn't be performed. This can only
+ *	happen when either the global message queue has run out of
+ *	space, or if the sender's quota has been exhausted.
+ */
 static bool
 store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
 {
@@ -891,6 +1057,12 @@ store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
 	return (true);
 }
 
+/*
+ * Returns true if a message is a "NOT CURRENT DATA AUTHORITY" message,
+ * or false otherwise. This is used to allow these special errors to
+ * propagate from an aircraft station to an ATC station even though the
+ * aircraft is not currently logged onto said ATC station.
+ */
 static bool
 msg_is_not_cda(const cpdlc_msg_t *msg)
 {
@@ -901,6 +1073,15 @@ msg_is_not_cda(const cpdlc_msg_t *msg)
 	    CPDLC_DM63_NOT_CURRENT_DATA_AUTHORITY);
 }
 
+/*
+ * Handles an incoming message from a connection. This performs all
+ * necessary permissions checks, logon hooks and message forwarding.
+ *
+ * @param conn The connection which received the message.
+ * @param msg The message to process. As any forwarding of the message
+ *	is done in encoded form, the caller retains ownership of the
+ *	message object.
+ */
 static void
 conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 {
@@ -910,6 +1091,10 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
 
+	/*
+	 * If the user isn't logged on, don't allow anything other than
+	 * LOGON through.
+	 */
 	mutex_enter(&conn->lock);
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
@@ -919,11 +1104,16 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	mutex_exit(&conn->lock);
 
 	if (msg->is_logon) {
+		/* Logon messages do not get forwarded. */
 		process_logon_msg(conn, msg);
 		return;
 	}
 
 	if (msg->to[0] != '\0') {
+		/*
+		 * Aircraft stations can only communicate with their
+		 * LOGON target.
+		 */
 		if (!conn->is_atc && !msg_is_not_cda(msg)) {
 			send_error_msg(conn, msg,
 			    "MESSAGE CANNOT CONTAIN TO= HEADER");
@@ -933,11 +1123,21 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	} else if (conn->to[0] != '\0') {
 		lacf_strlcpy(to, conn->to, sizeof (to));
 	} else {
+		/*
+		 * ATC stations MUST provide a TO= header, as they
+		 * otherwise have no default send target.
+		 */
 		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
 		return;
 	}
 	ASSERT(msg->num_segs > 0);
 	ASSERT(msg->segs[0].info != NULL);
+	/*
+	 * Make sure the message has the proper uplink/downlink message
+	 * type depending on the connection type. We only need to check
+	 * the first message segment, as cpdlc_msg_decode has made sure
+	 * that all segments have the same is_dl value.
+	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
 		send_error_msg(conn, msg, "MESSAGE UPLINK/DOWNLINK MISMATCH");
 		return;
@@ -946,15 +1146,20 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		send_svc_unavail_msg(conn, cpdlc_msg_get_min(msg));
 		return;
 	}
-
+	/*
+	 * Stamp the message with its sender connection. No matter what
+	 * FROM= header the client provided, this overrides it.
+	 */
 	ASSERT(conn->from[0] != '\0');
 	cpdlc_msg_set_from(msg, conn->from);
-
+	/*
+	 * If there is at least one connection matching the identity of
+	 * the intended recipient, forward the message without storing it.
+	 * Otherwise, we store it for later delivery as soon as the
+	 * recipient becomes available, or until the message expires.
+	 */
 	l = htbl_lookup_multi(&conns_by_from, to);
-	if (l == NULL || list_count(l) == 0) {
-		if (!store_msg(msg, to, conn->is_atc))
-			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
-	} else {
+	if (l != NULL && list_count(l) != 0) {
 		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
 		    mv = mv_next) {
 			conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
@@ -963,6 +1168,9 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 			ASSERT(tgt_conn != NULL);
 			conn_send_msg(tgt_conn, msg);
 		}
+	} else {
+		if (!store_msg(msg, to, conn->is_atc))
+			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
 	}
 }
 
