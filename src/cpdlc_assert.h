@@ -34,6 +34,7 @@
 extern "C" {
 #endif
 
+#ifndef	VERIFY
 /*
  * ASSERT() and VERIFY() are assertion test macros. If the condition
  * expression provided as the argument to the macro evaluates as non-true,
@@ -73,7 +74,9 @@ extern "C" {
 #define	VERIFY3F(x, op, y)	VERIFY3_impl(x, op, y, double, "%f")
 #define	VERIFY3P(x, op, y)	VERIFY3_impl(x, op, y, void *, "%p")
 #define	VERIFY0(x)		VERIFY3S((x), ==, 0)
+#endif	/* !defined(VERIFY) */
 
+#ifndef	ASSERT
 #ifdef	DEBUG
 #define	ASSERT(x)		VERIFY(x)
 #define	ASSERT3S(x, op, y)	VERIFY3S(x, op, y)
@@ -91,10 +94,12 @@ extern "C" {
 #define	ASSERT0(x)		UNUSED(x)
 #define	ASSERT_MSG(x, fmt, ...)	UNUSED(x)
 #endif	/* !DEBUG */
+#endif	/* !defined(ASSERT) */
 
 /*
  * Compile-time assertion. The condition 'x' must be constant.
  */
+#ifndef	CTASSERT
 #if	defined(__GNUC__) || defined(__clang__)
 #define	CTASSERT(x)		_CTASSERT(x, __LINE__)
 #define	_CTASSERT(x, y)		__CTASSERT(x, y)
@@ -104,6 +109,7 @@ extern "C" {
 #else	/* !defined(__GNUC__) && !defined(__clang__) */
 #define	CTASSERT(x)
 #endif	/* !defined(__GNUC__) && !defined(__clang__) */
+#endif	/* !defined(CTASSERT) */
 
 #if	defined(__GNUC__) || defined(__clang__)
 #define	BUILTIN_STRRCHR __builtin_strrchr

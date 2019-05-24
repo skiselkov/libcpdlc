@@ -39,6 +39,16 @@
 extern "C" {
 #endif
 
+/*
+ * This is an asynchronous logon authenticator. To begin an authentication
+ * session, first call auth_sess_open, passing the details of the logon
+ * message and the connection identity. The authenticator fires up a
+ * background thread that contacts the authentication URL (as set in
+ * `auth_init'). Once a response is received, the authenticator calls a
+ * callback with the result. Alternatively, an authentication session can
+ * be terminated early with a call to auth_sess_kill.
+ */
+
 typedef uint64_t auth_sess_key_t;
 typedef void (*auth_done_cb_t)(bool result, bool is_atc, void *userinfo);
 

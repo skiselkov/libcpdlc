@@ -65,9 +65,14 @@
 #include "msgquota.h"
 
 #define	CONN_BACKLOG		UINT16_MAX
-#define	READ_BUF_SZ		4096
-#define	MAX_BUF_SZ		8192
-#define	MAX_BUF_SZ_NO_LOGON	128
+#define	READ_BUF_SZ		4096	/* bytes */
+/*
+ * Buffer size limits for logged on and non-logged-on connections. If a
+ * message is not completed within this amount of bytes, the associated
+ * connection is terminated with an error.
+ */
+#define	MAX_BUF_SZ		8192	/* bytes */
+#define	MAX_BUF_SZ_NO_LOGON	128	/* bytes */
 #define	POLL_TIMEOUT		1000	/* ms */
 /*
  * This value is tuned to be greater + a sufficient margin above the longest
@@ -76,8 +81,25 @@
  * enough margin to definitely get those through within the validity period.
  */
 #define	QUEUED_MSG_TIMEOUT	600	/* seconds */
+/*
+ * If no logon is completed within this time period from the connection
+ * having been established, the connection is terminated.
+ */
 #define	LOGON_GRACE_TIME	30	/* seconds */
 
+/*
+ * Logon status enum:
+ * - LOGON_NONE: initial state when new connection is received and its TLS
+ *	handshake has completed.
+ * - LOGON_STARTED: client has sent a LOGON message and we have initiated
+ *	a background auth session to validate the logon.
+ * - LOGON_COMPLETING: background auth session has completed and its results
+ *	have been recorded in the connection structure. The main thread
+ *	needs to send the corresponding result to the client.
+ * - LOGON_COMPLETE: successfully logged on and the connection has assumed
+ *	its intended logon identity. If the logon fails, the logon status
+ *	reverts back to LOGON_NONE instead.
+ */
 typedef enum {
 	LOGON_NONE,
 	LOGON_STARTED,
@@ -85,58 +107,94 @@ typedef enum {
 	LOGON_COMPLETE
 } logon_status_t;
 
+/*
+ * Master connection tracking structure. This structure holds all the state
+ * associated with a client connection. It is held in the `conns' AVL tree
+ * (keyed by its remote address and port). If the client has completed a
+ * logon, it can also be referenced from the `conns_by_from' hash table.
+ */
 typedef struct {
 	/* only set & read from main thread */
-	uint8_t		addr[MAX_ADDR_LEN];
-	socklen_t	addr_len;
-	int		addr_family;
-	int		fd;
-	time_t		logoff_time;
+	uint8_t			addr[MAX_ADDR_LEN];
+	socklen_t		addr_len;
+	int			addr_family;
+	int			fd;
+	time_t			logoff_time;
 
-	uint8_t		*inbuf;
-	size_t		inbuf_sz;
+	uint8_t			*inbuf;
+	size_t			inbuf_sz;
 
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
 
-	mutex_t		lock;
+	mutex_t			lock;
 
-	/* protected by lock */
-	char		from[CALLSIGN_LEN];
-	char		to[CALLSIGN_LEN];
-	char		logon_from[CALLSIGN_LEN];
-	char		logon_to[CALLSIGN_LEN];
-	logon_status_t	logon_status;
-	unsigned	logon_min;
-	auth_sess_key_t	auth_key;
-	bool		is_atc;
-	bool		logon_success;
-	uint8_t		*outbuf;
-	size_t		outbuf_sz;
+	/* protected by `lock' */
+	logon_status_t		logon_status;
+	/* Actual identity after a successful LOGON */
+	char			from[CALLSIGN_LEN];
+	char			to[CALLSIGN_LEN];
+	/* Identity requested by a LOGON message */
+	char			logon_from[CALLSIGN_LEN];
+	char			logon_to[CALLSIGN_LEN];
+	bool			logon_success;
+	/* MIN value of LOGON message */
+	unsigned		logon_min;
+	auth_sess_key_t		auth_key;
+	bool			is_atc;
+	/* Data about to be sent to the client over the TLS connection */
+	uint8_t			*outbuf;
+	size_t			outbuf_sz;
 
-	avl_node_t	node;
-	avl_node_t	from_node;
+	avl_node_t		conns_node;
 } conn_t;
 
+/*
+ * An encoded message waiting in the delivery queue.
+ */
 typedef struct {
 	char		from[CALLSIGN_LEN];
 	char		to[CALLSIGN_LEN];
 	bool		is_atc;
-	time_t		created;
-	char		*msg;
-	list_node_t	node;
+	time_t		created;	/* when the msg entered the queue */
+	char		*msg;		/* message contents */
+	list_node_t	queued_msgs_node;
 } queued_msg_t;
 
+/*
+ * Structure holding all information about a socket on which we listen
+ * for new incoming connections. This structure is held in the
+ * `listen_socks' AVL tree, keyed by the address and port.
+ */
 typedef struct {
 	uint8_t		addr[MAX_ADDR_LEN];
 	socklen_t	addr_len;
 	int		addr_family;
 	int		fd;
-	avl_node_t	node;
+	avl_node_t	listen_socks_node;
 } listen_sock_t;
 
+/*
+ * Master connections list AVL tree. All conn_t's are gathered and primarily
+ * held in this tree, keyed by remote address and port. While we should
+ * never really have to deal with the possibility of duplicate connections
+ * with the same remote address and port, the reason this is arranged as an
+ * AVL tree is to allow for quick filtering. When the server refreshes its
+ * address-based blocklist, it does a quick search through all the
+ * connections for a matching address, to see if any of the existing
+ * connections should be torn down immediately.
+ */
 static avl_tree_t	conns;
+/*
+ * Hash table mapping station "FROM" identities to one or more connections.
+ * This mapping is established after a successful LOGON.
+ */
 static htbl_t		conns_by_from;
+/*
+ * Bitshift defining the size of the `conns_by_from' hash table.
+ * The default value of `12' defines a hash table with 4096 entries in it.
+ */
+#define	CONNS_BY_FROM_SHIFT	12
 static avl_tree_t	listen_socks;
 
 /*
@@ -152,20 +210,34 @@ static avl_tree_t	listen_socks;
  */
 static int		poll_wakeup_pipe[2] = { -1, -1 };
 
+/*
+ * TLS configuration parameters.
+ */
 static char		tls_keyfile[PATH_MAX] = { 0 };
 static char		tls_certfile[PATH_MAX] = { 0 };
 static char		tls_cafile[PATH_MAX] = { 0 };
 static char		tls_crlfile[PATH_MAX] = { 0 };
 static char		tls_keyfile_pass[PATH_MAX] = { 0 };
 static gnutls_pkcs_encrypt_flags_t tls_keyfile_enctype = GNUTLS_PKCS_PLAIN;
-
-static list_t		queued_msgs;
-static uint64_t		queued_msg_bytes = 0;
-static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
-
+/*
+ * Global TLS state.
+ */
 static gnutls_certificate_credentials_t	x509_creds;
 static gnutls_priority_t		prio_cache;
 
+/*
+ * List of messages queued for later delivery (recipient currently not
+ * connected). A list of queued_msg_t's. The list is processed at regular
+ * intervals to expunge timed out messages.
+ */
+static list_t		queued_msgs;
+/* Current amount of bytes consumed by messages in `queued_msgs' */
+static uint64_t		queued_msg_bytes = 0;
+/* Maximum size that `queued_msgs' can grow to. */
+static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
+/*
+ * Global server config parameters. Can be overridden from config file.
+ */
 static bool		background = true;
 static bool		do_shutdown = false;
 static int		default_port = 17622;
@@ -248,13 +320,15 @@ listen_sock_compar(const void *a, const void *b)
 static void
 init_structs(void)
 {
+	CTASSERT(CONNS_BY_FROM_SHIFT > 0);
 	avl_create(&conns, conn_compar, sizeof (conn_t),
-	    offsetof(conn_t, node));
-	htbl_create(&conns_by_from, 1024, CALLSIGN_LEN, true);
+	    offsetof(conn_t, conns_node));
+	htbl_create(&conns_by_from, 1 << CONNS_BY_FROM_SHIFT, CALLSIGN_LEN,
+	    true);
 	list_create(&queued_msgs, sizeof (queued_msg_t),
-	    offsetof(queued_msg_t, node));
+	    offsetof(queued_msg_t, queued_msgs_node));
 	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
-	    offsetof(listen_sock_t, node));
+	    offsetof(listen_sock_t, listen_socks_node));
 	blocklist_init();
 	VERIFY_MSG(pipe(poll_wakeup_pipe) != -1, "pipe() failed: %s",
 	    strerror(errno));
@@ -1174,6 +1248,15 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	}
 }
 
+/*
+ * Drains a connection's `inbuf', attempts to construct messages from it
+ * and processes them. Any input that isn't a full message yet, will be
+ * left in `inbuf'. This function shortens `inbuf' as necessary to adjust
+ * it for the consumed messages.
+ *
+ * @return True if input processing was successful. False if a fatal error
+ *	was encountered and the connection must be terminated.
+ */
 static bool
 conn_process_input(conn_t *conn)
 {
@@ -1207,6 +1290,7 @@ conn_process_input(conn_t *conn)
 		ASSERT3S(consumed_total, <=, conn->inbuf_sz);
 	}
 	if (consumed_total != 0) {
+		/* Adjust `inbuf' to get rid of the consumed message data */
 		ASSERT3S(consumed_total, <=, conn->inbuf_sz);
 		conn->inbuf_sz -= consumed_total;
 		memmove(conn->inbuf, &conn->inbuf[consumed_total],
@@ -1217,12 +1301,25 @@ conn_process_input(conn_t *conn)
 	return (true);
 }
 
+/*
+ * When TLS client verification is enabled, this function checks if the
+ * client's certificate is valid. The CA certificate used to validate
+ * the client's certificate is the same CA certificate as is used in our
+ * server connection. If a CRL is configured for the server, that is
+ * checked as well.
+ *
+ * @return True if the client's certificate is valid, false if it isn't
+ *	(the reason is printed to the log).
+ */
 static bool
 tls_verify_peer(conn_t *conn)
 {
 	unsigned int status;
-	int error = gnutls_certificate_verify_peers2(conn->session, &status);
+	int error;
 
+	ASSERT(conn != NULL);
+
+	error = gnutls_certificate_verify_peers2(conn->session, &status);
 	if (error != GNUTLS_E_SUCCESS) {
 		logMsg("TLS handshake error: error validating client "
 		    "certificate: %s\n", gnutls_strerror(error));
@@ -1236,9 +1333,30 @@ tls_verify_peer(conn_t *conn)
 	return (true);
 }
 
-static bool
-handle_conn_input(conn_t *conn)
+/*
+ * Data input validator. All incoming connection data must be plaintext.
+ */
+static inline bool
+input_char_is_valid(uint8_t c)
 {
+	return ((c >= 32 && c <= 127) || c == '\n' || c == '\r' || c == '\t');
+}
+
+/*
+ * Drains a connection of any pending input bytes and stores them in the
+ * `inbuf' cache. This function then calls conn_process_input to turn any
+ * available input bytes into messages and process them.
+ *
+ * @return True if the input read was successful. False if a fatal error
+ *	was encountered during input reading or processing and the
+ *	connection was terminated. The caller must avoid touching the
+ *	`conn' object in this case, as it will have been freed.
+ */
+static bool
+conn_read_input(conn_t *conn)
+{
+	ASSERT(conn != NULL);
+
 	for (;;) {
 		uint8_t buf[READ_BUF_SZ];
 		size_t max_inbuf_sz = (conn->from[0] != '\0' ?
@@ -1267,7 +1385,6 @@ handle_conn_input(conn_t *conn)
 		}
 
 		bytes = gnutls_record_recv(conn->session, buf, sizeof (buf));
-
 		if (bytes < 0) {
 			/* Read error, or no more data pending */
 			if (bytes == GNUTLS_E_AGAIN)
@@ -1289,7 +1406,7 @@ handle_conn_input(conn_t *conn)
 		}
 		for (ssize_t i = 0; i < bytes; i++) {
 			/* Input sanitization, don't allow control chars */
-			if (buf[i] == 0 || buf[i] > 127) {
+			if (!input_char_is_valid(buf[i])) {
 				logMsg("Invalid input character on "
 				    "connection: data MUST be plain text");
 				close_conn(conn);
@@ -1303,7 +1420,10 @@ handle_conn_input(conn_t *conn)
 			close_conn(conn);
 			return (false);
 		}
-
+		/*
+		 * Attach the new input bytes to the end of `inbuf'. That's
+		 * where conn_process_input will drain it from.
+		 */
 		conn->inbuf = safe_realloc(conn->inbuf,
 		    conn->inbuf_sz + bytes + 1);
 		memcpy(&conn->inbuf[conn->inbuf_sz], buf, bytes);
@@ -1317,8 +1437,19 @@ handle_conn_input(conn_t *conn)
 	}
 }
 
+/*
+ * Sends any pending output data over the associated connection. The
+ * function returns when all pending output data has been sent, further
+ * sending would block, or if an error is encountered. The `outbuf' of the
+ * connection is adjusted to remove the data sent.
+ *
+ * @return True if sending data was successful. False if a fatal error has
+ *	been encountered and the connection has been closed. The caller
+ *	must avoid touching the `conn' object in this case, as it will have
+ *	been freed.
+ */
 static bool
-handle_conn_output(conn_t *conn)
+conn_write_output(conn_t *conn)
 {
 	int bytes;
 
@@ -1326,7 +1457,10 @@ handle_conn_output(conn_t *conn)
 	ASSERT(conn->outbuf != NULL);
 
 	mutex_enter(&conn->lock);
-
+	/*
+	 * We are in non-blocking mode, so we can hold `lock' here safely
+	 * during the record send operation.
+	 */
 	bytes = gnutls_record_send(conn->session, conn->outbuf,
 	    conn->outbuf_sz);
 	if (bytes < 0) {
@@ -1360,6 +1494,11 @@ handle_conn_output(conn_t *conn)
 	return (true);
 }
 
+/*
+ * Polls all sockets for incoming data and if we have any pending data
+ * to be written, also polls on client connection sockets for ready-to-send
+ * status. This is the main I/O worker function of the server.
+ */
 static void
 poll_sockets(void)
 {
@@ -1369,6 +1508,9 @@ poll_sockets(void)
 	struct pollfd *pfds = safe_calloc(num_pfds, sizeof (*pfds));
 	int poll_res, polls_seen;
 
+	/*
+	 * The first fd in the poll list is always our poll wakeup pipe.
+	 */
 	pfds[sock_nr].fd = poll_wakeup_pipe[0];
 	pfds[sock_nr].events = POLLIN;
 	sock_nr++;
@@ -1382,7 +1524,8 @@ poll_sockets(void)
 	    conn = AVL_NEXT(&conns, conn), sock_nr++) {
 		pfds[sock_nr].fd = conn->fd;
 		pfds[sock_nr].events = POLLIN;
-		if (conn->outbuf != NULL)
+		/* If a socket has data to send, poll for output as well */
+		if (conn->outbuf_sz != 0)
 			pfds[sock_nr].events |= POLLOUT;
 	}
 	ASSERT3U(sock_nr, ==, num_pfds);
@@ -1407,23 +1550,32 @@ poll_sockets(void)
 		uint8_t buf[4096];
 
 		polls_seen++;
-		/* poll wakeup pipe has been disturbed, drain it */
+		/*
+		 * poll wakeup pipe has been disturbed, drain it.
+		 * This avoids us being woken up unnecessarily many times.
+		 */
 		while (read(poll_wakeup_pipe[0], buf, sizeof (buf)) > 0)
 			;
 		if (polls_seen == poll_res)
 			goto out;
 	}
 	sock_nr++;
-
+	/*
+	 * Handling of newly accepted connections.
+	 */
 	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
 	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
 		if (pfds[sock_nr].revents & (POLLIN | POLLPRI)) {
 			handle_accepts(ls);
 			polls_seen++;
+			/* If we've processed all polls, early exit */
 			if (polls_seen >= poll_res)
 				goto out;
 		}
 	}
+	/*
+	 * This is the primary client connection I/O event loop.
+	 */
 	for (conn_t *conn = avl_first(&conns), *next_conn = NULL;
 	    conn != NULL; conn = next_conn, sock_nr++) {
 		/*
@@ -1434,28 +1586,34 @@ poll_sockets(void)
 		if (pfds[sock_nr].revents & (POLLIN | POLLOUT)) {
 			polls_seen++;
 			if (pfds[sock_nr].revents & POLLIN) {
-				if (!handle_conn_input(conn))
+				if (!conn_read_input(conn))
 					continue;
 			}
 			if (conn->outbuf != NULL &&
 			    (pfds[sock_nr].revents & POLLOUT)) {
-				if (!handle_conn_output(conn))
+				if (!conn_write_output(conn))
 					continue;
 			}
+			/* If we've processed all polls, early exit */
 			if (polls_seen >= poll_res)
 				goto out;
 		}
 	}
 out:
-
 	free(pfds);
 }
 
+/*
+ * Removes a queued message it from the delayed-delivery queue (queued_msgs)
+ * and adjusts the quota and queue size accounting.
+ */
 static void
 dequeue_msg(queued_msg_t *qmsg)
 {
-	uint64_t bytes = strlen(qmsg->msg);
+	uint64_t bytes;
 
+	ASSERT(qmsg != NULL);
+	bytes = strlen(qmsg->msg);
 	ASSERT3U(queued_msg_bytes, >=, bytes);
 	queued_msg_bytes -= bytes;
 	if (!qmsg->is_atc)
@@ -1467,6 +1625,11 @@ dequeue_msg(queued_msg_t *qmsg)
 		ASSERT0(queued_msg_bytes);
 }
 
+/*
+ * Runs over `queued_msgs' and processes all of the queued messages. Any
+ * messages which can be delivered are sent to their respective connections.
+ * Alternatively, any messages which have expired are dropped from the queue.
+ */
 static void
 handle_queued_msgs(void)
 {
@@ -1475,11 +1638,20 @@ handle_queued_msgs(void)
 	for (queued_msg_t *qmsg = list_head(&queued_msgs), *next_qmsg = NULL;
 	    qmsg != NULL; qmsg = next_qmsg) {
 		const list_t *l;
-
+		/*
+		 * Messages might be removed from the list below, so we need
+		 * to grab the next message pointer ahead of time.
+		 */
 		next_qmsg = list_next(&queued_msgs, qmsg);
 
 		l = htbl_lookup_multi(&conns_by_from, qmsg->to);
 		if (l != NULL && list_count(l) != 0) {
+			/*
+			 * One or more connections with the identity of the
+			 * message's intended recipient have been found, so
+			 * deliver the message to them and remove it from
+			 * the queue.
+			 */
 			for (void *mv = list_head(l); mv != NULL;
 			    mv = list_next(l, mv)) {
 				conn_t *conn = HTBL_VALUE_MULTI(mv);
@@ -1488,18 +1660,22 @@ handle_queued_msgs(void)
 			}
 			dequeue_msg(qmsg);
 		} else if (now - qmsg->created > QUEUED_MSG_TIMEOUT) {
+			/*
+			 * Message has timed out, remove it from the queue.
+			 */
 			dequeue_msg(qmsg);
 		}
 	}
 }
 
+/*
+ * Runs through existing connections and close ones which are now
+ * on the blocklist. This allows for forcibly disconnecting clients
+ * that have been added to the blocklist after connecting.
+ */
 static void
 close_blocked_conns(void)
 {
-	/*
-	 * Run through existing connections and close ones which are now
-	 * on the blocklist.
-	 */
 	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
 	    conn = conn_next) {
 		conn_next = AVL_NEXT(&conns, conn);
@@ -1510,15 +1686,15 @@ close_blocked_conns(void)
 	}
 }
 
+/*
+ * Runs through existing connections and close ones which haven't logged on
+ * yet and have timed out.
+ */
 static void
 close_timedout_conns(void)
 {
 	time_t now = time(NULL);
 
-	/*
-	 * Run through existing connections and close ones which haven't
-	 * yet logged on and have timed out.
-	 */
 	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
 	    conn = conn_next) {
 		conn_next = AVL_NEXT(&conns, conn);
@@ -1529,6 +1705,9 @@ close_timedout_conns(void)
 	}
 }
 
+/*
+ * Initializes our global TLS parameters.
+ */
 static bool
 tls_init(void)
 {
@@ -1576,15 +1755,19 @@ tls_init(void)
 #endif	/* GNUTLS_VERSION_NUMBER */
 #if	GNUTLS_VERSION_NUMBER >= 0x030603
 	TLS_CHK(gnutls_priority_init2(&prio_cache, NULL, NULL,
-#else
+	    GNUTLS_PRIORITY_INIT_DEF_APPEND));
+#else	/* GNUTLS_VERSION_NUMBER */
 	TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
-#endif
+#endif	/* GNUTLS_VERSION_NUMBER */
 
 	return (true);
 #undef	TLS_CHK
 #undef	CHECKFILE
 }
 
+/*
+ * Destroys global TLS parameters.
+ */
 static void
 tls_fini(void)
 {
@@ -1599,8 +1782,10 @@ main(int argc, char *argv[])
 	int opt;
 	const char *conf_path = NULL;
 
+	/* Initialize libacfutils' logMsg and crc64 functions */
 	log_init((logfunc_t)puts, "cpdlcd");
 	crc64_init();
+	/* Initialize cURL's global data structures */
 	curl_global_init(CURL_GLOBAL_ALL);
 
 	/* Default certificate names */
