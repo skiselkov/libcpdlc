@@ -57,8 +57,7 @@ void auth_init(const char *url, const char *cainfo, const char *username,
 void auth_fini(void);
 
 auth_sess_key_t auth_sess_open(const cpdlc_msg_t *logon_msg,
-    const void *addr, int addr_family, auth_done_cb_t done_cb,
-    void *userinfo);
+    const void *sockaddr, auth_done_cb_t done_cb, void *userinfo);
 void auth_sess_kill(auth_sess_key_t key);
 
 #ifdef	__cplusplus

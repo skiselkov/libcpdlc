@@ -45,7 +45,7 @@ static void
 verify_alt_req(fans_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	int clb = 0, cur_alt = fans_get_cur_alt(box);
 
 	if (box->alt_req.alt[0].alt.alt >= cur_alt + LVL_ALT_THRESH)

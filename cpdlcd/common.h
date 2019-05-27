@@ -31,8 +31,6 @@ extern "C" {
 #endif
 
 #define	CALLSIGN_LEN	16
-#define	MAX_ADDR_LEN	\
-	MAX(sizeof(struct sockaddr_in6), sizeof(struct sockaddr_in))
 
 #ifdef	__cplusplus
 }

@@ -32,7 +32,7 @@
 static void
 verify_vmc_req(fans_t *box)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	cpdlc_msg_add_seg(msg, true, CPDLC_DM69_REQ_VMC_DES, 0);
 	fans_req_add_common(box, msg);

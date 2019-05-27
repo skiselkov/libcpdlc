@@ -366,8 +366,6 @@ auth_fini(void)
  *	authentication request to be generated. The caller retains
  *	ownership of the message.
  * @param addr The sockaddr structure of the connection's remote end.
- * @param addr_family The address family of the `addr' structure. Must
- *	be either AF_INET or AF_INET6.
  * @param done_cb A completion callback that will be invoked once the
  *	authentication session has finished processing. If the session
  *	encountered a communication error with the remote authenticator,
@@ -381,8 +379,8 @@ auth_fini(void)
  *	auth_sess_kill to terminate the session early.
  */
 auth_sess_key_t
-auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
-    int addr_family, auth_done_cb_t done_cb, void *userinfo)
+auth_sess_open(const cpdlc_msg_t *logon_msg, const void *sockaddr,
+    auth_done_cb_t done_cb, void *userinfo)
 {
 	auth_sess_t *sess;
 	char *tmpstr;
@@ -391,9 +389,11 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
 	uint64_t key;
 	/* temp curl context only used for URL-escaping purposes */
 	CURL *curl;
+	sa_family_t addr_family;
 
 	ASSERT(logon_msg != NULL);
-	ASSERT(addr != NULL);
+	ASSERT(sockaddr != NULL);
+	addr_family = ((struct sockaddr *)sockaddr)->sa_family;
 	ASSERT(addr_family == AF_INET || addr_family == AF_INET6);
 	ASSERT(done_cb != NULL);
 
@@ -451,15 +451,15 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
 		curl_free(tmpstr);
 	}
 	if (addr_family == AF_INET) {
-		const struct sockaddr_in *addr_v4 =
-		    (const struct sockaddr_in *)addr;
-		inet_ntop(addr_family, &addr_v4->sin_addr, addrbuf,
+		const struct sockaddr_in *sockaddr_v4 =
+		    (const struct sockaddr_in *)sockaddr;
+		inet_ntop(addr_family, &sockaddr_v4->sin_addr, addrbuf,
 		    sizeof (addrbuf));
 	} else {
 		char addrbuf[64];
-		const struct sockaddr_in6 *addr_v6 =
-		    (const struct sockaddr_in6 *)addr;
-		inet_ntop(addr_family, &addr_v6->sin6_addr, addrbuf,
+		const struct sockaddr_in6 *sockaddr_v6 =
+		    (const struct sockaddr_in6 *)sockaddr;
+		inet_ntop(addr_family, &sockaddr_v6->sin6_addr, addrbuf,
 		    sizeof (addrbuf));
 	}
 	tmpstr = curl_easy_escape(curl, addrbuf, 0);

@@ -45,7 +45,7 @@ static void
 verify_freetext_msg(fans_t *box)
 {
 	char buf[sizeof (box->freetext)] = { 0 };
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	ASSERT(box != NULL);
 	ASSERT(freetext_msg_ready(box));

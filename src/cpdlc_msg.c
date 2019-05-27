@@ -388,11 +388,13 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 }
 
 cpdlc_msg_t *
-cpdlc_msg_alloc(void)
+cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 {
 	cpdlc_msg_t *msg = safe_calloc(1, sizeof (cpdlc_msg_t));
 
+	ASSERT3U(pkt_type, <=, CPDLC_PKT_PONG);
 	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
+	msg->pkt_type = pkt_type;
 
 	return (msg);
 }
@@ -418,12 +420,29 @@ cpdlc_msg_free(cpdlc_msg_t *msg)
 	free(msg);
 }
 
+static const char *
+pkt_type2str(cpdlc_pkt_t pkt_type)
+{
+	switch (pkt_type) {
+	case CPDLC_PKT_CPDLC:
+		return ("CPDLC");
+	case CPDLC_PKT_PING:
+		return ("PING");
+	case CPDLC_PKT_PONG:
+		return ("PONG");
+	default:
+		VERIFY_MSG(0, "Invalid pkt_type %x", pkt_type);
+	}
+}
+
 unsigned
 cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 {
 	unsigned n_bytes = 0;
 
-	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=CPDLC/MIN=%d", msg->min);
+	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s/MIN=%d",
+	    pkt_type2str(msg->pkt_type), msg->min);
+
 	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
 	if (msg->is_logon) {
@@ -537,14 +556,22 @@ validate_message(const cpdlc_msg_t *msg)
 	if (msg->is_logon)
 		return (validate_logon_message(msg));
 
-	if (msg->num_segs == 0) {
-		fprintf(stderr, "Message malformed: no message segments found\n");
-		return (false);
-	}
 	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
 		fprintf(stderr, "Message malformed: missing or invalid "
 		    "MIN header\n");
 		return (false);
+
+	if (msg->pkt_type == CPDLC_PKT_PING) {
+		return (msg->num_segs == 0 &&
+		    msg->mrn == CPDLC_INVALID_MSG_SEQ_NR);
+	}
+	if (msg->pkt_type == CPDLC_PKT_PONG)
+		return (msg->num_segs == 0);
+
+	if (msg->num_segs == 0) {
+		fprintf(stderr, "Message malformed: no message segments found\n");
+		return (false);
+	}
 	}
 	return (true);
 }
@@ -988,7 +1015,7 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 {
 	const char *start, *term;
 	cpdlc_msg_t *msg;
-	bool pkt_is_cpdlc = false;
+	bool pkt_type_seen = false;
 	bool skipped_cr = false;
 
 	ASSERT(in_buf != NULL);
@@ -1022,12 +1049,18 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 		if (sep == NULL || sep > term)
 			sep = term;
 		if (strncmp(in_buf, "PKT=", 4) == 0) {
-			if (strncmp(&in_buf[4], "CPDLC/", 6) != 0) {
+			if (strncmp(&in_buf[4], "CPDLC/", 6) == 0) {
+				msg->pkt_type = CPDLC_PKT_CPDLC;
+			} else if (strncmp(&in_buf[4], "PING/", 5) == 0) {
+				msg->pkt_type = CPDLC_PKT_PING;
+			} else if (strncmp(&in_buf[4], "PONG/", 5) == 0) {
+				msg->pkt_type = CPDLC_PKT_PONG;
+			} else {
 				fprintf(stderr, "Message malformed: invalid "
 				    "PKT type\n");
 				goto errout;
 			}
-			pkt_is_cpdlc = true;
+			pkt_type_seen = true;
 		} else if (strncmp(in_buf, "MIN=", 4) == 0) {
 			if (sscanf(&in_buf[4], "%u", &msg->min) != 1) {
 				fprintf(stderr, "Message malformed: invalid "
@@ -1090,7 +1123,7 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 		in_buf = sep + 1;
 	}
 
-	if (!pkt_is_cpdlc || !validate_message(msg))
+	if (!pkt_type_seen || !validate_message(msg))
 		goto errout;
 
 	*msg_p = msg;

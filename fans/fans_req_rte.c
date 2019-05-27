@@ -64,7 +64,7 @@ static void
 verify_rte_req(fans_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	char buf[32];
 
 	if (box->rte_req.dct.set) {

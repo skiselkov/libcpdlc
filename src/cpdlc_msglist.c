@@ -252,7 +252,7 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 	} else if (msg_is_ul_req(last->msg) &&
 	    thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
 	    now - last->time > timeout) {
-		cpdlc_msg_t *msg = cpdlc_msg_alloc();
+		cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(last->msg));
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM62_ERROR_errorinfo, 0);
 		cpdlc_msg_seg_set_arg(msg, 0, 0, "TIMEDOUT", NULL);

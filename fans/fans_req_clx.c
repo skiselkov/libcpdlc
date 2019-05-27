@@ -45,7 +45,7 @@ static void
 verify_clx_req(fans_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	if (box->clx_req.clx) {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM25_REQ_PDC, 0);

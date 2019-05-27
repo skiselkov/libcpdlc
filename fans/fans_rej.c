@@ -99,7 +99,7 @@ fans_rej_key_cb(fans_t *box, fms_key_t key)
 		    box->rej.freetext[key - FMS_KEY_LSK_L2],
 		    sizeof (box->rej.freetext[key - FMS_KEY_LSK_L2]), true);
 	} else if (key == FMS_KEY_LSK_R5) {
-		cpdlc_msg_t *msg = cpdlc_msg_alloc();
+		cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		unsigned seg;
 		char freetext[sizeof (box->rej.freetext)] = { 0 };
 

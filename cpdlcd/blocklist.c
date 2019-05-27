@@ -34,57 +34,42 @@
 #include <acfutils/assert.h>
 #include <acfutils/avl.h>
 #include <acfutils/helpers.h>
+#include <acfutils/htbl.h>
 #include <acfutils/safe_alloc.h>
+#include <acfutils/thread.h>
 
 #include "common.h"
 #include "blocklist.h"
 
+#define	BLOCK_ADDR_LEN	MAX(sizeof (struct in6_addr), sizeof (struct in_addr))
+
 typedef struct {
-	uint8_t		addr[MAX_ADDR_LEN];
-	socklen_t	addr_len;
+	uint8_t		addr[BLOCK_ADDR_LEN];
 	int		addr_family;
-	avl_node_t	node;
 } block_addr_t;
 
-static time_t		update_time = 0;
-static char		filename[PATH_MAX] = { 0 };
-static avl_tree_t	tree;
-
-static int
-block_addr_compar(const void *a, const void *b)
-{
-	const block_addr_t *ba = a, *bb = b;
-	int res;
-
-	if (ba->addr_family < bb->addr_family)
-		return (-1);
-	if (ba->addr_family > bb->addr_family)
-		return (1);
-	ASSERT3U(ba->addr_len, ==, bb->addr_len);
-	res = memcmp(ba->addr, bb->addr, sizeof (ba->addr_len));
-	if (res < 0)
-		return (-1);
-	if (res > 0)
-		return (1);
-	return (0);
-}
+static time_t	update_time = 0;
+static char	filename[PATH_MAX] = { 0 };
+static mutex_t	lock;
+static bool	table_inited = false;
+static htbl_t	table;
+static bool	blocklist_entry = true;
 
 void
 blocklist_init(void)
 {
-	avl_create(&tree, block_addr_compar, sizeof (block_addr_t),
-	    offsetof(block_addr_t, node));
+	mutex_init(&lock);
 }
 
 void
 blocklist_fini(void)
 {
-	void *cookie = NULL;
-	block_addr_t *ba;
-
-	while ((ba = avl_destroy_nodes(&tree, &cookie)) != NULL)
-		free(ba);
-	avl_destroy(&tree);
+	if (table_inited) {
+		htbl_empty(&table, NULL, NULL);
+		htbl_destroy(&table);
+		table_inited = false;
+	}
+	mutex_destroy(&lock);
 }
 
 void
@@ -96,9 +81,10 @@ blocklist_set_filename(const char *new_filename)
 static bool
 blocklist_refresh_impl(void)
 {
-	void *cookie = NULL;
-	block_addr_t *ba;
 	FILE *fp;
+	unsigned num_lines = 0;
+	char *line = NULL;
+	size_t linecap = 0;
 
 	/* Blocklist updated, refresh */
 	fp = fopen(filename, "r");
@@ -107,9 +93,24 @@ blocklist_refresh_impl(void)
 		    strerror(errno));
 		return (false);
 	}
+	/* Count lines */
+	for (num_lines = 0; !feof(fp); num_lines++)
+		getline(&line, &linecap, fp);
+	free(line);
+	line = NULL;
+	linecap = 0;
+	rewind(fp);
+
+	mutex_enter(&lock);
+
 	/* Empty out the old blocklist data */
-	while ((ba = avl_destroy_nodes(&tree, &cookie)) != NULL)
-		free(ba);
+	if (table_inited) {
+		htbl_empty(&table, NULL, NULL);
+		htbl_destroy(&table);
+		table_inited = false;
+	}
+	htbl_create(&table, num_lines, sizeof (block_addr_t), 0);
+	table_inited = true;
 
 	while (!feof(fp)) {
 		char buf[128];
@@ -144,26 +145,42 @@ blocklist_refresh_impl(void)
 		}
 		for (const struct addrinfo *ai = ai_full; ai != NULL;
 		    ai = ai->ai_next) {
-			avl_index_t where;
+			block_addr_t ba;
 
-			/* Only care about TCP connections. */
+			if (ai->ai_family != AF_INET &&
+			    ai->ai_family != AF_INET6) {
+				continue;
+			}
+
+			/* We only care about TCP connections. */
 			ASSERT3U(ai->ai_protocol, ==, IPPROTO_TCP);
-			ba = safe_calloc(1, sizeof (*ba));
-			ASSERT3U(ai->ai_addrlen, <=, sizeof (ba->addr));
-			memcpy(ba->addr, ai->ai_addr, ai->ai_addrlen);
-			ba->addr_len = ai->ai_addrlen;
-			ba->addr_family = ai->ai_family;
+			ASSERT3U(ai->ai_addrlen, <=, sizeof (ba.addr));
 
-			if (avl_find(&tree, ba, &where) != NULL) {
+			memset(&ba, 0, sizeof (ba));
+			if (ai->ai_family == AF_INET) {
+				const struct sockaddr_in *sa =
+				    (struct sockaddr_in *)ai->ai_addr;
+				memcpy(ba.addr, &sa->sin_addr,
+				    sizeof (sa->sin_addr));
+			} else {
+				const struct sockaddr_in6 *sa =
+				    (struct sockaddr_in6 *)ai->ai_addr;
+				memcpy(ba.addr, &sa->sin6_addr,
+				    sizeof (sa->sin6_addr));
+			}
+			ba.addr_family = ai->ai_family;
+
+			if (htbl_lookup(&table, &ba) != NULL) {
 				logMsg("Duplicate blocklist entry: %s", buf);
-				free(ba);
 				break;
 			}
-			avl_insert(&tree, ba, where);
+			htbl_set(&table, &ba, &blocklist_entry);
 		}
 		freeaddrinfo(ai_full);
 	}
 	fclose(fp);
+
+	mutex_exit(&lock);
 
 	return (true);
 }
@@ -192,25 +209,42 @@ blocklist_refresh(void)
 }
 
 bool
-blocklist_check(const void *addr, socklen_t addr_len, int addr_family)
+blocklist_check_impl(const void *addr, size_t addr_len, int addr_family)
 {
-	block_addr_t ba = { .addr_len = addr_len, .addr_family = addr_family };
+	block_addr_t ba;
+	bool result;
 
 	ASSERT(addr != NULL);
+	ASSERT(addr_len != 0);
 	ASSERT(addr_family == AF_INET || addr_family == AF_INET6);
 
+	memset(&ba, 0, sizeof (ba));
 	memcpy(ba.addr, addr, addr_len);
-	/*
-	 * Before we search, we need to sanitize the lookup to have a
-	 * zero port number, otherwise we won't generate an exact match.
-	 */
-	if (addr_family == AF_INET) {
-		struct sockaddr_in *in_addr = (struct sockaddr_in *)ba.addr;
-		in_addr->sin_port = 0;
-	} else {
-		struct sockaddr_in6 *in6_addr = (struct sockaddr_in6 *)ba.addr;
-		in6_addr->sin6_port = 0;
-	}
-	return (avl_find(&tree, &ba, NULL) == NULL);
+	ba.addr_family = addr_family;
+
+	mutex_enter(&lock);
+	result = (htbl_lookup(&table, &ba) == NULL);
+	mutex_exit(&lock);
+
+	return (result);
 }
 
+bool
+blocklist_check(const void *sockaddr)
+{
+	sa_family_t addr_family;
+
+	ASSERT(sockaddr != NULL);
+	addr_family = ((struct sockaddr *)sockaddr)->sa_family;
+	ASSERT(addr_family == AF_INET || addr_family == AF_INET6);
+
+	if (addr_family == AF_INET) {
+		const struct sockaddr_in *sa = sockaddr;
+		return (blocklist_check_impl(&sa->sin_addr,
+		    sizeof (sa->sin_addr), AF_INET));
+	} else {
+		const struct sockaddr_in6 *sa = sockaddr;
+		return (blocklist_check_impl(&sa->sin6_addr,
+		    sizeof (sa->sin6_addr), AF_INET6));
+	}
+}

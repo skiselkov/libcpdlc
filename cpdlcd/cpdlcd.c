@@ -61,6 +61,7 @@
 #include <acfutils/thread.h>
 
 #include "../src/cpdlc_msg.h"
+#include "../src/cpdlc_string.h"
 
 #include "auth.h"
 #include "blocklist.h"
@@ -90,6 +91,12 @@
  */
 #define	LOGON_GRACE_TIME	30	/* seconds */
 
+#define	SOCKADDR_STRLEN		64
+
+#define	AF2ADDRLEN(sa_family) \
+	((sa_family) == AF_INET ? sizeof (struct sockaddr_in) : \
+	    sizeof (struct sockaddr_in6))
+
 /*
  * Checks whether the appropriate connections list mutex is held for
  * a particular connection. For TCP connections, we want to be holding
@@ -98,13 +105,6 @@
  */
 #define	CONNS_MUTEX_HELD(conn)	((conn)->is_lws ? \
 	MUTEX_HELD(&conns_lws_lock) : MUTEX_HELD(&conns_tcp_lock))
-
-#define	LWS_CLOSE_PROTO_ERR(conn, msg) \
-	do { \
-		ASSERT((conn)->wsi != NULL); \
-		lws_close_reason((conn)->wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, \
-		    (unsigned char *)(msg), strlen((msg))); \
-	} while (0)
 
 /*
  * Logon status enum:
@@ -138,11 +138,11 @@ typedef struct {
 	uint64_t		outbuf_pre_pad;
 
 	struct lws		*wsi;
+	bool			kill_wsi;
 
 	/* only set & read from main thread */
-	uint8_t			addr[MAX_ADDR_LEN];
-	socklen_t		addr_len;
-	int			addr_family;
+	struct sockaddr_storage	sockaddr;
+	char			addr_str[SOCKADDR_STRLEN];
 	int			fd;
 	time_t			logoff_time;
 
@@ -189,14 +189,12 @@ typedef struct {
 /*
  * Structure holding all information about a socket on which we listen
  * for new incoming connections. This structure is held in the
- * `listen_socks' AVL tree, keyed by the address and port.
+ * `listen_socks' list.
  */
 typedef struct {
-	uint8_t			addr[MAX_ADDR_LEN];
-	socklen_t		addr_len;
-	int			addr_family;
+	struct sockaddr_storage	sockaddr;
 	int			fd;
-	avl_node_t		listen_socks_node;
+	list_node_t		listen_socks_node;
 } listen_sock_t;
 
 typedef struct {
@@ -238,7 +236,11 @@ static htbl_t		conns_by_from;
  * The default value of `12' defines a hash table with 4096 entries in it.
  */
 #define	CONNS_BY_FROM_SHIFT	12
-static avl_tree_t	listen_socks;
+/*
+ * Master lists of listening ends. `listen_socks' is for TCP sockets,
+ * `listen_lws' is for WebSockets.
+ */
+static list_t		listen_socks;
 static list_t		listen_lws;
 
 /*
@@ -341,25 +343,39 @@ set_fd_nonblock(int fd)
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
 }
 
-/*
- * Listen socket AVL tree (listen_socks) comparator.
- */
-static int
-listen_sock_compar(const void *a, const void *b)
+static void
+sockaddr2str(const struct sockaddr_storage *ss, char str[SOCKADDR_STRLEN])
 {
-	const listen_sock_t *la = a, *lb = b;
-	int res;
+	ASSERT(ss != NULL);
+	ASSERT(str != NULL);
 
-	if (la->addr_len < lb->addr_len)
-		return (-1);
-	if (la->addr_len > lb->addr_len)
-		return (1);
-	res = memcmp(la->addr, lb->addr, sizeof (la->addr_len));
-	if (res < 0)
-		return (-1);
-	if (res > 0)
-		return (1);
-	return (0);
+	if (ss->ss_family == AF_INET) {
+		char addr[SOCKADDR_STRLEN] = { 0 };
+		struct sockaddr_in *sa = (struct sockaddr_in *)ss;
+
+		VERIFY_MSG(inet_ntop(ss->ss_family, &sa->sin_addr, addr,
+		    sizeof (addr)) != NULL,
+		    "Cannot convert sockaddr to string: %s", strerror(errno));
+		if (sa->sin_port != 0) {
+			snprintf(str, SOCKADDR_STRLEN, "%s:%d", addr,
+			    ntohs(sa->sin_port));
+		} else {
+			cpdlc_strlcpy(str, addr, SOCKADDR_STRLEN);
+		}
+	} else {
+		char addr[SOCKADDR_STRLEN] = { 0 };
+		struct sockaddr_in6 *sa = (struct sockaddr_in6 *)ss;
+
+		VERIFY_MSG(inet_ntop(ss->ss_family, &sa->sin6_addr, addr,
+		    sizeof (addr)) != NULL,
+		    "Cannot convert sockaddr to string: %s", strerror(errno));
+		if (sa->sin6_port != 0) {
+			snprintf(str, SOCKADDR_STRLEN, "[%s]:%d", addr,
+			    ntohs(sa->sin6_port));
+		} else {
+			snprintf(str, SOCKADDR_STRLEN, "[%s]", addr);
+		}
+	}
 }
 
 /*
@@ -378,7 +394,7 @@ init_structs(void)
 	    true);
 	list_create(&queued_msgs, sizeof (queued_msg_t),
 	    offsetof(queued_msg_t, queued_msgs_node));
-	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
+	list_create(&listen_socks, sizeof (listen_sock_t),
 	    offsetof(listen_sock_t, listen_socks_node));
 	list_create(&listen_lws, sizeof (listen_lws_t),
 	    offsetof(listen_lws_t, listen_lws_node));
@@ -395,7 +411,6 @@ init_structs(void)
 static void
 fini_structs(void)
 {
-	void *cookie;
 	conn_t *conn;
 	queued_msg_t *msg;
 	listen_sock_t *ls;
@@ -427,13 +442,12 @@ fini_structs(void)
 	list_destroy(&queued_msgs);
 	queued_msg_bytes = 0;
 
-	cookie = NULL;
-	while ((ls = avl_destroy_nodes(&listen_socks, &cookie)) != NULL) {
+	while ((ls = list_remove_head(&listen_socks)) != NULL) {
 		if (ls->fd != -1)
 			close(ls->fd);
 		free(ls);
 	}
-	avl_destroy(&listen_socks);
+	list_destroy(&listen_socks);
 
 	/*
 	 * First mark all LWS contexts for destruction, then join all the
@@ -525,25 +539,15 @@ add_listen_sock_tcp(const char *hostname, int port, const char *name_port)
 
 	for (const struct addrinfo *ai = ai_full; ai != NULL;
 	    ai = ai->ai_next) {
-		listen_sock_t *ls, *old_ls;
-		avl_index_t where;
+		listen_sock_t *ls;
 		unsigned int one = 1;
 
 		ASSERT3U(ai->ai_protocol, ==, IPPROTO_TCP);
 		ls = safe_calloc(1, sizeof (*ls));
-		ASSERT3U(ai->ai_addrlen, <=, sizeof (ls->addr));
-		memcpy(ls->addr, ai->ai_addr, ai->ai_addrlen);
-		ls->addr_len = ai->ai_addrlen;
-		ls->addr_family = ai->ai_family;
+		ASSERT3U(ai->ai_addrlen, <=, sizeof (ls->sockaddr));
+		memcpy(&ls->sockaddr, ai->ai_addr, ai->ai_addrlen);
 
-		old_ls = avl_find(&listen_socks, ls, &where);
-		if (old_ls != NULL) {
-			logMsg("Invalid listen directive \"%s\": address "
-			    "already used on another socket", name_port);
-			free(ls);
-			goto errout;
-		}
-		avl_insert(&listen_socks, ls, where);
+		list_insert_tail(&listen_socks, ls);
 
 		ls->fd = socket(ai->ai_family, ai->ai_socktype,
 		    ai->ai_protocol);
@@ -756,7 +760,7 @@ parse_config(const char *conf_path)
 		}
 	}
 
-	if (avl_numnodes(&listen_socks) == 0 &&
+	if (list_count(&listen_socks) == 0 &&
 	    !add_listen_sock("localhost", false)) {
 		goto errout;
 	}
@@ -835,11 +839,10 @@ handle_accepts(listen_sock_t *ls)
 {
 	for (;;) {
 		conn_t *conn = safe_calloc(1, sizeof (*conn));
+		socklen_t addr_len = sizeof (conn->sockaddr);
 
-		conn->addr_len = sizeof (conn->addr);
-		conn->fd = accept(ls->fd, (struct sockaddr *)conn->addr,
-		    &conn->addr_len);
-		conn->addr_family = ls->addr_family;
+		conn->fd = accept(ls->fd, (struct sockaddr *)&conn->sockaddr,
+		    &addr_len);
 		if (conn->fd == -1) {
 			free(conn);
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -851,14 +854,16 @@ handle_accepts(listen_sock_t *ls)
 			    strerror(errno));
 			continue;
 		}
+		ASSERT(conn->sockaddr.ss_family == AF_INET ||
+		    conn->sockaddr.ss_family == AF_INET6);
+		sockaddr2str(&conn->sockaddr, conn->addr_str);
 		/*
 		 * Interrogate the blocklist as early as possible, so we're
 		 * not wasting any resources on blocked hosts.
 		 */
-		if (!blocklist_check(conn->addr, conn->addr_len,
-		    conn->addr_family)) {
-			logMsg("Incoming connection blocked: address on "
-			    "blocklist.");
+		if (!blocklist_check(&conn->sockaddr)) {
+			logMsg("Incoming connection blocked: "
+			    "address %s on blocklist.", conn->addr_str);
 			close(conn->fd);
 			free(conn);
 			continue;
@@ -1026,7 +1031,7 @@ complete_logon(conn_t *conn)
 		mutex_exit(&conn->lock);
 		return;
 	}
-	msg = cpdlc_msg_alloc();
+	msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	cpdlc_msg_set_mrn(msg, conn->logon_min);
 	if (conn->logon_success && !conn->is_atc &&
 	    conn->logon_to[0] == '\0') {
@@ -1113,8 +1118,8 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	conn->logon_min = cpdlc_msg_get_min(msg);
 
 	/* This is async */
-	conn->auth_key = auth_sess_open(msg, conn->addr, conn->addr_family,
-	    logon_done_cb, conn);
+	conn->auth_key = auth_sess_open(msg, &conn->sockaddr, logon_done_cb,
+	    conn);
 	/*
 	 * Mustn't touch logon status after this, as logon_done_cb might
 	 * have already been called (auth.c does this if it has no
@@ -1218,7 +1223,7 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 	va_end(ap);
 
 	if (orig_msg != NULL) {
-		msg = cpdlc_msg_alloc();
+		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(orig_msg));
 		if (cpdlc_msg_get_dl(orig_msg)) {
 			cpdlc_msg_add_seg(msg, false,
@@ -1228,7 +1233,7 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 			    CPDLC_DM62_ERROR_errorinfo, 0);
 		}
 	} else {
-		msg = cpdlc_msg_alloc();
+		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
 	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
@@ -1248,7 +1253,7 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 static void
 send_svc_unavail_msg(conn_t *conn, unsigned orig_min)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	ASSERT(conn != NULL);
 	cpdlc_msg_set_mrn(msg, orig_min);
 	cpdlc_msg_add_seg(msg, false, CPDLC_UM162_SVC_UNAVAIL, 0);
@@ -1285,9 +1290,9 @@ store_msg(const cpdlc_msg_t *msg, const char *to, bool is_atc)
 
 	if (queued_msg_max_bytes != 0 &&
 	    queued_msg_bytes + bytes > queued_msg_max_bytes) {
-		logMsg("Cannot queue message, global message queue is "
-		    "completely out of space (%lld bytes)",
-		    (long long)queued_msg_max_bytes);
+		logMsg("Cannot queue message from %s, global message queue "
+		    "is completely out of space (%lld bytes)",
+		    cpdlc_msg_get_from(msg), (long long)queued_msg_max_bytes);
 		return (false);
 	}
 	if (!is_atc && !msgquota_incr(cpdlc_msg_get_from(msg), bytes))
@@ -1360,6 +1365,14 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	if (msg->is_logon) {
 		/* Logon messages do not get forwarded. */
 		process_logon_msg(conn, msg);
+		return;
+	}
+	if (msg->pkt_type == CPDLC_PKT_PING) {
+		/* Generate a local PONG message with no further processing */
+		cpdlc_msg_t *pong = cpdlc_msg_alloc(CPDLC_PKT_PONG);
+		cpdlc_msg_set_mrn(pong, cpdlc_msg_get_min(msg));
+		conn_send_msg(conn, pong);
+		cpdlc_msg_free(pong);
 		return;
 	}
 
@@ -1456,7 +1469,8 @@ conn_process_input(conn_t *conn)
 		if (!cpdlc_msg_decode(
 		    (const char *)&conn->inbuf[consumed_total], &msg,
 		    &consumed)) {
-			logMsg("Error decoding message from client");
+			logMsg("Error decoding message from client %s",
+			    conn->addr_str);
 			return (false);
 		}
 		/* No more complete messages pending? */
@@ -1506,12 +1520,14 @@ tls_verify_peer(conn_t *conn)
 	error = gnutls_certificate_verify_peers2(conn->session, &status);
 	if (error != GNUTLS_E_SUCCESS) {
 		logMsg("TLS handshake error: error validating client "
-		    "certificate: %s\n", gnutls_strerror(error));
+		    "certificate from %s: %s\n", conn->addr_str,
+		    gnutls_strerror(error));
 		return (false);
 	}
 	if (status != 0) {
-		logMsg("TLS handshake error: client certificate "
-		    "failed validation with status 0x%x", status);
+		logMsg("TLS handshake error: client certificate from %s "
+		    "failed validation with status 0x%x", conn->addr_str,
+		    status);
 		return (false);
 	}
 	return (true);
@@ -1562,8 +1578,8 @@ conn_read_input(conn_t *conn)
 					/* Need more data */
 					return (true);
 				}
-				logMsg("TLS handshake error: %s",
-				    gnutls_strerror(error));
+				logMsg("TLS handshake error from %s: %s",
+				    conn->addr_str, gnutls_strerror(error));
 				return (false);
 			}
 			if (req_client_cert && !tls_verify_peer(conn))
@@ -1578,12 +1594,13 @@ conn_read_input(conn_t *conn)
 			if (bytes == GNUTLS_E_AGAIN)
 				return (true);
 			if (!gnutls_error_is_fatal(bytes)) {
-				logMsg("Soft read error on connection, can "
-				    "retry: %s", gnutls_strerror(bytes));
+				logMsg("Soft read error on connection from %s, "
+				    "can retry: %s", conn->addr_str,
+				    gnutls_strerror(bytes));
 				continue;
 			}
-			logMsg("Fatal read error on connection: %s",
-			    gnutls_strerror(bytes));
+			logMsg("Fatal read error on connection from %s: %s",
+			    conn->addr_str, gnutls_strerror(bytes));
 			return (false);
 		}
 		if (bytes == 0) {
@@ -1591,14 +1608,15 @@ conn_read_input(conn_t *conn)
 			return (false);
 		}
 		if (!sanitize_input(buf, bytes)) {
-			logMsg("Invalid input character on connection: "
-			    "data MUST be plain text");
+			logMsg("Invalid input character on connection from "
+			    "%s: data MUST be plain text", conn->addr_str);
 			return (false);
 		}
 		if (conn->inbuf_sz + bytes > max_inbuf_sz) {
-			logMsg("Input buffer overflow on connection: received "
-			    "%d bytes, maximum allowable is %d bytes",
-			    (int)(conn->inbuf_sz + bytes), (int)max_inbuf_sz);
+			logMsg("Input buffer overflow on connection from %s: "
+			    "received %d bytes, maximum allowable is %d bytes",
+			    conn->addr_str, (int)(conn->inbuf_sz + bytes),
+			    (int)max_inbuf_sz);
 			return (false);
 		}
 		/*
@@ -1649,23 +1667,23 @@ conn_write_output(conn_t *conn)
 	if (bytes < 0) {
 		if (bytes != GNUTLS_E_AGAIN) {
 			if (gnutls_error_is_fatal(bytes)) {
-				logMsg("Fatal send error on connection: %s",
+				logMsg("Fatal send error on connection from "
+				    "%s: %s", conn->addr_str,
 				    gnutls_strerror(bytes));
 				mutex_exit(&conn->lock);
 				return (false);
 			}
-			logMsg("Soft send error on connection: %s",
-			    gnutls_strerror(bytes));
+			logMsg("Soft send error on connection from %s: %s",
+			    conn->addr_str, gnutls_strerror(bytes));
 		}
 	} else if (bytes > 0) {
 		if ((ssize_t)conn->outbuf_sz > bytes) {
 			memmove(&conn->outbuf[conn->outbuf_pre_pad],
 			    &conn->outbuf[conn->outbuf_pre_pad + bytes],
 			    (conn->outbuf_sz - bytes) + 1);
-			conn->outbuf = safe_realloc(conn->outbuf,
-			    conn->outbuf_pre_pad + (conn->outbuf_sz - bytes) +
-			    1);
 			conn->outbuf_sz -= bytes;
+			conn->outbuf = safe_realloc(conn->outbuf,
+			    conn->outbuf_pre_pad + conn->outbuf_sz + 1);
 		} else {
 			free(conn->outbuf);
 			conn->outbuf = NULL;
@@ -1694,7 +1712,7 @@ poll_sockets(void)
 	mutex_enter(&conns_tcp_lock);
 retry_poll:
 	conns_tcp_dirty = false;
-	num_pfds = 1 + avl_numnodes(&listen_socks) + list_count(&conns_tcp);
+	num_pfds = 1 + list_count(&listen_socks) + list_count(&conns_tcp);
 	pfds = safe_calloc(num_pfds, sizeof (*pfds));
 
 	/*
@@ -1704,8 +1722,8 @@ retry_poll:
 	pfds[sock_nr].events = POLLIN;
 	sock_nr++;
 
-	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
-	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
+	for (listen_sock_t *ls = list_head(&listen_socks); ls != NULL;
+	    ls = list_next(&listen_socks, ls), sock_nr++) {
 		pfds[sock_nr].fd = ls->fd;
 		pfds[sock_nr].events = POLLIN;
 	}
@@ -1766,8 +1784,8 @@ retry_poll:
 	/*
 	 * Handling of newly accepted connections.
 	 */
-	for (listen_sock_t *ls = avl_first(&listen_socks); ls != NULL;
-	    ls = AVL_NEXT(&listen_socks, ls), sock_nr++) {
+	for (listen_sock_t *ls = list_head(&listen_socks); ls != NULL;
+	    ls = list_next(&listen_socks, ls), sock_nr++) {
 		if (pfds[sock_nr].revents & (POLLIN | POLLPRI)) {
 			handle_accepts(ls);
 			polls_seen++;
@@ -1822,8 +1840,11 @@ handle_lws_input(void)
 		ASSERT(conn->wsi != NULL);
 
 		mutex_enter(&conn->lock);
-		if (conn->inbuf_sz > 0 && !conn_process_input(conn))
-			LWS_CLOSE_PROTO_ERR(conn, "Bad message");
+		if (conn->inbuf_sz > 0 && !conn_process_input(conn)) {
+			logMsg("Error LWS connection from %s: input "
+			    "processing error", conn->addr_str);
+			conn->kill_wsi = true;
+		}
 		mutex_exit(&conn->lock);
 	}
 
@@ -1909,10 +1930,8 @@ close_blocked_conns(void)
 	for (conn_t *conn = list_head(&conns_tcp), *conn_next = NULL;
 	    conn != NULL; conn = conn_next) {
 		conn_next = list_next(&conns_tcp, conn);
-		if (!blocklist_check(conn->addr, conn->addr_len,
-		    conn->addr_family)) {
+		if (!blocklist_check(&conn->sockaddr))
 			close_conn(conn);
-		}
 	}
 	mutex_exit(&conns_tcp_lock);
 
@@ -1920,13 +1939,8 @@ close_blocked_conns(void)
 	for (conn_t *conn = list_head(&conns_lws), *conn_next = NULL;
 	    conn != NULL; conn = conn_next) {
 		conn_next = list_next(&conns_lws, conn);
-		if (!blocklist_check(conn->addr, conn->addr_len,
-		    conn->addr_family)) {
-			lws_close_reason(conn->wsi,
-			    LWS_CLOSE_STATUS_POLICY_VIOLATION,
-			    (unsigned char *)"Connection blocked",
-			    strlen("Connection blocked"));
-		}
+		if (!blocklist_check(&conn->sockaddr))
+			conn->kill_wsi = true;
 	}
 	mutex_exit(&conns_lws_lock);
 }
@@ -1958,7 +1972,7 @@ close_timedout_conns(void)
 		ASSERT(conn->wsi != NULL);
 		if (!conn->logon_success &&
 		    now - conn->logoff_time > LOGON_GRACE_TIME) {
-			LWS_CLOSE_PROTO_ERR(conn, "LOGON timeout");
+			conn->kill_wsi = true;
 		}
 	}
 	mutex_exit(&conns_lws_lock);
@@ -2085,6 +2099,7 @@ main(int argc, char *argv[])
 	}
 	if (!tls_init())
 		return (1);
+	(void) blocklist_refresh();
 
 	while (!do_shutdown) {
 		poll_sockets();
@@ -2117,66 +2132,106 @@ lws_worker(void *userinfo)
 		lws_service(lws->ctx, POLL_TIMEOUT);
 }
 
-static int
-http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
-    void *in, size_t len)
+static bool
+filter_lws_conn(int fd)
 {
-	UNUSED(wsi);
-	UNUSED(reason);
-	UNUSED(user);
-	UNUSED(in);
-	UNUSED(len);
-	return (0);
-}
+	struct sockaddr_storage sa;
+	socklen_t sa_len = sizeof (sa);
 
-static void
-close_lws_bad_conn(struct lws *wsi)
-{
-	lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR,
-	    (unsigned char *)"Bad connection", strlen("Bad connection"));
+	ASSERT(fd != -1);
+
+	memset(&sa, 0, sizeof (sa));
+	if (getpeername(fd, (struct sockaddr *)&sa, &sa_len) < 0) {
+		logMsg("Error in getpeername: %s", strerror(errno));
+		return (true);
+	}
+	if (!blocklist_check(&sa)) {
+		char addr[SOCKADDR_STRLEN];
+		sockaddr2str(&sa, addr);
+		logMsg("Incoming connection blocked: "
+		    "address %s on blocklist.", addr);
+		return (true);
+	}
+	return (false);
 }
 
 static void
 conn_established_lws(conn_t *conn, struct lws *wsi)
 {
-	char addrstr[128] = { 0 };
+	int fd;
+	socklen_t sa_len = sizeof (conn->sockaddr);
 
 	ASSERT(conn != NULL);
 	ASSERT(wsi != NULL);
 
 	memset(conn, 0, sizeof (*conn));
 
-	lws_get_peer_simple(wsi, addrstr, sizeof (addrstr));
-	if (strchr(addrstr, '.') != NULL) {
-		if (inet_pton(AF_INET, addrstr, conn->addr) != 1) {
-			logMsg("Invalid IP address \"%s\"", addrstr);
-			close_lws_bad_conn(wsi);
-			return;
-		}
-		conn->addr_len = sizeof (struct sockaddr_in);
-		conn->addr_family = AF_INET;
-	} else if (strchr(addrstr, ':') != NULL) {
-		if (inet_pton(AF_INET6, addrstr, conn->addr) != 1) {
-			logMsg("Invalid IPv6 address \"%s\"", addrstr);
-			close_lws_bad_conn(wsi);
-			return;
-		}
-		conn->addr_len = sizeof (struct sockaddr_in6);
-		conn->addr_family = AF_INET6;
-	} else {
-		logMsg("lws_get_peer_simple(%p) didn't return a valid address",
-		    wsi);
-		close_lws_bad_conn(wsi);
-		return;
-	}
 	conn->is_lws = true;
-	conn->outbuf_pre_pad = P2ROUNDUP(LWS_PRE);
-	mutex_init(&conn->lock);
 	conn->wsi = wsi;
+	conn->outbuf_pre_pad = P2ROUNDUP(LWS_PRE);
+	conn->logoff_time = time(NULL);
+	/*
+	 * We must have validated the address before already, so we can't
+	 * be having trouble grabbing it again here.
+	 */
+	fd = lws_get_socket_fd(wsi);
+	VERIFY(fd != -1);
+	VERIFY0(getpeername(fd, (struct sockaddr *)&conn->sockaddr, &sa_len));
+	sockaddr2str(&conn->sockaddr, conn->addr_str);
+
+	mutex_init(&conn->lock);
 
 	mutex_enter(&conns_lws_lock);
 	list_insert_tail(&conns_lws, conn);
 	mutex_exit(&conns_lws_lock);
+}
+
+static bool
+do_lws_output(conn_t *conn, struct lws *wsi)
+{
+	int bytes;
+
+	ASSERT(conn != NULL);
+	ASSERT(wsi != NULL);
+
+	if (conn->outbuf_sz == 0)
+		return (true);
+
+	bytes = lws_write(wsi, &conn->outbuf[conn->outbuf_pre_pad],
+	    conn->outbuf_sz, LWS_WRITE_TEXT);
+	if (bytes == -1) {
+		logMsg("Write error on connection from %s", conn->addr_str);
+		return (false);
+	}
+	if (bytes == 0) {
+		lws_callback_on_writable(wsi);
+		return (true);
+	}
+	free(conn->outbuf);
+	conn->outbuf = NULL;
+	conn->outbuf_sz = 0;
+
+	return (true);
+}
+
+static int
+http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
+    void *in, size_t len)
+{
+	UNUSED(wsi);
+	UNUSED(user);
+	UNUSED(in);
+	UNUSED(len);
+
+	switch (reason) {
+	case LWS_CALLBACK_FILTER_NETWORK_CONNECTION:
+		/* The `in' pointer is actually the new socket fd */
+		return (filter_lws_conn((intptr_t)in));
+	default:
+		break;
+	}
+
+	return (0);
 }
 
 static int
@@ -2204,11 +2259,12 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
 		break;
 	case LWS_CALLBACK_RECEIVE:
 		ASSERT(conn != NULL);
+		if (conn->kill_wsi)
+			return (-1);
 		if (!sanitize_input(in, len)) {
-			logMsg("Invalid input character on connection: "
-			    "data MUST be plain text");
-			LWS_CLOSE_PROTO_ERR(conn, "Bad input");
-			break;
+			logMsg("Invalid input character on connection from "
+			    "%s: data MUST be plain text", conn->addr_str);
+			return (-1);
 		}
 		mutex_enter(&conn->lock);
 		conn->inbuf = safe_realloc(conn->inbuf,
@@ -2221,13 +2277,12 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
 		break;
 	case LWS_CALLBACK_SERVER_WRITEABLE:
 		ASSERT(conn != NULL);
-		if (lws_write(conn->wsi, &conn->outbuf[conn->outbuf_pre_pad],
-		    conn->outbuf_sz, LWS_WRITE_TEXT) == -1) {
-			LWS_CLOSE_PROTO_ERR(conn, "Write error");
+		mutex_enter(&conn->lock);
+		if (conn->kill_wsi || !do_lws_output(conn, wsi)) {
+			mutex_exit(&conn->lock);
+			return (-1);
 		}
-		free(conn->outbuf);
-		conn->outbuf = NULL;
-		conn->outbuf_sz = 0;
+		mutex_exit(&conn->lock);
 		break;
 	default:
 		break;

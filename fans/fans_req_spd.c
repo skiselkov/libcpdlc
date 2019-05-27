@@ -43,7 +43,7 @@ static void
 verify_spd_req(fans_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	if (box->spd_req.spd[1].spd.spd != 0) {
 		seg = cpdlc_msg_add_seg(msg, true, 

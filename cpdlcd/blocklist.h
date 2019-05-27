@@ -38,7 +38,7 @@ extern "C" {
 void blocklist_init(void);
 void blocklist_fini(void);
 void blocklist_set_filename(const char *filename);
-bool blocklist_check(const void *addr, socklen_t addr_len, int addr_family);
+bool blocklist_check(const void *sockaddr);
 bool blocklist_refresh(void);
 
 #ifdef	__cplusplus

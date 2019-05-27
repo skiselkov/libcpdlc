@@ -49,7 +49,7 @@ verify_off_req(fans_t *box)
 	int seg = 0;
 	cpdlc_msg_t *msg;
 
-	msg = cpdlc_msg_alloc();
+	msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	if (box->off_req.step_at.type != STEP_AT_NONE) {
 		if (box->off_req.step_at.type == STEP_AT_TIME) {

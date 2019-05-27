@@ -71,6 +71,8 @@
 #define	DEFAULT_PORT_TCP	17622
 #define	DEFAULT_PORT_LWS	17623
 
+#define	KEEPALIVE_TIMEOUT	300	/* seconds */
+
 #ifdef	CPDLC_CLIENT_LWS
 #define	SENDBUF_PRE_PAD		LWS_PRE
 #else
@@ -159,14 +161,20 @@ struct cpdlc_client_s {
 	struct {
 		/* protected by `lock' */
 		cpdlc_msg_token_t	next_tok;
-		list_t		sending;
-		list_t		sent;
+		list_t			sending;
+		list_t			sent;
 	} outmsgbufs;
 
 	/* protected by `lock' */
 	char		*inbuf;
 	unsigned	inbuf_sz;
 	list_t		inmsgbufs;
+
+	/*
+	 * When any last data was sent or received. Used for keepalive.
+	 * Protected by `lock'.
+	 */
+	time_t		last_data_rdwr;
 
 	struct {
 		/* protected by `lock' */
@@ -227,6 +235,21 @@ set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 	} else {
 		memset(cl->logon_failure, 0, sizeof (cl->logon_failure));
 	}
+}
+
+static void
+check_keepalive(cpdlc_client_t *cl)
+{
+	ASSERT(cl != NULL);
+
+	if (time(NULL) - cl->last_data_rdwr < KEEPALIVE_TIMEOUT)
+		return;
+
+	cpdlc_msg_t *ping = cpdlc_msg_alloc(CPDLC_PKT_PING);
+	send_msg_impl(cl, ping, false);
+	cpdlc_msg_free(ping);
+	/* Reset the keepalive timer */
+	cl->last_data_rdwr = time(NULL);
 }
 
 #ifndef	CPDLC_CLIENT_LWS
@@ -305,6 +328,9 @@ logon_worker(void *userinfo)
 			VERIFY_MSG(0, "client reached impossible "
 			    "logon_status = %x", cl->logon_status);
 		}
+		/* Schedules a keepalive message if necessary */
+		if (cl->logon_status == CPDLC_LOGON_COMPLETE)
+			check_keepalive(cl);
 
 		if (new_msgs && cl->msg_recv_cb != NULL) {
 			/*
@@ -847,7 +873,7 @@ tls_handshake(cpdlc_client_t *cl)
 static void
 send_logon(cpdlc_client_t *cl)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	ASSERT(cl != NULL);
 	ASSERT(cl->logon.data != NULL);
@@ -909,7 +935,7 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	ASSERT(msg != NULL);
 
 	if (!cl->is_atc && strcmp(cpdlc_msg_get_from(msg), cl->logon.to) != 0) {
-		cpdlc_msg_t *errmsg = cpdlc_msg_alloc();
+		cpdlc_msg_t *errmsg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 		cpdlc_msg_set_mrn(errmsg, cpdlc_msg_get_min(msg));
 		cpdlc_msg_set_to(errmsg, cpdlc_msg_get_from(msg));
@@ -961,6 +987,12 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	ASSERT(cl != NULL);
 	ASSERT(msg != NULL);
 
+	if (msg->pkt_type != CPDLC_PKT_CPDLC) {
+		/* Discard ping/pong messages */
+		cpdlc_msg_free(msg);
+		return (false);
+	}
+
 	switch (cl->logon_status) {
 	case CPDLC_LOGON_LINK_AVAIL:
 		/* Discard any incoming message traffic in this state. */
@@ -972,6 +1004,7 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 			if (strcmp(logon_data, "SUCCESS") == 0) {
 				cl->logon_status = CPDLC_LOGON_COMPLETE;
+				cl->last_data_rdwr = time(NULL);
 				set_logon_failure(cl, NULL);
 			} else {
 				cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
@@ -1063,6 +1096,8 @@ do_msg_input_lws(cpdlc_client_t *cl, const uint8_t *buf, size_t len)
 	cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz + len + 1);
 	cpdlc_strlcpy(&cl->inbuf[cl->inbuf_sz], (const char *)buf, len + 1);
 	cl->inbuf_sz += len;
+	/* Reset the keepalive timer */
+	cl->last_data_rdwr = time(NULL);
 
 	return (process_input(cl));
 }
@@ -1101,6 +1136,8 @@ do_msg_input(cpdlc_client_t *cl)
 		cpdlc_strlcpy(&cl->inbuf[cl->inbuf_sz], (const char *)buf,
 		    bytes + 1);
 		cl->inbuf_sz += bytes;
+		/* Reset the keepalive timer */
+		cl->last_data_rdwr = time(NULL);
 
 		new_msgs |= process_input(cl);
 	}
@@ -1129,11 +1166,15 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 		int bytes;
 
 #ifdef	CPDLC_CLIENT_LWS
-		bytes = lws_write(wsi, (void *)&outmsgbuf->buf[LWS_PRE],
+		bytes = lws_write(wsi, (void *)&outmsgbuf->buf[SENDBUF_PRE_PAD],
 		    outmsgbuf->bufsz, LWS_WRITE_TEXT);
 		if (bytes == -1) {
 			/* Fatal send error */
 			cl->logon_status = CPDLC_LOGON_NONE;
+			break;
+		}
+		if (bytes == 0) {
+			lws_callback_on_writable(wsi);
 			break;
 		}
 		/*
@@ -1161,6 +1202,8 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 #endif	/* !CPDLC_CLIENT_LWS */
 		outmsgbuf->bytes_sent += bytes;
 		ASSERT3S(outmsgbuf->bytes_sent, <=, outmsgbuf->bufsz);
+		/* Reset the keepalive timer */
+		cl->last_data_rdwr = time(NULL);
 		/* short byte count sent, need to wait for more writing */
 		if (outmsgbuf->bytes_sent < outmsgbuf->bufsz)
 			break;
@@ -1252,6 +1295,8 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
 		mutex_exit(&cl->lock);
 		break;
 	case LWS_CALLBACK_CLOSED:
+	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
+	case LWS_CALLBACK_WSI_DESTROY:
 		cl = user;
 		ASSERT(cl != NULL);
 

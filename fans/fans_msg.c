@@ -215,7 +215,7 @@ msg_can_standby(fans_t *box)
 static void
 send_quick_resp(fans_t *box, int msg_type)
 {
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	ASSERT(box != NULL);
 

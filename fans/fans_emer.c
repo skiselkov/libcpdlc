@@ -40,7 +40,7 @@ verify_emer(fans_t *box)
 	char buf[512];
 	unsigned l = 0;
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc();
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	cpdlc_arg_t des;
 	fms_time_t fuel;
 

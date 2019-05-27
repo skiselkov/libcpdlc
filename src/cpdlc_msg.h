@@ -416,7 +416,14 @@ typedef struct {
 	cpdlc_arg_t		args[CPDLC_MAX_ARGS];
 } cpdlc_msg_seg_t;
 
+typedef enum {
+	CPDLC_PKT_CPDLC,
+	CPDLC_PKT_PING,
+	CPDLC_PKT_PONG
+} cpdlc_pkt_t;
+
 typedef struct {
+	cpdlc_pkt_t	pkt_type;
 	unsigned	min;
 	unsigned	mrn;
 	char		from[CPDLC_CALLSIGN_LEN];
@@ -430,7 +437,7 @@ typedef struct {
 const cpdlc_msg_info_t *cpdlc_ul_infos;
 const cpdlc_msg_info_t *cpdlc_dl_infos;
 
-CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(void);
+CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(cpdlc_pkt_t pkt_type);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
