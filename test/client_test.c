@@ -277,7 +277,7 @@ int
 main(void)
 {
 	const char *hostname = "localhost";
-	const char *ca_file = "cpdlc_cert.pem";
+	const char *ca_file = "ca_cert.pem";
 	int port = 0;
 	struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
 

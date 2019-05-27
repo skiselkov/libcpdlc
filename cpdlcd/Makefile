@@ -26,10 +26,10 @@ include ../Makefile.vars
 include ../Makefile.com
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O2 -g -DDEBUG \
-	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(ACFUTILS)/src \
+	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell pkg-config gnutls --cflags)
-LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
+LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
 	$(shell pkg-config gnutls --libs) \
 	-lpthread -lm
@@ -39,7 +39,9 @@ DAEMON_OBJS=\
 	blocklist.o \
 	cpdlcd.o \
 	msgquota.o \
-	$(CORE_SRC_OBJS)
+	$(SRCPREFIX)/cpdlc_assert.o \
+	$(SRCPREFIX)/cpdlc_infos.o \
+	$(SRCPREFIX)/cpdlc_msg.o \
 
 all : cpdlcd
 

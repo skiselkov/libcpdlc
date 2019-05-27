@@ -494,7 +494,7 @@ fms_init(void)
 
 	cl = fans_get_client(box);
 	ASSERT(cl != NULL);
-	cpdlc_client_set_ca_file(cl, "cpdlc_cert.pem");
+	cpdlc_client_set_ca_file(cl, "ca_cert.pem");
 }
 
 static void

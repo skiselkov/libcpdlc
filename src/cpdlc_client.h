@@ -81,9 +81,11 @@ CPDLC_API const char *cpdlc_client_get_ca_file(cpdlc_client_t *cl);
 CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
     const char *key_file, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_file);
+#ifndef	CPDLC_CLIENT_LWS
 CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
     const char *key_pem_data, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_pem_data);
+#endif	/* !CPDLC_CLIENT_LWS */
 
 CPDLC_API size_t cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf,
     size_t cap);

@@ -42,6 +42,10 @@
 #include <unistd.h>
 #endif	/* !_WIN32 */
 
+#ifdef	CPDLC_CLIENT_LWS
+#include <libwebsockets.h>
+#endif
+
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
 #include "cpdlc_client.h"
@@ -64,7 +68,14 @@
 
 #define	WORKER_POLL_INTVAL	100	/* ms */
 #define	READBUF_SZ		4096	/* bytes */
-#define	DEFAULT_PORT		17622
+#define	DEFAULT_PORT_TCP	17622
+#define	DEFAULT_PORT_LWS	17623
+
+#ifdef	CPDLC_CLIENT_LWS
+#define	SENDBUF_PRE_PAD		LWS_PRE
+#else
+#define	SENDBUF_PRE_PAD		0
+#endif
 
 #ifndef	PATH_MAX
 #define	PATH_MAX		256	/* chars */
@@ -85,8 +96,19 @@ typedef struct inmsgbuf_s {
 	list_node_t		node;
 } inmsgbuf_t;
 
-/**
- * This object provides a generic
+/*
+ * This object provides a generic CPDLC interfacing client. It is
+ * responsible for maintaining the server connection, handling the
+ * LOGON process and passing CPDLC messages over the wire. You
+ * simply pass in CPDLC messages and the client takes care of
+ * serializing them over the wire and sending them to the server.
+ * You can also configure custom callbacks that is called when a
+ * message is received from the server, or when a message has been
+ * successfully sent to the server.
+ *
+ * This object doesn't provide facilities for tracking inter-
+ * message relationships (such as message threads and formatting
+ * of proper responses to requests). See cpdlc_msglist.h for that.
  */
 struct cpdlc_client_s {
 	/* immutable */
@@ -103,19 +125,32 @@ struct cpdlc_client_s {
 	char				*key_pass;
 	gnutls_pkcs_encrypt_flags_t	key_enctype;
 	char				*cert_file;
+#ifndef	CPDLC_CLIENT_LWS
+	/* LWS doesn't support in-memory keys */
 	char				*key_pem_data;
 	char				*cert_pem_data;
+#endif	/* !CPDLC_CLIENT_LWS */
 
 	thread_t			worker;
 	bool				worker_started;
 	cpdlc_logon_status_t		logon_status;
 	char				logon_failure[128];
+#ifdef	CPDLC_CLIENT_LWS
+	struct lws_context		*lws_ctx;
+	struct lws			*lws_sock;
+	struct {
+		cpdlc_msg_token_t	**out_tokens;
+		unsigned		*num_out_tokens;
+		bool			new_msgs;
+	} pollinfo;
+#else	/* !CPDLC_CLIENT_LWS */
 	int				sock;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;
 	gnutls_session_t		session;
 	bool				handshake_completed;
 	gnutls_certificate_credentials_t xcred;
+#endif	/* !CPDLC_CLIENT_LWS */
 
 	cpdlc_msg_sent_cb_t		msg_sent_cb;
 	cpdlc_msg_recv_cb_t		msg_recv_cb;
@@ -143,19 +178,42 @@ struct cpdlc_client_s {
 	} logon;
 };
 
-static void reset_link_state(cpdlc_client_t *cl);
+#ifdef	CPDLC_CLIENT_LWS
+static void init_conn_lws(cpdlc_client_t *cl);
+static bool poll_lws(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
+    unsigned *num_out_tokens);
+static int cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
+    void *user, void *in, size_t len);
+#else	/* !CPDLC_CLIENT_LWS */
 static bool resolve_host(cpdlc_client_t *cl);
 static void init_conn(cpdlc_client_t *cl);
 static void complete_conn(cpdlc_client_t *cl);
 static void tls_handshake(cpdlc_client_t *cl);
+static bool poll_for_msgs(cpdlc_client_t *cl,
+    cpdlc_msg_token_t **out_tokens, unsigned *num_out_tokens);
+#endif	/* !CPDLC_CLIENT_LWS */
+
+static void reset_link_state(cpdlc_client_t *cl);
+
 static void send_logon(cpdlc_client_t *cl);
-static bool poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
-    unsigned *num_out_tokens);
 static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
     const cpdlc_msg_t *msg, bool track_sent);
 
 static void set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
     PRINTF_ATTR(2);
+
+#ifdef	CPDLC_CLIENT_LWS
+
+static struct lws_protocols proto_list_lws[] = {
+    {
+	.name = "cpdlc",
+	.callback = cpdlc_lws_cb,
+	.rx_buffer_size = READBUF_SZ
+    },
+    { .name = NULL }	/* list terminator */
+};
+
+#endif	/* CPDLC_CLIENT_LWS */
 
 static void
 set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
@@ -171,6 +229,8 @@ set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 	}
 }
 
+#ifndef	CPDLC_CLIENT_LWS
+
 static bool
 set_fd_nonblock(int fd)
 {
@@ -178,6 +238,8 @@ set_fd_nonblock(int fd)
 	return ((flags = fcntl(fd, F_GETFL)) >= 0 &&
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
 }
+
+#endif	/* !CPDLC_CLIENT_LWS */
 
 static void
 logon_worker(void *userinfo)
@@ -188,8 +250,12 @@ logon_worker(void *userinfo)
 
 	mutex_enter(&cl->lock);
 
+#ifdef	CPDLC_CLIENT_LWS
+	init_conn_lws(cl);
+#else	/* !CPDLC_CLIENT_LWS */
 	if (resolve_host(cl))
 		init_conn(cl);
+#endif	/* !CPDLC_CLIENT_LWS */
 
 	while (cl->logon_status != CPDLC_LOGON_NONE &&
 	    cl->logon_failure[0] == '\0') {
@@ -199,25 +265,41 @@ logon_worker(void *userinfo)
 
 		switch (cl->logon_status) {
 		case CPDLC_LOGON_CONNECTING_LINK:
+#ifdef	CPDLC_CLIENT_LWS
+			ASSERT(cl->lws_sock != NULL);
+			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
+#else	/* !CPDLC_CLIENT_LWS */
 			ASSERT(cl->sock != -1);
 			complete_conn(cl);
+#endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_HANDSHAKING_LINK:
+#ifndef	CPDLC_CLIENT_LWS
 			ASSERT(cl->sock != -1);
 			tls_handshake(cl);
+#endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_LINK_AVAIL:
 			if (cl->logon.do_logon) {
 				send_logon(cl);
 			} else {
+#ifdef	CPDLC_CLIENT_LWS
+				new_msgs = poll_lws(cl, &out_tokens,
+				    &num_out_tokens);
+#else	/* !CPDLC_CLIENT_LWS */
 				new_msgs = poll_for_msgs(cl, &out_tokens,
 				    &num_out_tokens);
+#endif	/* !CPDLC_CLIENT_LWS */
 			}
 			break;
 		case CPDLC_LOGON_IN_PROG:
 		case CPDLC_LOGON_COMPLETE:
+#ifdef	CPDLC_CLIENT_LWS
+			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
+#else	/* !CPDLC_CLIENT_LWS */
 			new_msgs = poll_for_msgs(cl, &out_tokens,
 			    &num_out_tokens);
+#endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		default:
 			VERIFY_MSG(0, "client reached impossible "
@@ -260,7 +342,9 @@ cpdlc_client_alloc(bool is_atc)
 
 	cl->is_atc = is_atc;
 
+#ifndef	CPDLC_CLIENT_LWS
 	cl->sock = -1;
+#endif
 
 	list_create(&cl->outmsgbufs.sending, sizeof (outmsgbuf_t),
 	    offsetof(outmsgbuf_t, node));
@@ -278,15 +362,18 @@ clear_key_data(cpdlc_client_t *cl)
 	secure_free(cl->key_file);
 	secure_free(cl->key_pass);
 	secure_free(cl->cert_file);
-	secure_free(cl->key_pem_data);
-	secure_free(cl->cert_pem_data);
 
 	cl->key_file = NULL;
 	cl->key_pass = NULL;
 	cl->key_enctype = GNUTLS_PKCS_PLAIN;
 	cl->cert_file = NULL;
+
+#ifndef	CPDLC_CLIENT_LWS
+	secure_free(cl->key_pem_data);
+	secure_free(cl->cert_pem_data);
 	cl->key_pem_data = NULL;
 	cl->cert_pem_data = NULL;
+#endif	/* !CPDLC_CLIENT_LWS */
 }
 
 void
@@ -311,10 +398,12 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	list_destroy(&cl->inmsgbufs);
 
 	free(cl->cafile);
+	clear_key_data(cl);
+
+#ifndef	CPDLC_CLIENT_LWS
 	if (cl->ai != NULL)
 		freeaddrinfo(cl->ai);
-
-	clear_key_data(cl);
+#endif	/* !CPDLC_CLIENT_LWS */
 
 	mutex_destroy(&cl->lock);
 
@@ -404,6 +493,7 @@ cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
 	mutex_exit(&cl->lock);
 }
 
+#ifndef	CPDLC_CLIENT_LWS
 void
 cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
@@ -427,6 +517,7 @@ cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
 
 	mutex_exit(&cl->lock);
 }
+#endif	/* CPDLC_CLIENT_LWS */
 
 static void
 reset_link_state(cpdlc_client_t *cl)
@@ -440,6 +531,14 @@ reset_link_state(cpdlc_client_t *cl)
 	cl->logon.nda = NULL;
 	free(cl->logon.to);
 	cl->logon.to = NULL;
+
+#ifdef	CPDLC_CLIENT_LWS
+	if (cl->lws_ctx != NULL) {
+		lws_context_destroy(cl->lws_ctx);
+		cl->lws_ctx = NULL;
+		cl->lws_sock = NULL;
+	}
+#else	/* !CPDLC_CLIENT_LWS */
 	if (cl->session != NULL) {
 		if (cl->handshake_completed) {
 			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
@@ -458,9 +557,9 @@ reset_link_state(cpdlc_client_t *cl)
 		shutdown(cl->sock, SHUT_RDWR);
 		cl->sock = -1;
 	}
+#endif	/* !CPDLC_CLIENT_LWS */
 
-	while ((outbuf = list_remove_head(&cl->outmsgbufs.sending)) !=
-	    NULL) {
+	while ((outbuf = list_remove_head(&cl->outmsgbufs.sending)) != NULL) {
 		free(outbuf->buf);
 		free(outbuf);
 	}
@@ -479,6 +578,55 @@ reset_link_state(cpdlc_client_t *cl)
 	}
 }
 
+#ifdef	CPDLC_CLIENT_LWS
+
+static void
+init_conn_lws(cpdlc_client_t *cl)
+{
+	struct lws_context_creation_info info;
+	struct lws_client_connect_info ccinfo;
+
+	ASSERT(cl != NULL);
+
+	info.port = CONTEXT_PORT_NO_LISTEN;
+	info.protocols = proto_list_lws;
+	info.gid = -1;
+	info.uid = -1;
+	info.client_ssl_ca_filepath = cl->cafile;
+	info.client_ssl_private_key_filepath = cl->key_file;
+	info.client_ssl_private_key_password = cl->key_pass;
+	info.client_ssl_cert_filepath = cl->cert_file;
+	info.vhost_name = cl->host;
+	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+
+	cl->lws_ctx = lws_create_context(&info);
+	memset(&info, 0, sizeof (info));
+	if (cl->lws_ctx == NULL) {
+		fprintf(stderr, "Failed to create lws_ctx\n");
+		return;
+	}
+
+	ccinfo.address = cl->host;
+	ccinfo.port = (cl->port != 0 ? cl->port : DEFAULT_PORT_LWS);
+	ccinfo.path = "/";
+	ccinfo.host = cl->host;
+	ccinfo.origin = cl->logon.from;
+	ccinfo.protocol = "cpdlc";
+	ccinfo.context = cl->lws_ctx;
+	ccinfo.userdata = cl;
+	ccinfo.ssl_connection = LCCSCF_USE_SSL | LCCSCF_ALLOW_SELFSIGNED;
+	cl->lws_sock = lws_client_connect_via_info(&ccinfo);
+	memset(&ccinfo, 0, sizeof (ccinfo));
+	if (cl->lws_sock == NULL) {
+		fprintf(stderr, "Failed to create lws_sock\n");
+		return;
+	}
+
+	cl->logon_status = CPDLC_LOGON_CONNECTING_LINK;
+}
+
+#else	/* !CPDLC_CLIENT_LWS */
+
 static bool
 resolve_host(cpdlc_client_t *cl)
 {
@@ -490,7 +638,7 @@ resolve_host(cpdlc_client_t *cl)
 	    .ai_socktype = SOCK_STREAM,
 	    .ai_protocol = IPPROTO_TCP
 	};
-	int port = (cl->port != 0 ? cl->port : DEFAULT_PORT);
+	int port = (cl->port != 0 ? cl->port : DEFAULT_PORT_TCP);
 	char host[PATH_MAX];
 
 	ASSERT(cl != NULL);
@@ -694,6 +842,8 @@ tls_handshake(cpdlc_client_t *cl)
 	cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
 }
 
+#endif	/* !CPDLC_CLIENT_LWS */
+
 static void
 send_logon(cpdlc_client_t *cl)
 {
@@ -890,17 +1040,34 @@ process_input(cpdlc_client_t *cl)
 }
 
 static bool
-validate_input(const uint8_t *buf, int l)
+sanitize_input(const uint8_t *buf, size_t len)
 {
-	for (int i = 0; i < l; i++) {
-		if (buf[i] == 0 || buf[i] > 127) {
-			fprintf(stderr, "Invalid input character on "
-			    "connection: data MUST be plain text");
+	for (size_t i = 0; i < len; i++) {
+		uint8_t c = buf[i];
+		/* Input sanitization, don't allow control chars */
+		if ((c < 32 || c > 127) && c != '\n' && c != '\r' && c != '\t')
 			return (false);
-		}
 	}
 	return (true);
 }
+
+#ifdef	CPDLC_CLIENT_LWS
+
+static bool
+do_msg_input_lws(cpdlc_client_t *cl, const uint8_t *buf, size_t len)
+{
+	ASSERT(cl != NULL);
+	ASSERT(buf != NULL);
+	ASSERT(len != 0);
+
+	cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz + len + 1);
+	cpdlc_strlcpy(&cl->inbuf[cl->inbuf_sz], (const char *)buf, len + 1);
+	cl->inbuf_sz += len;
+
+	return (process_input(cl));
+}
+
+#else	/* !CPDLC_CLIENT_LWS */
 
 static bool
 do_msg_input(cpdlc_client_t *cl)
@@ -926,7 +1093,7 @@ do_msg_input(cpdlc_client_t *cl)
 			break;
 		}
 		/* Input sanitization, don't allow control chars */
-		if (!validate_input(buf, bytes)) {
+		if (!sanitize_input(buf, bytes)) {
 			cl->logon_status = CPDLC_LOGON_NONE;
 			break;
 		}
@@ -941,8 +1108,15 @@ do_msg_input(cpdlc_client_t *cl)
 	return (new_msgs);
 }
 
+#endif	/* !CPDLC_CLIENT_LWS */
+
+#ifdef	CPDLC_CLIENT_LWS
+static cpdlc_msg_token_t *
+do_msg_output(cpdlc_client_t *cl, struct lws *wsi, unsigned *num_tokens_p)
+#else	/* !CPDLC_CLIENT_LWS */
 static cpdlc_msg_token_t *
 do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
+#endif	/* !CPDLC_CLIENT_LWS */
 {
 	unsigned num_tokens = 0;
 	cpdlc_msg_token_t *tokens = NULL;
@@ -952,7 +1126,23 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 
 	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
 	    outmsgbuf != NULL; outmsgbuf = list_head(&cl->outmsgbufs.sending)) {
-		int bytes = gnutls_record_send(cl->session,
+		int bytes;
+
+#ifdef	CPDLC_CLIENT_LWS
+		bytes = lws_write(wsi, (void *)&outmsgbuf->buf[LWS_PRE],
+		    outmsgbuf->bufsz, LWS_WRITE_TEXT);
+		if (bytes == -1) {
+			/* Fatal send error */
+			cl->logon_status = CPDLC_LOGON_NONE;
+			break;
+		}
+		/*
+		 * LWS should buffer any unsent data internally, so we check
+		 * that we absolutely super-duper have sent everything.
+		 */
+		ASSERT3S(bytes, ==, outmsgbuf->bufsz);
+#else	/* !CPDLC_CLIENT_LWS */
+		bytes = gnutls_record_send(cl->session,
 		    &outmsgbuf->buf[outmsgbuf->bytes_sent],
 		    outmsgbuf->bufsz - outmsgbuf->bytes_sent);
 
@@ -968,8 +1158,12 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 			cl->logon_status = CPDLC_LOGON_NONE;
 			break;
 		}
+#endif	/* !CPDLC_CLIENT_LWS */
 		outmsgbuf->bytes_sent += bytes;
 		ASSERT3S(outmsgbuf->bytes_sent, <=, outmsgbuf->bufsz);
+		/* short byte count sent, need to wait for more writing */
+		if (outmsgbuf->bytes_sent < outmsgbuf->bufsz)
+			break;
 		list_remove(&cl->outmsgbufs.sending, outmsgbuf);
 		/* Don't need the buffer inside anymore */
 		free(outmsgbuf->buf);
@@ -988,6 +1182,101 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 	*num_tokens_p = num_tokens;
 	return (tokens);
 }
+
+#ifdef	CPDLC_CLIENT_LWS
+
+static bool
+poll_lws(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
+    unsigned *num_out_tokens)
+{
+	ASSERT(cl != NULL);
+	ASSERT(out_tokens != NULL);
+	ASSERT(num_out_tokens != NULL);
+
+	cl->pollinfo.out_tokens = out_tokens;
+	cl->pollinfo.num_out_tokens = num_out_tokens;
+	cl->pollinfo.new_msgs = false;
+
+	if (list_count(&cl->outmsgbufs.sending) != 0)
+		lws_callback_on_writable(cl->lws_sock);
+
+	mutex_exit(&cl->lock);
+	lws_service(cl->lws_ctx, WORKER_POLL_INTVAL);
+	mutex_enter(&cl->lock);
+
+	return (cl->pollinfo.new_msgs);
+}
+
+static int
+cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
+    void *user, void *in, size_t len)
+{
+	cpdlc_client_t *cl;
+
+	ASSERT(wsi != NULL);
+
+	switch (reason) {
+	case LWS_CALLBACK_CLIENT_ESTABLISHED:
+		cl = user;
+		ASSERT(cl != NULL);
+		mutex_enter(&cl->lock);
+		cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
+		mutex_exit(&cl->lock);
+		break;
+	case LWS_CALLBACK_CLIENT_RECEIVE:
+		cl = user;
+		ASSERT(cl != NULL);
+		ASSERT(in != NULL);
+		ASSERT(len != 0);
+
+		mutex_enter(&cl->lock);
+		if (!sanitize_input(in, len)) {
+			cl->logon_status = CPDLC_LOGON_NONE;
+			cpdlc_strlcpy(cl->logon_failure, "Bad data on link",
+			    sizeof (cl->logon_failure));
+		}
+		if (cl->logon_status != CPDLC_LOGON_NONE)
+			cl->pollinfo.new_msgs |= do_msg_input_lws(cl, in, len);
+		mutex_exit(&cl->lock);
+		break;
+	case LWS_CALLBACK_CLIENT_WRITEABLE:
+		cl = user;
+		ASSERT(cl != NULL);
+		ASSERT(cl->pollinfo.out_tokens != NULL);
+
+		mutex_enter(&cl->lock);
+		if (cl->logon_status != CPDLC_LOGON_NONE) {
+			*cl->pollinfo.out_tokens = do_msg_output(cl, wsi,
+			    cl->pollinfo.num_out_tokens);
+		}
+		mutex_exit(&cl->lock);
+		break;
+	case LWS_CALLBACK_CLOSED:
+		cl = user;
+		ASSERT(cl != NULL);
+
+		mutex_enter(&cl->lock);
+		cl->logon_status = CPDLC_LOGON_NONE;
+		mutex_exit(&cl->lock);
+		break;
+	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+		cl = user;
+		ASSERT(cl != NULL);
+
+		mutex_enter(&cl->lock);
+		cl->logon_status = CPDLC_LOGON_NONE;
+		cpdlc_strlcpy(cl->logon_failure, "Connection error",
+		    sizeof (cl->logon_failure));
+		mutex_exit(&cl->lock);
+		break;
+	default:
+		break;
+	}
+
+	return (0);
+}
+
+#else	/* !CPDLC_CLIENT_LWS */
 
 static bool
 poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
@@ -1027,6 +1316,8 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 
 	return (new_msgs);
 }
+
+#endif	/* !CPDLC_CLIENT_LWS */
 
 size_t
 cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf, size_t cap)
@@ -1144,8 +1435,9 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 	outmsgbuf = safe_calloc(1, sizeof (*outmsgbuf));
 	outmsgbuf->token = cl->outmsgbufs.next_tok++;
 	outmsgbuf->bufsz = cpdlc_msg_encode(msg, NULL, 0);
-	outmsgbuf->buf = safe_malloc(outmsgbuf->bufsz + 1);
-	cpdlc_msg_encode(msg, outmsgbuf->buf, outmsgbuf->bufsz + 1);
+	outmsgbuf->buf = safe_malloc(SENDBUF_PRE_PAD + outmsgbuf->bufsz + 1);
+	cpdlc_msg_encode(msg, &outmsgbuf->buf[SENDBUF_PRE_PAD],
+	    outmsgbuf->bufsz + 1);
 	outmsgbuf->track_sent = track_sent;
 
 	list_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);

@@ -426,7 +426,6 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
 	 *	AF_INET, this will be an IPv4 address in dotted-quad
 	 *	notation. If addr_family is AF_INET6, this will be an IPv6
 	 *	address in hex-colon notation.
-	 * "REMOTEPORT" - the remote connection TCP port number.
 	 *
 	 * We expect the authenticator to respond with two
 	 * x-www-form-urlencoded fields:
@@ -456,16 +455,12 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const void *addr,
 		    (const struct sockaddr_in *)addr;
 		inet_ntop(addr_family, &addr_v4->sin_addr, addrbuf,
 		    sizeof (addrbuf));
-		append_format(&sess->postdata, &cap, "&REMOTEPORT=%d",
-		    ntohs(addr_v4->sin_port));
 	} else {
 		char addrbuf[64];
 		const struct sockaddr_in6 *addr_v6 =
 		    (const struct sockaddr_in6 *)addr;
 		inet_ntop(addr_family, &addr_v6->sin6_addr, addrbuf,
 		    sizeof (addrbuf));
-		append_format(&sess->postdata, &cap, "&REMOTEPORT=%d",
-		    ntohs(addr_v6->sin6_port));
 	}
 	tmpstr = curl_easy_escape(curl, addrbuf, 0);
 	append_format(&sess->postdata, &cap, "&REMOTEADDR=%s", tmpstr);

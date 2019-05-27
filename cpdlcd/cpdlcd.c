@@ -40,6 +40,7 @@
 
 #include <netdb.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -47,6 +48,8 @@
 
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
+
+#include <libwebsockets.h>
 
 #include <acfutils/avl.h>
 #include <acfutils/conf.h>
@@ -73,7 +76,7 @@
  */
 #define	MAX_BUF_SZ		8192	/* bytes */
 #define	MAX_BUF_SZ_NO_LOGON	128	/* bytes */
-#define	POLL_TIMEOUT		1000	/* ms */
+#define	POLL_TIMEOUT		500	/* ms */
 /*
  * This value is tuned to be greater + a sufficient margin above the longest
  * possible message validity timeout (LONG_TIMEOUT in cpdlc_infos.c). This is
@@ -86,6 +89,22 @@
  * having been established, the connection is terminated.
  */
 #define	LOGON_GRACE_TIME	30	/* seconds */
+
+/*
+ * Checks whether the appropriate connections list mutex is held for
+ * a particular connection. For TCP connections, we want to be holding
+ * `conns_tcp_lock', whereas for libwebsocket connections, we want to
+ * be holding `conns_lws_lock'.
+ */
+#define	CONNS_MUTEX_HELD(conn)	((conn)->is_lws ? \
+	MUTEX_HELD(&conns_lws_lock) : MUTEX_HELD(&conns_tcp_lock))
+
+#define	LWS_CLOSE_PROTO_ERR(conn, msg) \
+	do { \
+		ASSERT((conn)->wsi != NULL); \
+		lws_close_reason((conn)->wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR, \
+		    (unsigned char *)(msg), strlen((msg))); \
+	} while (0)
 
 /*
  * Logon status enum:
@@ -109,20 +128,23 @@ typedef enum {
 
 /*
  * Master connection tracking structure. This structure holds all the state
- * associated with a client connection. It is held in the `conns' AVL tree
- * (keyed by its remote address and port). If the client has completed a
- * logon, it can also be referenced from the `conns_by_from' hash table.
+ * associated with a client connection. It is held in the `conns_tcp' and
+ * `conns_lws' lists. If the client has completed a logon, it can also be
+ * referenced from the `conns_by_from' hash table.
  */
 typedef struct {
+	/* immutable once set */
+	bool			is_lws;
+	uint64_t		outbuf_pre_pad;
+
+	struct lws		*wsi;
+
 	/* only set & read from main thread */
 	uint8_t			addr[MAX_ADDR_LEN];
 	socklen_t		addr_len;
 	int			addr_family;
 	int			fd;
 	time_t			logoff_time;
-
-	uint8_t			*inbuf;
-	size_t			inbuf_sz;
 
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
@@ -142,11 +164,14 @@ typedef struct {
 	unsigned		logon_min;
 	auth_sess_key_t		auth_key;
 	bool			is_atc;
-	/* Data about to be sent to the client over the TLS connection */
+	/* Data received over the TLS/WS connection */
+	uint8_t			*inbuf;
+	size_t			inbuf_sz;
+	/* Data about to be sent to the client over the TLS/WS connection */
 	uint8_t			*outbuf;
 	size_t			outbuf_sz;
 
-	avl_node_t		conns_node;
+	list_node_t		conns_node;
 } conn_t;
 
 /*
@@ -167,28 +192,46 @@ typedef struct {
  * `listen_socks' AVL tree, keyed by the address and port.
  */
 typedef struct {
-	uint8_t		addr[MAX_ADDR_LEN];
-	socklen_t	addr_len;
-	int		addr_family;
-	int		fd;
-	avl_node_t	listen_socks_node;
+	uint8_t			addr[MAX_ADDR_LEN];
+	socklen_t		addr_len;
+	int			addr_family;
+	int			fd;
+	avl_node_t		listen_socks_node;
 } listen_sock_t;
 
+typedef struct {
+	bool			is_lws;
+	struct lws_context	*ctx;
+	bool			shutdown;
+	thread_t		worker;
+	list_node_t		listen_lws_node;
+} listen_lws_t;
+
 /*
- * Master connections list AVL tree. All conn_t's are gathered and primarily
- * held in this tree, keyed by remote address and port. While we should
- * never really have to deal with the possibility of duplicate connections
- * with the same remote address and port, the reason this is arranged as an
- * AVL tree is to allow for quick filtering. When the server refreshes its
- * address-based blocklist, it does a quick search through all the
- * connections for a matching address, to see if any of the existing
- * connections should be torn down immediately.
+ * Master connections lists. All conn_t's are gathered and primarily
+ * held in one of two lists. `conns_tcp' collects connections over raw
+ * TLS over TCP. `conns_lws' collects connections over libwebsocket.
+ * Each list has its corresponding manipulation lock.
  */
-static avl_tree_t	conns;
+static mutex_t		conns_tcp_lock;
+static list_t		conns_tcp;
+
+static mutex_t		conns_lws_lock;
+static list_t		conns_lws;
+/*
+ * If modifications to `conns_tcp' are done, we need to raise this flag.
+ * This is because TCP input handling requires constructing a pollfd list
+ * that then needs to be back-correlated to the list of connections in
+ * `conns_tcp' exactly. In case `conns_tcp' is modified while polling, we
+ * need to throw away the poll result, reconstruct the pollfd list and
+ * try the poll operation again.
+ */
+static bool		conns_tcp_dirty = false;
 /*
  * Hash table mapping station "FROM" identities to one or more connections.
  * This mapping is established after a successful LOGON.
  */
+static mutex_t		conns_by_from_lock;
 static htbl_t		conns_by_from;
 /*
  * Bitshift defining the size of the `conns_by_from' hash table.
@@ -196,6 +239,7 @@ static htbl_t		conns_by_from;
  */
 #define	CONNS_BY_FROM_SHIFT	12
 static avl_tree_t	listen_socks;
+static list_t		listen_lws;
 
 /*
  * Since the main thread can be sitting in poll(), we need an I/O-based
@@ -241,7 +285,32 @@ static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
 static bool		background = true;
 static bool		do_shutdown = false;
 static int		default_port = 17622;
+static int		default_port_lws = 17623;
 static bool		req_client_cert = false;
+
+static void lws_worker(void *userinfo);
+static int http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
+    void *user, void *in, size_t len);
+static int cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
+    void *user, void *in, size_t len);
+
+static struct lws_protocols proto_list_lws[] =
+{
+    /* The first protocol must always be the HTTP handler */
+    {
+	.name = "http-only",
+	.callback = http_lws_cb,
+	.per_session_data_size = 0,
+	.rx_buffer_size = 0
+    },
+    {
+	.name = "cpdlc",
+	.callback = cpdlc_lws_cb,
+	.per_session_data_size = sizeof (conn_t),
+	.rx_buffer_size = MAX_BUF_SZ
+    },
+    { .name = NULL }	/* list terminator */
+};
 
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
     const char *fmt, ...);
@@ -273,27 +342,6 @@ set_fd_nonblock(int fd)
 }
 
 /*
- * Connection AVL tree (conns) comparator.
- */
-static int
-conn_compar(const void *a, const void *b)
-{
-	const conn_t *ca = a, *cb = b;
-	int res;
-
-	if (ca->addr_len < cb->addr_len)
-		return (-1);
-	if (ca->addr_len > cb->addr_len)
-		return (1);
-	res = memcmp(ca->addr, cb->addr, sizeof (ca->addr_len));
-	if (res < 0)
-		return (-1);
-	if (res > 0)
-		return (1);
-	return (0);
-}
-
-/*
  * Listen socket AVL tree (listen_socks) comparator.
  */
 static int
@@ -321,14 +369,19 @@ static void
 init_structs(void)
 {
 	CTASSERT(CONNS_BY_FROM_SHIFT > 0);
-	avl_create(&conns, conn_compar, sizeof (conn_t),
-	    offsetof(conn_t, conns_node));
+	mutex_init(&conns_tcp_lock);
+	list_create(&conns_tcp, sizeof (conn_t), offsetof(conn_t, conns_node));
+	mutex_init(&conns_lws_lock);
+	list_create(&conns_lws, sizeof (conn_t), offsetof(conn_t, conns_node));
+	mutex_init(&conns_by_from_lock);
 	htbl_create(&conns_by_from, 1 << CONNS_BY_FROM_SHIFT, CALLSIGN_LEN,
 	    true);
 	list_create(&queued_msgs, sizeof (queued_msg_t),
 	    offsetof(queued_msg_t, queued_msgs_node));
 	avl_create(&listen_socks, listen_sock_compar, sizeof (listen_sock_t),
 	    offsetof(listen_sock_t, listen_socks_node));
+	list_create(&listen_lws, sizeof (listen_lws_t),
+	    offsetof(listen_lws_t, listen_lws_node));
 	blocklist_init();
 	VERIFY_MSG(pipe(poll_wakeup_pipe) != -1, "pipe() failed: %s",
 	    strerror(errno));
@@ -346,16 +399,26 @@ fini_structs(void)
 	conn_t *conn;
 	queued_msg_t *msg;
 	listen_sock_t *ls;
+	listen_lws_t *lws;
 
 	htbl_empty(&conns_by_from, NULL, NULL);
 	htbl_destroy(&conns_by_from);
+	mutex_destroy(&conns_by_from_lock);
 
-	cookie = NULL;
-	while ((conn = avl_destroy_nodes(&conns, &cookie)) != NULL) {
-		close(conn->fd);
-		free(conn);
+	mutex_enter(&conns_tcp_lock);
+	/* calling `close_conn' removes the connection from `conns_tcp' */
+	while ((conn = list_head(&conns_tcp)) != NULL) {
+		ASSERT(!conn->is_lws);
+		close_conn(conn);
 	}
-	avl_destroy(&conns);
+	mutex_exit(&conns_tcp_lock);
+	list_destroy(&conns_tcp);
+	mutex_destroy(&conns_tcp_lock);
+
+	/* Destroying the LWS contexts should have drained this list */
+	ASSERT0(list_count(&conns_lws));
+	list_destroy(&conns_lws);
+	mutex_destroy(&conns_lws_lock);
 
 	while ((msg = list_remove_head(&queued_msgs)) != NULL) {
 		free(msg->msg);
@@ -372,6 +435,20 @@ fini_structs(void)
 	}
 	avl_destroy(&listen_socks);
 
+	/*
+	 * First mark all LWS contexts for destruction, then join all the
+	 * worker threads.
+	 */
+	for (lws = list_head(&listen_lws); lws != NULL;
+	    lws = list_next(&listen_lws, lws)) {
+		lws->shutdown = true;
+	}
+	while ((lws = list_remove_head(&listen_lws)) != NULL) {
+		thread_join(&lws->worker);
+		free(lws);
+	}
+	list_destroy(&listen_lws);
+
 	blocklist_fini();
 
 	close(poll_wakeup_pipe[0]);
@@ -384,18 +461,46 @@ print_usage(const char *progname, FILE *fp)
 	fprintf(fp, "Usage: %s [-h] [-c <conffile>]\n", progname);
 }
 
-/*
- * Adds a listen socket to the server's list of incoming sockets.
- * @param name_port String specifying the "hostname:port" combo to listen on.
- * @return true if the socket was added successfully, false on error.
- *	The error reason is printed to the log.
- */
 static bool
-add_listen_sock(const char *name_port)
+add_listen_sock_lws(const char *hostname, int port, const char *name_port)
 {
-	char hostname[64];
-	int port = default_port;
-	const char *colon = strchr(name_port, ':');
+	struct lws_context_creation_info info;
+	listen_lws_t *lws = safe_calloc(1, sizeof (*lws));
+
+	ASSERT(hostname != NULL);
+	ASSERT3S(port, >, 0);
+	ASSERT3S(port, <, UINT16_MAX);
+
+	memset(&info, 0, sizeof(info));
+
+	info.port = port;
+	info.protocols = proto_list_lws;
+	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+
+	info.gid = -1;
+	info.uid = -1;
+
+	info.ssl_private_key_filepath = tls_keyfile;
+	if (tls_keyfile_enctype != GNUTLS_PKCS_PLAIN)
+		info.ssl_private_key_password = tls_keyfile_pass;
+	info.ssl_cert_filepath = tls_certfile;
+	if (strlen(tls_cafile) != 0)
+		info.ssl_ca_filepath = tls_cafile;
+
+	lws->ctx = lws_create_context(&info);
+	if (lws->ctx == NULL) {
+		logMsg("Error creating LWS context for %s", name_port);
+		free(lws);
+		return (false);
+	}
+	VERIFY(thread_create(&lws->worker, lws_worker, lws));
+
+	return (true);
+}
+
+static bool
+add_listen_sock_tcp(const char *hostname, int port, const char *name_port)
+{
 	struct addrinfo *ai_full = NULL;
 	char portbuf[8];
 	int error;
@@ -405,17 +510,10 @@ add_listen_sock(const char *name_port)
 	    .ai_protocol = IPPROTO_TCP
 	};
 
-	if (colon != NULL) {
-		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
-		if (sscanf(&colon[1], "%d", &port) != 1 ||
-		    port <= 0 || port > UINT16_MAX) {
-			logMsg("Invalid listen directive \"%s\": expected "
-			    "valid port number after ':' character", name_port);
-			return (false);
-		}
-	} else {
-		lacf_strlcpy(hostname, name_port, sizeof (hostname));
-	}
+	ASSERT(hostname != NULL);
+	ASSERT3S(port, >, 0);
+	ASSERT3S(port, <, UINT16_MAX);
+
 	snprintf(portbuf, sizeof (portbuf), "%d", port);
 
 	error = getaddrinfo(hostname, portbuf, &hints, &ai_full);
@@ -480,6 +578,51 @@ errout:
 	if (ai_full != NULL)
 		freeaddrinfo(ai_full);
 	return (false);
+}
+
+/*
+ * Adds a listen socket to the server's list of incoming sockets.
+ * @param name_port String specifying the "hostname:port" combo to listen on.
+ * @return true if the socket was added successfully, false on error.
+ *	The error reason is printed to the log.
+ */
+static bool
+add_listen_sock(const char *name_port, bool lws)
+{
+	char hostname[64] = { 0 };
+	int port;
+	const char *colon = strrchr(name_port, ':');
+	const char *right_bracket = strrchr(name_port, ']');
+
+	/*
+	 * We try to capture the last ':' character that is NOT part of an
+	 * IPv6 address spec (i.e. the format "[AB:CD::EF]:port").
+	 */
+	if (colon != NULL && (right_bracket == NULL || colon > right_bracket)) {
+		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
+		if (sscanf(&colon[1], "%d", &port) != 1 ||
+		    port <= 0 || port >= UINT16_MAX) {
+			logMsg("Invalid listen directive \"%s\": expected "
+			    "valid port number following last ':' character",
+			    name_port);
+			return (false);
+		}
+	} else {
+		lacf_strlcpy(hostname, name_port, sizeof (hostname));
+		port = (lws ? default_port_lws : default_port);
+	}
+
+	if (strlen(hostname) > 2 && hostname[0] == '[' &&
+	    hostname[strlen(hostname) - 1] == ']') {
+		/* Strip the brackets surrounding the IPv6 address */
+		memmove(hostname, &hostname[1], strlen(hostname));
+		hostname[strlen(hostname) - 1] = '\0';
+	}
+
+	if (lws)
+		return (add_listen_sock_lws(hostname, port, name_port));
+	else
+		return (add_listen_sock_tcp(hostname, port, name_port));
 }
 
 /*
@@ -558,14 +701,6 @@ parse_config(const char *conf_path)
 			logMsg("%s: parsing error on %d", conf_path, errline);
 		return (false);
 	}
-
-	cookie = NULL;
-	while (conf_walk(conf, &key, &value, &cookie)) {
-		if (strncmp(key, "listen/", 7) == 0) {
-			if (!add_listen_sock(value))
-				goto errout;
-		}
-	}
 	if (conf_get_str(conf, "tls/keyfile", &value))
 		lacf_strlcpy(tls_keyfile, value, sizeof (tls_keyfile));
 	if (conf_get_str(conf, "tls/keyfile_pass", &value)) {
@@ -606,8 +741,25 @@ parse_config(const char *conf_path)
 	if (conf_get_str(conf, "msgqueue/max", &value))
 		queued_msg_max_bytes = parse_bytes(value);
 
-	if (avl_numnodes(&listen_socks) == 0 && !add_listen_sock("localhost"))
+	/*
+	 * Must go after all TLS parameters have been parsed, because
+	 * LWS connections can request them immediately.
+	 */
+	cookie = NULL;
+	while (conf_walk(conf, &key, &value, &cookie)) {
+		if (strncmp(key, "listen/", 7) == 0) {
+			if (!add_listen_sock(value, false))
+				goto errout;
+		} else if (strncmp(key, "listen_lws/", 11) == 0) {
+			if (!add_listen_sock(value, true))
+				goto errout;
+		}
+	}
+
+	if (avl_numnodes(&listen_socks) == 0 &&
+	    !add_listen_sock("localhost", false)) {
 		goto errout;
+	}
 	auth_init(auth_url, auth_cainfo, auth_username, auth_password);
 	msgquota_init(msgquota_max);
 
@@ -628,7 +780,7 @@ auto_config(void)
 {
 	auth_init(NULL, NULL, NULL, NULL);
 	msgquota_init(0);
-	return (add_listen_sock("localhost"));
+	return (add_listen_sock("localhost", false));
 }
 
 /*
@@ -683,8 +835,6 @@ handle_accepts(listen_sock_t *ls)
 {
 	for (;;) {
 		conn_t *conn = safe_calloc(1, sizeof (*conn));
-		conn_t *old_conn;
-		avl_index_t where;
 
 		conn->addr_len = sizeof (conn->addr);
 		conn->fd = accept(ls->fd, (struct sockaddr *)conn->addr,
@@ -719,14 +869,6 @@ handle_accepts(listen_sock_t *ls)
 		 */
 		set_fd_nonblock(conn->fd);
 		conn->logoff_time = time(NULL);
-		old_conn = avl_find(&conns, conn, &where);
-		if (old_conn != NULL) {
-			logMsg("Error accepting connection: duplicate "
-			    "connection encountered?!");
-			close(conn->fd);
-			free(conn);
-			continue;
-		}
 		/*
 		 * Start the TLS handshake process.
 		 */
@@ -744,7 +886,10 @@ handle_accepts(listen_sock_t *ls)
 
 		mutex_init(&conn->lock);
 
-		avl_insert(&conns, conn, where);
+		mutex_enter(&conns_tcp_lock);
+		list_insert_tail(&conns_tcp, conn);
+		conns_tcp_dirty = true;
+		mutex_exit(&conns_tcp_lock);
 	}
 }
 
@@ -775,6 +920,7 @@ conn_reset_logon(conn_t *conn)
 	 * If the logon has completed, we MUST have had this connection
 	 * inserted in the conns_by_from hashtable.
 	 */
+	mutex_enter(&conns_by_from_lock);
 	l = htbl_lookup_multi(&conns_by_from, conn->from);
 	ASSERT(l != NULL);
 	for (void *mv = list_head(l); mv != NULL; mv = list_next(l, mv)) {
@@ -785,6 +931,7 @@ conn_reset_logon(conn_t *conn)
 			break;
 		}
 	}
+	mutex_exit(&conns_by_from_lock);
 	conn->is_atc = false;
 	memset(conn->from, 0, sizeof (conn->from));
 	memset(conn->to, 0, sizeof (conn->to));
@@ -804,23 +951,35 @@ static void
 close_conn(conn_t *conn)
 {
 	ASSERT(conn != NULL);
+	ASSERT(CONNS_MUTEX_HELD(conn));
+
 	/*
 	 * Must be done before unlinking the connection from any list,
 	 * because we can be called in the background to complete a logon.
 	 */
 	conn_reset_logon(conn);
 
-	avl_remove(&conns, conn);
-	if (conn->tls_handshake_complete)
-		gnutls_bye(conn->session, GNUTLS_SHUT_WR);
-	ASSERT(conn->fd != -1);
-	close(conn->fd);
-	gnutls_deinit(conn->session);
+	if (conn->is_lws) {
+		list_remove(&conns_lws, conn);
+	} else {
+		list_remove(&conns_tcp, conn);
+		conns_tcp_dirty = true;
+	}
+
 	mutex_destroy(&conn->lock);
 	free(conn->inbuf);
 	free(conn->outbuf);
-	memset(conn, 0, sizeof (*conn));
-	free(conn);
+
+	if (!conn->is_lws) {
+		if (conn->tls_handshake_complete)
+			gnutls_bye(conn->session, GNUTLS_SHUT_WR);
+		ASSERT(conn->fd != -1);
+		close(conn->fd);
+		gnutls_deinit(conn->session);
+
+		memset(conn, 0, sizeof (*conn));
+		free(conn);
+	}
 }
 
 /*
@@ -859,6 +1018,7 @@ complete_logon(conn_t *conn)
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn);
+	ASSERT(CONNS_MUTEX_HELD(conn));
 
 	mutex_enter(&conn->lock);
 
@@ -878,7 +1038,9 @@ complete_logon(conn_t *conn)
 		conn->logon_status = LOGON_COMPLETE;
 		lacf_strlcpy(conn->to, conn->logon_to, sizeof (conn->to));
 		lacf_strlcpy(conn->from, conn->logon_from, sizeof (conn->from));
+		mutex_enter(&conns_by_from_lock);
 		htbl_set(&conns_by_from, conn->from, conn);
+		mutex_exit(&conns_by_from_lock);
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
 		cpdlc_msg_set_from(msg, "ATN");
 	} else {
@@ -899,9 +1061,19 @@ complete_logon(conn_t *conn)
 static void
 complete_logons(void)
 {
-	for (conn_t *conn = avl_first(&conns); conn != NULL;
-	    conn = AVL_NEXT(&conns, conn))
+	mutex_enter(&conns_tcp_lock);
+	for (conn_t *conn = list_head(&conns_tcp); conn != NULL;
+	    conn = list_next(&conns_tcp, conn)) {
 		complete_logon(conn);
+	}
+	mutex_exit(&conns_tcp_lock);
+
+	mutex_enter(&conns_lws_lock);
+	for (conn_t *conn = list_head(&conns_lws); conn != NULL;
+	    conn = list_next(&conns_lws, conn)) {
+		complete_logon(conn);
+	}
+	mutex_exit(&conns_lws_lock);
 }
 
 /*
@@ -914,6 +1086,7 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
+	ASSERT(CONNS_MUTEX_HELD(conn));
 
 	mutex_enter(&conn->lock);
 
@@ -965,10 +1138,16 @@ conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
 
 	mutex_enter(&conn->lock);
 
-	conn->outbuf = safe_realloc(conn->outbuf, conn->outbuf_sz + buflen + 1);
-	lacf_strlcpy((char *)&conn->outbuf[conn->outbuf_sz], buf, buflen + 1);
+	conn->outbuf = safe_realloc(conn->outbuf, conn->outbuf_pre_pad +
+	    conn->outbuf_sz + buflen + 1);
+	lacf_strlcpy((char *)&conn->outbuf[conn->outbuf_pre_pad +
+	    conn->outbuf_sz], buf, buflen + 1);
 	/* Exclude training NUL char */
 	conn->outbuf_sz += buflen;
+	if (conn->is_lws) {
+		ASSERT(conn->wsi != NULL);
+		lws_callback_on_writable(conn->wsi);
+	}
 
 	mutex_exit(&conn->lock);
 }
@@ -1164,6 +1343,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
+	ASSERT(CONNS_MUTEX_HELD(conn));
 
 	/*
 	 * If the user isn't logged on, don't allow anything other than
@@ -1232,6 +1412,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 * Otherwise, we store it for later delivery as soon as the
 	 * recipient becomes available, or until the message expires.
 	 */
+	mutex_enter(&conns_by_from_lock);
 	l = htbl_lookup_multi(&conns_by_from, to);
 	if (l != NULL && list_count(l) != 0) {
 		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
@@ -1246,6 +1427,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		if (!store_msg(msg, to, conn->is_atc))
 			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
 	}
+	mutex_exit(&conns_by_from_lock);
 }
 
 /*
@@ -1264,6 +1446,8 @@ conn_process_input(conn_t *conn)
 
 	ASSERT(conn != NULL);
 	ASSERT(conn->inbuf_sz != 0);
+	ASSERT(CONNS_MUTEX_HELD(conn));
+	ASSERT(MUTEX_HELD(&conn->lock));
 
 	while (consumed_total < (int)conn->inbuf_sz) {
 		int consumed;
@@ -1336,10 +1520,16 @@ tls_verify_peer(conn_t *conn)
 /*
  * Data input validator. All incoming connection data must be plaintext.
  */
-static inline bool
-input_char_is_valid(uint8_t c)
+static bool
+sanitize_input(const uint8_t *buf, size_t len)
 {
-	return ((c >= 32 && c <= 127) || c == '\n' || c == '\r' || c == '\t');
+	for (size_t i = 0; i < len; i++) {
+		uint8_t c = buf[i];
+		/* Input sanitization, don't allow control chars */
+		if ((c < 32 || c > 127) && c != '\n' && c != '\r' && c != '\t')
+			return (false);
+	}
+	return (true);
 }
 
 /*
@@ -1348,14 +1538,15 @@ input_char_is_valid(uint8_t c)
  * available input bytes into messages and process them.
  *
  * @return True if the input read was successful. False if a fatal error
- *	was encountered during input reading or processing and the
- *	connection was terminated. The caller must avoid touching the
- *	`conn' object in this case, as it will have been freed.
+ *	was encountered during input reading or processing of messages,
+ *	or the remote end has closed the connection. The caller should call
+ *	close_conn.
  */
 static bool
 conn_read_input(conn_t *conn)
 {
 	ASSERT(conn != NULL);
+	ASSERT(MUTEX_HELD(&conns_tcp_lock));
 
 	for (;;) {
 		uint8_t buf[READ_BUF_SZ];
@@ -1373,13 +1564,10 @@ conn_read_input(conn_t *conn)
 				}
 				logMsg("TLS handshake error: %s",
 				    gnutls_strerror(error));
-				close_conn(conn);
 				return (false);
 			}
-			if (req_client_cert && !tls_verify_peer(conn)) {
-				close_conn(conn);
+			if (req_client_cert && !tls_verify_peer(conn))
 				return (false);
-			}
 			/* TLS handshake succeeded */
 			conn->tls_handshake_complete = true;
 		}
@@ -1396,34 +1584,29 @@ conn_read_input(conn_t *conn)
 			}
 			logMsg("Fatal read error on connection: %s",
 			    gnutls_strerror(bytes));
-			close_conn(conn);
 			return (false);
 		}
 		if (bytes == 0) {
 			/* Connection closed */
-			close_conn(conn);
 			return (false);
 		}
-		for (ssize_t i = 0; i < bytes; i++) {
-			/* Input sanitization, don't allow control chars */
-			if (!input_char_is_valid(buf[i])) {
-				logMsg("Invalid input character on "
-				    "connection: data MUST be plain text");
-				close_conn(conn);
-				return (false);
-			}
+		if (!sanitize_input(buf, bytes)) {
+			logMsg("Invalid input character on connection: "
+			    "data MUST be plain text");
+			return (false);
 		}
 		if (conn->inbuf_sz + bytes > max_inbuf_sz) {
 			logMsg("Input buffer overflow on connection: received "
 			    "%d bytes, maximum allowable is %d bytes",
 			    (int)(conn->inbuf_sz + bytes), (int)max_inbuf_sz);
-			close_conn(conn);
 			return (false);
 		}
 		/*
 		 * Attach the new input bytes to the end of `inbuf'. That's
 		 * where conn_process_input will drain it from.
 		 */
+		mutex_enter(&conn->lock);
+
 		conn->inbuf = safe_realloc(conn->inbuf,
 		    conn->inbuf_sz + bytes + 1);
 		memcpy(&conn->inbuf[conn->inbuf_sz], buf, bytes);
@@ -1431,9 +1614,10 @@ conn_read_input(conn_t *conn)
 		conn->inbuf[conn->inbuf_sz] = '\0';
 
 		if (!conn_process_input(conn)) {
-			close_conn(conn);
+			mutex_exit(&conn->lock);
 			return (false);
 		}
+		mutex_exit(&conn->lock);
 	}
 }
 
@@ -1444,9 +1628,7 @@ conn_read_input(conn_t *conn)
  * connection is adjusted to remove the data sent.
  *
  * @return True if sending data was successful. False if a fatal error has
- *	been encountered and the connection has been closed. The caller
- *	must avoid touching the `conn' object in this case, as it will have
- *	been freed.
+ *	been encountered and the caller should call close_conn.
  */
 static bool
 conn_write_output(conn_t *conn)
@@ -1454,22 +1636,22 @@ conn_write_output(conn_t *conn)
 	int bytes;
 
 	ASSERT(conn != NULL);
-	ASSERT(conn->outbuf != NULL);
+	ASSERT(conn->outbuf_sz != 0);
+	ASSERT(MUTEX_HELD(&conns_tcp_lock));
 
 	mutex_enter(&conn->lock);
 	/*
 	 * We are in non-blocking mode, so we can hold `lock' here safely
 	 * during the record send operation.
 	 */
-	bytes = gnutls_record_send(conn->session, conn->outbuf,
-	    conn->outbuf_sz);
+	bytes = gnutls_record_send(conn->session,
+	    &conn->outbuf[conn->outbuf_pre_pad], conn->outbuf_sz);
 	if (bytes < 0) {
 		if (bytes != GNUTLS_E_AGAIN) {
 			if (gnutls_error_is_fatal(bytes)) {
 				logMsg("Fatal send error on connection: %s",
 				    gnutls_strerror(bytes));
 				mutex_exit(&conn->lock);
-				close_conn(conn);
 				return (false);
 			}
 			logMsg("Soft send error on connection: %s",
@@ -1477,10 +1659,12 @@ conn_write_output(conn_t *conn)
 		}
 	} else if (bytes > 0) {
 		if ((ssize_t)conn->outbuf_sz > bytes) {
-			memmove(conn->outbuf, &conn->outbuf[bytes],
+			memmove(&conn->outbuf[conn->outbuf_pre_pad],
+			    &conn->outbuf[conn->outbuf_pre_pad + bytes],
 			    (conn->outbuf_sz - bytes) + 1);
 			conn->outbuf = safe_realloc(conn->outbuf,
-			    (conn->outbuf_sz - bytes) + 1);
+			    conn->outbuf_pre_pad + (conn->outbuf_sz - bytes) +
+			    1);
 			conn->outbuf_sz -= bytes;
 		} else {
 			free(conn->outbuf);
@@ -1503,10 +1687,15 @@ static void
 poll_sockets(void)
 {
 	unsigned sock_nr = 0;
-	unsigned num_pfds = 1 + avl_numnodes(&listen_socks) +
-	    avl_numnodes(&conns);
-	struct pollfd *pfds = safe_calloc(num_pfds, sizeof (*pfds));
+	unsigned num_pfds;
+	struct pollfd *pfds;
 	int poll_res, polls_seen;
+
+	mutex_enter(&conns_tcp_lock);
+retry_poll:
+	conns_tcp_dirty = false;
+	num_pfds = 1 + avl_numnodes(&listen_socks) + list_count(&conns_tcp);
+	pfds = safe_calloc(num_pfds, sizeof (*pfds));
 
 	/*
 	 * The first fd in the poll list is always our poll wakeup pipe.
@@ -1520,8 +1709,8 @@ poll_sockets(void)
 		pfds[sock_nr].fd = ls->fd;
 		pfds[sock_nr].events = POLLIN;
 	}
-	for (conn_t *conn = avl_first(&conns); conn != NULL;
-	    conn = AVL_NEXT(&conns, conn), sock_nr++) {
+	for (conn_t *conn = list_head(&conns_tcp); conn != NULL;
+	    conn = list_next(&conns_tcp, conn), sock_nr++) {
 		pfds[sock_nr].fd = conn->fd;
 		pfds[sock_nr].events = POLLIN;
 		/* If a socket has data to send, poll for output as well */
@@ -1529,11 +1718,15 @@ poll_sockets(void)
 			pfds[sock_nr].events |= POLLOUT;
 	}
 	ASSERT3U(sock_nr, ==, num_pfds);
+	mutex_exit(&conns_tcp_lock);
 
 	poll_res = poll(pfds, num_pfds, POLL_TIMEOUT);
 	if (poll_res == -1) {
-		if (errno != EINTR)
-			logMsg("Error polling on sockets: %s", strerror(errno));
+		/*
+		 * In case conns_tcp was changed and a socket closed before
+		 * we attempted to poll, we might end up getting spurious
+		 * poll errors.
+		 */
 		free(pfds);
 		return;
 	}
@@ -1541,6 +1734,16 @@ poll_sockets(void)
 		/* Poll timeout, respin another loop */
 		free(pfds);
 		return;
+	}
+
+	mutex_enter(&conns_tcp_lock);
+	/*
+	 * If the conns_tcp list has changed while we were polling, we must
+	 * retry the poll with a refreshed connections list.
+	 */
+	if (conns_tcp_dirty) {
+		free(pfds);
+		goto retry_poll;
 	}
 
 	polls_seen = 0;
@@ -1576,23 +1779,27 @@ poll_sockets(void)
 	/*
 	 * This is the primary client connection I/O event loop.
 	 */
-	for (conn_t *conn = avl_first(&conns), *next_conn = NULL;
+	for (conn_t *conn = list_head(&conns_tcp), *next_conn = NULL;
 	    conn != NULL; conn = next_conn, sock_nr++) {
 		/*
 		 * Grab the next connection handle now in case
 		 * the connection gets closed due to EOF or errors.
 		 */
-		next_conn = AVL_NEXT(&conns, conn);
+		next_conn = list_next(&conns_tcp, conn);
 		if (pfds[sock_nr].revents & (POLLIN | POLLOUT)) {
 			polls_seen++;
 			if (pfds[sock_nr].revents & POLLIN) {
-				if (!conn_read_input(conn))
+				if (!conn_read_input(conn)) {
+					close_conn(conn);
 					continue;
+				}
 			}
-			if (conn->outbuf != NULL &&
+			if (conn->outbuf_sz != 0 &&
 			    (pfds[sock_nr].revents & POLLOUT)) {
-				if (!conn_write_output(conn))
+				if (!conn_write_output(conn)) {
+					close_conn(conn);
 					continue;
+				}
 			}
 			/* If we've processed all polls, early exit */
 			if (polls_seen >= poll_res)
@@ -1601,6 +1808,26 @@ poll_sockets(void)
 	}
 out:
 	free(pfds);
+	mutex_exit(&conns_tcp_lock);
+}
+
+static void
+handle_lws_input(void)
+{
+	mutex_enter(&conns_lws_lock);
+
+	for (conn_t *conn = list_head(&conns_lws); conn != NULL;
+	    conn = list_next(&conns_lws, conn)) {
+		ASSERT(conn->is_lws);
+		ASSERT(conn->wsi != NULL);
+
+		mutex_enter(&conn->lock);
+		if (conn->inbuf_sz > 0 && !conn_process_input(conn))
+			LWS_CLOSE_PROTO_ERR(conn, "Bad message");
+		mutex_exit(&conn->lock);
+	}
+
+	mutex_exit(&conns_lws_lock);
 }
 
 /*
@@ -1644,6 +1871,7 @@ handle_queued_msgs(void)
 		 */
 		next_qmsg = list_next(&queued_msgs, qmsg);
 
+		mutex_enter(&conns_by_from_lock);
 		l = htbl_lookup_multi(&conns_by_from, qmsg->to);
 		if (l != NULL && list_count(l) != 0) {
 			/*
@@ -1665,6 +1893,7 @@ handle_queued_msgs(void)
 			 */
 			dequeue_msg(qmsg);
 		}
+		mutex_exit(&conns_by_from_lock);
 	}
 }
 
@@ -1676,14 +1905,30 @@ handle_queued_msgs(void)
 static void
 close_blocked_conns(void)
 {
-	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
-	    conn = conn_next) {
-		conn_next = AVL_NEXT(&conns, conn);
+	mutex_enter(&conns_tcp_lock);
+	for (conn_t *conn = list_head(&conns_tcp), *conn_next = NULL;
+	    conn != NULL; conn = conn_next) {
+		conn_next = list_next(&conns_tcp, conn);
 		if (!blocklist_check(conn->addr, conn->addr_len,
 		    conn->addr_family)) {
 			close_conn(conn);
 		}
 	}
+	mutex_exit(&conns_tcp_lock);
+
+	mutex_enter(&conns_lws_lock);
+	for (conn_t *conn = list_head(&conns_lws), *conn_next = NULL;
+	    conn != NULL; conn = conn_next) {
+		conn_next = list_next(&conns_lws, conn);
+		if (!blocklist_check(conn->addr, conn->addr_len,
+		    conn->addr_family)) {
+			lws_close_reason(conn->wsi,
+			    LWS_CLOSE_STATUS_POLICY_VIOLATION,
+			    (unsigned char *)"Connection blocked",
+			    strlen("Connection blocked"));
+		}
+	}
+	mutex_exit(&conns_lws_lock);
 }
 
 /*
@@ -1695,14 +1940,28 @@ close_timedout_conns(void)
 {
 	time_t now = time(NULL);
 
-	for (conn_t *conn = avl_first(&conns), *conn_next = NULL; conn != NULL;
-	    conn = conn_next) {
-		conn_next = AVL_NEXT(&conns, conn);
+	mutex_enter(&conns_tcp_lock);
+	for (conn_t *conn = list_head(&conns_tcp), *conn_next = NULL;
+	    conn != NULL; conn = conn_next) {
+		conn_next = list_next(&conns_tcp, conn);
 		if (!conn->logon_success &&
 		    now - conn->logoff_time > LOGON_GRACE_TIME) {
 			close_conn(conn);
 		}
 	}
+	mutex_exit(&conns_tcp_lock);
+
+	mutex_enter(&conns_lws_lock);
+	for (conn_t *conn = list_head(&conns_lws), *conn_next = NULL;
+	    conn != NULL; conn = conn_next) {
+		conn_next = list_next(&conns_lws, conn);
+		ASSERT(conn->wsi != NULL);
+		if (!conn->logon_success &&
+		    now - conn->logoff_time > LOGON_GRACE_TIME) {
+			LWS_CLOSE_PROTO_ERR(conn, "LOGON timeout");
+		}
+	}
+	mutex_exit(&conns_lws_lock);
 }
 
 /*
@@ -1829,6 +2088,7 @@ main(int argc, char *argv[])
 
 	while (!do_shutdown) {
 		poll_sockets();
+		handle_lws_input();
 		complete_logons();
 		handle_queued_msgs();
 		if (blocklist_refresh())
@@ -1841,6 +2101,137 @@ main(int argc, char *argv[])
 	tls_fini();
 	fini_structs();
 	curl_global_cleanup();
+
+	return (0);
+}
+
+static void
+lws_worker(void *userinfo)
+{
+	listen_lws_t *lws = userinfo;
+
+	ASSERT(userinfo != NULL);
+	ASSERT(lws->ctx != NULL);
+
+	while (!lws->shutdown)
+		lws_service(lws->ctx, POLL_TIMEOUT);
+}
+
+static int
+http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
+    void *in, size_t len)
+{
+	UNUSED(wsi);
+	UNUSED(reason);
+	UNUSED(user);
+	UNUSED(in);
+	UNUSED(len);
+	return (0);
+}
+
+static void
+close_lws_bad_conn(struct lws *wsi)
+{
+	lws_close_reason(wsi, LWS_CLOSE_STATUS_PROTOCOL_ERR,
+	    (unsigned char *)"Bad connection", strlen("Bad connection"));
+}
+
+static void
+conn_established_lws(conn_t *conn, struct lws *wsi)
+{
+	char addrstr[128] = { 0 };
+
+	ASSERT(conn != NULL);
+	ASSERT(wsi != NULL);
+
+	memset(conn, 0, sizeof (*conn));
+
+	lws_get_peer_simple(wsi, addrstr, sizeof (addrstr));
+	if (strchr(addrstr, '.') != NULL) {
+		if (inet_pton(AF_INET, addrstr, conn->addr) != 1) {
+			logMsg("Invalid IP address \"%s\"", addrstr);
+			close_lws_bad_conn(wsi);
+			return;
+		}
+		conn->addr_len = sizeof (struct sockaddr_in);
+		conn->addr_family = AF_INET;
+	} else if (strchr(addrstr, ':') != NULL) {
+		if (inet_pton(AF_INET6, addrstr, conn->addr) != 1) {
+			logMsg("Invalid IPv6 address \"%s\"", addrstr);
+			close_lws_bad_conn(wsi);
+			return;
+		}
+		conn->addr_len = sizeof (struct sockaddr_in6);
+		conn->addr_family = AF_INET6;
+	} else {
+		logMsg("lws_get_peer_simple(%p) didn't return a valid address",
+		    wsi);
+		close_lws_bad_conn(wsi);
+		return;
+	}
+	conn->is_lws = true;
+	conn->outbuf_pre_pad = P2ROUNDUP(LWS_PRE);
+	mutex_init(&conn->lock);
+	conn->wsi = wsi;
+
+	mutex_enter(&conns_lws_lock);
+	list_insert_tail(&conns_lws, conn);
+	mutex_exit(&conns_lws_lock);
+}
+
+static int
+cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
+    void *in, size_t len)
+{
+	conn_t *conn = user;
+
+	ASSERT(wsi != NULL);
+	UNUSED(reason);
+	UNUSED(in);
+	UNUSED(len);
+
+	switch (reason) {
+	case LWS_CALLBACK_ESTABLISHED:
+		ASSERT(conn != NULL);
+		ASSERT(wsi != NULL);
+		conn_established_lws(conn, wsi);
+		break;
+	case LWS_CALLBACK_CLOSED:
+		ASSERT(conn != NULL);
+		mutex_enter(&conns_lws_lock);
+		close_conn(conn);
+		mutex_exit(&conns_lws_lock);
+		break;
+	case LWS_CALLBACK_RECEIVE:
+		ASSERT(conn != NULL);
+		if (!sanitize_input(in, len)) {
+			logMsg("Invalid input character on connection: "
+			    "data MUST be plain text");
+			LWS_CLOSE_PROTO_ERR(conn, "Bad input");
+			break;
+		}
+		mutex_enter(&conn->lock);
+		conn->inbuf = safe_realloc(conn->inbuf,
+		    conn->inbuf_sz + len + 1);
+		memcpy(&conn->inbuf[conn->inbuf_sz], in, len);
+		conn->inbuf_sz += len;
+		conn->inbuf[conn->inbuf_sz] = '\0';
+		mutex_exit(&conn->lock);
+		wake_up_main_thread();
+		break;
+	case LWS_CALLBACK_SERVER_WRITEABLE:
+		ASSERT(conn != NULL);
+		if (lws_write(conn->wsi, &conn->outbuf[conn->outbuf_pre_pad],
+		    conn->outbuf_sz, LWS_WRITE_TEXT) == -1) {
+			LWS_CLOSE_PROTO_ERR(conn, "Write error");
+		}
+		free(conn->outbuf);
+		conn->outbuf = NULL;
+		conn->outbuf_sz = 0;
+		break;
+	default:
+		break;
+	}
 
 	return (0);
 }

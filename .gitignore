@@ -2,6 +2,8 @@
 Makefile.vars
 test/msgtest
 test/client_test
+ca_cert.pem
+ca_key.pem
 cpdlcd/cpdlcd
 cpdlcd/cpdlcd_*.pem
 cpdlcd/test.conf

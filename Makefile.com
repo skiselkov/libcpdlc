@@ -65,3 +65,6 @@ FANS_OBJS=\
 	$(FANS)/fans_req_voice.o \
 	$(FANS)/fans_scratchpad.o \
 	$(FANS)/fans_vrfy.o
+
+LWS_CFLAGS=$(shell pkg-config libwebsockets --cflags)
+LWS_LIBS=$(shell pkg-config libwebsockets --libs)

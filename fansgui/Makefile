@@ -37,12 +37,18 @@ endif
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
-	$(shell pkg-config gnutls --cflags)
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags)
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
-	$(shell pkg-config gnutls --libs) \
-	$(PLATFORM_LIBS) -lpthread -lm
+	$(PLATFORM_LIBS) -lpthread -lm 
+
+ifeq ($(LWS),yes)
+	CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)
+	LIBS += $(LWS_LIBS)
+else
+	CFLAGS += $(shell pkg-config gnutls --cflags)
+	LIBS += $(shell pkg-config gnutls --libs)
+endif
 
 # clang doesn't properly support optimized debug code.
 ifeq ($(PLATFORM_NAME),mac-64)
