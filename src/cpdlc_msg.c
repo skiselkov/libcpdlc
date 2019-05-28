@@ -25,6 +25,7 @@
 
 #include <ctype.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -56,6 +57,27 @@
 		while ((__start) < (__end) && !isspace((__start)[0])) \
 			(__start)++; \
 	} while (0)
+
+#define	MALFORMED_MSG(...) \
+	do { \
+		set_error(reason, reason_cap, "Malformed message: " \
+		    __VA_ARGS__); \
+	} while (0)
+
+static void
+set_error(char *reason, unsigned cap, const char *fmt, ...)
+{
+	va_list ap;
+
+	ASSERT(fmt != NULL);
+
+	if (cap == 0)
+		return;
+
+	va_start(ap, fmt);
+	vsnprintf(reason, cap, fmt, ap);
+	va_end(ap);
+}
 
 static const cpdlc_msg_info_t *
 msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
@@ -452,6 +474,8 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 		    sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGON=%s", textbuf);
 	}
+	if (msg->is_logoff)
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGOFF");
 	if (msg->from[0] != '\0') {
 		char textbuf[32];
 		cpdlc_escape_percent(msg->from, textbuf, sizeof (textbuf));
@@ -529,47 +553,65 @@ cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 }
 
 static bool
-validate_logon_message(const cpdlc_msg_t *msg)
+validate_logon_logoff_message(const cpdlc_msg_t *msg, char *reason,
+    unsigned reason_cap)
 {
-	if (msg->num_segs != 0) {
-		fprintf(stderr, "Message malformed: LOGON messages "
-		    "may not contain MSG segments\n");
+	const char *msgtype;
+
+	ASSERT(msg != NULL);
+
+	msgtype = (msg->is_logon ? "LOGON" : "LOGOFF");
+	if (msg->is_logon && msg->is_logoff) {
+		MALFORMED_MSG("message can either be a LOGON or LOGOFF "
+		    "message, but not both");
 		return (false);
 	}
-	if (msg->from[0] == '\0' && strcmp(msg->logon_data, "FAILURE") != 0) {
-		fprintf(stderr, "Message malformed: LOGON messages "
-		    "MUST contain a FROM header\n");
+	if (msg->num_segs != 0) {
+		MALFORMED_MSG("%s messages may not contain MSG segments",
+		    msgtype);
+		return (false);
+	}
+	if (msg->from[0] == '\0') {
+		MALFORMED_MSG("%s messages MUST contain a FROM header",
+		    msgtype);
 		return (false);
 	}
 	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
-		fprintf(stderr, "Message malformed: missing or invalid "
-		    "MIN header\n");
+		MALFORMED_MSG("missing or invalid MIN header");
 		return (false);
 	}
 	return (true);
 }
 
 static bool
-validate_message(const cpdlc_msg_t *msg)
+validate_message(const cpdlc_msg_t *msg, char *reason, unsigned reason_cap)
 {
 	/* LOGON message format is special */
-	if (msg->is_logon)
-		return (validate_logon_message(msg));
+	if (msg->is_logon || msg->is_logoff)
+		return (validate_logon_logoff_message(msg, reason, reason_cap));
 
 	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
-		fprintf(stderr, "Message malformed: missing or invalid "
-		    "MIN header\n");
+		MALFORMED_MSG("missing or invalid MIN header");
 		return (false);
 
-	if (msg->pkt_type == CPDLC_PKT_PING) {
-		return (msg->num_segs == 0 &&
-		    msg->mrn == CPDLC_INVALID_MSG_SEQ_NR);
+	if (msg->pkt_type == CPDLC_PKT_PING ||
+	    msg->pkt_type == CPDLC_PKT_PONG) {
+		if (msg->num_segs != 0) {
+			MALFORMED_MSG("PING/PONG messages may not contain "
+			    "MSG segments");
+			return (false);
+		}
+		if (msg->pkt_type == CPDLC_PKT_PING &&
+		    msg->mrn != CPDLC_INVALID_MSG_SEQ_NR) {
+			MALFORMED_MSG("PING messages may not contain "
+			    "an MRN header");
+			return (false);
+		}
+		return (true);
 	}
-	if (msg->pkt_type == CPDLC_PKT_PONG)
-		return (msg->num_segs == 0);
 
 	if (msg->num_segs == 0) {
-		fprintf(stderr, "Message malformed: no message segments found\n");
+		MALFORMED_MSG("no message segments found");
 		return (false);
 	}
 	}
@@ -629,7 +671,8 @@ contains_spaces(const char *str)
 }
 
 static bool
-msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
+msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
+    char *reason, unsigned reason_cap)
 {
 	bool is_dl;
 	int msg_type;
@@ -643,19 +686,19 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 	} else if (strncmp(start, "UM", 2) == 0) {
 		is_dl = false;
 	} else {
-		fprintf(stderr, "Malformed message: invalid segment letters\n");
+		MALFORMED_MSG("invalid segment letters");
 		return (false);
 	}
 	start += 2;
 	if (start >= end) {
-		fprintf(stderr, "Malformed message: segment too short\n");
+		MALFORMED_MSG("segment too short");
 		return (false);
 	}
 	msg_type = atoi(start);
 	if (msg_type < 0 ||
 	    (is_dl && msg_type > CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE) ||
 	    (!is_dl && msg_type > CPDLC_UM182_CONFIRM_ATIS_CODE)) {
-		fprintf(stderr, "Malformed message: invalid message type\n");
+		MALFORMED_MSG("invalid message type");
 		return (false);
 	}
 	while (start < end && isdigit(start[0]))
@@ -663,23 +706,20 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 	if (start >= end) {
 		seg->info = msg_infos_lookup(is_dl, msg_type, 0);
 		if (seg->info == NULL) {
-			fprintf(stderr, "Malformed message: invalid message "
-			    "type\n");
+			MALFORMED_MSG("invalid message type");
 			return (false);
 		}
 		goto end;
 	}
 	if (!isspace(start[0])) {
 		if (!is_dl || msg_type != 67) {
-			fprintf(stderr, "Malformed message: only DM67 can "
-			    "have a subtype suffix\n");
+			MALFORMED_MSG("only DM67 can have a subtype suffix");
 			return (false);
 		}
 		msg_subtype = start[0];
 		if (msg_subtype < CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time ||
 		    msg_subtype > CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt) {
-			fprintf(stderr, "Malformed message: invalid DM67 "
-			    "subtype (%c)\n", msg_subtype);
+			MALFORMED_MSG("invalid DM67 subtype (%c)", msg_subtype);
 			return (false);
 		}
 		start++;
@@ -687,14 +727,13 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 
 	info = msg_infos_lookup(is_dl, msg_type, msg_subtype);
 	if (info == NULL) {
-		fprintf(stderr, "Malformed message: invalid message type\n");
+		MALFORMED_MSG("invalid message type");
 		return (false);
 	}
 	seg->info = info;
 
 	if (!isspace(start[0])) {
-		fprintf(stderr, "Malformed message: expected space after "
-		    "message type\n");
+		MALFORMED_MSG("expected space after message type");
 		return (false);
 	}
 	SKIP_SPACE(start, end);
@@ -713,8 +752,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				if (sscanf(&start[2], "%d",
 				    &arg->alt.alt) != 1 ||
 				    arg->alt.alt <= 0) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid flight level\n");
+					MALFORMED_MSG("invalid flight level");
 					return (false);
 				}
 			} else {
@@ -722,8 +760,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				if (sscanf(start, "%d", &arg->alt.alt) != 1 ||
 				    arg->alt.alt < -1500 ||
 				    arg->alt.alt > 100000) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid altitude\n");
+					MALFORMED_MSG("invalid altitude");
 					return (false);
 				}
 			}
@@ -737,8 +774,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			if (arg->alt.fl &&
 			    ((!arg->alt.met && arg->alt.alt > 100000) ||
 			    (arg->alt.met && arg->alt.alt > 30000))) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid flight level\n");
+				MALFORMED_MSG("invalid flight level");
 				return (false);
 			}
 			break;
@@ -747,8 +783,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				arg->spd.mach = true;
 				arg->spd.spd = round(atof(&start[1]) * 1000);
 				if (arg->spd.spd < 100) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid Mach\n");
+					MALFORMED_MSG("invalid Mach");
 					return (false);
 				}
 			} else {
@@ -764,8 +799,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				arg_end = find_arg_end(start, end);
 
 				if (arg_end - start != 5) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid time\n");
+					MALFORMED_MSG("invalid time");
 					return (false);
 				}
 				hrs[0] = start[0];
@@ -777,8 +811,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				    arg->time.hrs < 0 || arg->time.hrs > 23 ||
 				    arg->time.mins < 0 || arg->time.mins > 59 ||
 				    start[4] != 'Z') {
-					fprintf(stderr, "Malformed message: "
-					    "invalid time\n");
+					MALFORMED_MSG("invalid time");
 					return (false);
 				}
 			}
@@ -789,13 +822,12 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(arg_end - start) + 1));
 			if (cpdlc_unescape_percent(textbuf, arg->pos,
 			    sizeof (arg->pos)) == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid URL escapes");
 				return (false);
 			}
 			if (contains_spaces(arg->pos)) {
-				fprintf(stderr, "Malformed message: position "
-				    "cannot contain whitespace\n");
+				MALFORMED_MSG("position cannot contain "
+				    "whitespace");
 				return (false);
 			}
 			break;
@@ -804,9 +836,9 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			case 'N':
 				if (is_hold(is_dl, msg_type) ||
 				    is_offset(is_dl, msg_type)) {
-					fprintf(stderr, "Malformed message: "
-					    "this message type cannot specify "
-					    "a direction of 'ANY'.\n");
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'ANY'");
 					return (false);
 				}
 				arg->dir = CPDLC_DIR_ANY;
@@ -818,24 +850,23 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				arg->dir = CPDLC_DIR_RIGHT;
 				break;
 			default:
-				fprintf(stderr, "Malformed message: invalid "
-				    "direction letter (%c)\n", start[0]);
+				MALFORMED_MSG("invalid direction letter (%c)",
+				    start[0]);
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_DISTANCE:
 			arg->dist = atof(start);
 			if (arg->dist < 0 || arg->dist > 20000) {
-				fprintf(stderr, "Malformed message: invalid "
-				    "distance (%.2f)\n", arg->dist);
+				MALFORMED_MSG("invalid distance (%.2f)",
+				    arg->dist);
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_VVI:
 			arg->vvi = atoi(start);
 			if (arg->vvi < 0 || arg->vvi > 10000) {
-				fprintf(stderr, "Malformed message: invalid "
-				    "VVI (%d)\n", arg->vvi);
+				MALFORMED_MSG("invalid VVI (%d)", arg->vvi);
 				return (false);
 			}
 			break;
@@ -848,8 +879,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    arg_end - start == 4) {
 				arg->tofrom = false;
 			} else {
-				fprintf(stderr, "Malformed message: invalid "
-				    "TO/FROM flag\n");
+				MALFORMED_MSG("invalid TO/FROM flag");
 				return (false);
 			}
 			break;
@@ -858,8 +888,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(end - start) + 1));
 			l = cpdlc_unescape_percent(textbuf, NULL, 0);
 			if (l == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
 			if (arg->route != NULL)
@@ -874,21 +903,19 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(arg_end - start) + 1));
 			if (cpdlc_unescape_percent(textbuf, arg->proc,
 			    sizeof (arg->proc)) == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
 			if (contains_spaces(arg->pos)) {
-				fprintf(stderr, "Malformed message: procedure "
-				    "name cannot contain whitespace\n");
+				MALFORMED_MSG("procedure name cannot contain "
+				    "whitespace");
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_SQUAWK:
 			if (sscanf(start, "%d", &arg->squawk) != 1 ||
 			    !is_valid_squawk(arg->squawk)) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid squawk code\n");
+				MALFORMED_MSG("invalid squawk code");
 				return (false);
 			}
 			break;
@@ -899,21 +926,20 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(arg_end - start) + 1));
 			if (cpdlc_unescape_percent(textbuf, arg->icaoname.icao,
 			    sizeof (arg->icaoname.icao)) == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
 			if (contains_spaces(arg->icaoname.icao)) {
-				fprintf(stderr, "Malformed message: icaoname "
-				    "cannot contain whitespace\n");
+				MALFORMED_MSG("icaoname cannot contain "
+				    "whitespace");
 				return (false);
 			}
 			/* Followed by whitespace */
 			SKIP_NONSPACE(start, end);
 			SKIP_SPACE(start, end);
 			if (start == end) {
-				fprintf(stderr, "Malformed message: icaoname "
-				    "must be followed by descriptive name\n");
+				MALFORMED_MSG("icaoname must be followed by "
+				    "descriptive name");
 				return (false);
 			}
 			/* And finally a percent-escaped descriptive name */
@@ -922,16 +948,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(arg_end - start) + 1));
 			if (cpdlc_unescape_percent(textbuf, arg->icaoname.name,
 			    sizeof (arg->icaoname.name)) == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid percent escapes");
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_FREQUENCY:
 			arg->freq = atof(start);
 			if (arg->freq <= 0) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid frequency\n");
+				MALFORMED_MSG("invalid frequency");
 				return (false);
 			}
 			break;
@@ -939,24 +963,21 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			arg_end = find_arg_end(start, end);
 			arg->deg.deg = atoi(start);
 			if (arg->deg.deg >= 360) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid heading/track\n");
+				MALFORMED_MSG("invalid heading/track");
 				return (false);
 			}
 			arg->deg.tru = (arg_end[-1] == 'T');
 			break;
 		case CPDLC_ARG_BARO:
 			if (start + 4 >= end) {
-				fprintf(stderr, "Malformed message: baro "
-				    "too short\n");
+				MALFORMED_MSG("baro too short");
 				return (false);
 			}
 			switch(start[0]) {
 			case 'A':
 				arg->baro.val = atof(&start[1]);
 				if (arg->baro.val < 28 || arg->baro.val > 32) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid baro value\n");
+					MALFORMED_MSG("invalid baro value");
 					return (false);
 				}
 				break;
@@ -964,14 +985,13 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 				arg->baro.val = atoi(&start[1]);
 				if (arg->baro.val < 900 ||
 				    arg->baro.val > 1100) {
-					fprintf(stderr, "Malformed message: "
-					    "invalid baro value\n");
+					MALFORMED_MSG("invalid baro value");
 					return (false);
 				}
 				break;
 			default:
-				fprintf(stderr, "Malformed message: "
-				    "invalid baro type (%c)\n", start[0]);
+				MALFORMED_MSG("invalid baro type (%c)",
+				    start[0]);
 				return (false);
 			}
 			break;
@@ -980,8 +1000,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 			    (uintptr_t)(end - start) + 1));
 			l = cpdlc_unescape_percent(textbuf, NULL, 0);
 			if (l == -1) {
-				fprintf(stderr, "Malformed message: "
-				    "invalid percent escapes\n");
+				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
 			free(arg->freetext);
@@ -997,13 +1016,11 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end)
 
 end:
 	if (seg->info->num_args != num_args) {
-		fprintf(stderr, "Malformed message: invalid number of "
-		    "arguments\n");
+		MALFORMED_MSG("invalid number of arguments");
 		return (false);
 	}
 	if (start != end) {
-		fprintf(stderr, "Malformed message: too much data in "
-		    "message\n");
+		MALFORMED_MSG("too much data in message");
 		return (false);
 	}
 
@@ -1011,7 +1028,8 @@ end:
 }
 
 bool
-cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
+cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
+    char *reason, unsigned reason_cap)
 {
 	const char *start, *term;
 	cpdlc_msg_t *msg;
@@ -1056,21 +1074,18 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			} else if (strncmp(&in_buf[4], "PONG/", 5) == 0) {
 				msg->pkt_type = CPDLC_PKT_PONG;
 			} else {
-				fprintf(stderr, "Message malformed: invalid "
-				    "PKT type\n");
+				MALFORMED_MSG("invalid PKT type");
 				goto errout;
 			}
 			pkt_type_seen = true;
 		} else if (strncmp(in_buf, "MIN=", 4) == 0) {
 			if (sscanf(&in_buf[4], "%u", &msg->min) != 1) {
-				fprintf(stderr, "Message malformed: invalid "
-				    "MIN value\n");
+				MALFORMED_MSG("invalid MIN value");
 				goto errout;
 			}
 		} else if (strncmp(in_buf, "MRN=", 4) == 0) {
 			if (sscanf(&in_buf[4], "%u", &msg->mrn) != 1) {
-				fprintf(stderr, "Message malformed: invalid "
-				    "MRN value\n");
+				MALFORMED_MSG("invalid MRN value");
 				goto errout;
 			}
 		} else if (strncmp(in_buf, "LOGON=", 6) == 0) {
@@ -1082,6 +1097,8 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			msg->logon_data = safe_malloc(l + 1);
 			cpdlc_unescape_percent(textbuf, msg->logon_data, l + 1);
 			msg->is_logon = true;
+		} else if (strncmp(in_buf, "LOGOFF", 6) == 0) {
+			msg->is_logoff = true;
 		} else if (strncmp(in_buf, "TO=", 3) == 0) {
 			char textbuf[32];
 
@@ -1100,30 +1117,33 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed)
 			cpdlc_msg_seg_t *seg;
 
 			if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
-				fprintf(stderr, "Message malformed: too many "
-				    "message segments\n");
+				MALFORMED_MSG("too many message segments");
 				goto errout;
 			}
 			seg = &msg->segs[msg->num_segs];
-			if (!msg_decode_seg(seg, &in_buf[4], sep))
+			if (!msg_decode_seg(seg, &in_buf[4], sep, reason,
+			    reason_cap))
 				goto errout;
 			if (msg->num_segs > 0 && msg->segs[0].info->is_dl !=
 			    seg->info->is_dl) {
-				fprintf(stderr, "Message malformed: can't "
-				    "mix DM and UM message segments\n");
+				MALFORMED_MSG("can't mix DM and UM message "
+				    "segments");
 				goto errout;
 			}
 			msg->num_segs++;
 		} else {
-			fprintf(stderr, "Message malformed: unknown message "
-			    "header\n");
+			MALFORMED_MSG("unknown message header");
 			goto errout;
 		}
 
 		in_buf = sep + 1;
 	}
 
-	if (!pkt_type_seen || !validate_message(msg))
+	if (!pkt_type_seen) {
+		MALFORMED_MSG("missing PKT header");
+		goto errout;
+	}
+	if (!validate_message(msg, reason, reason_cap))
 		goto errout;
 
 	*msg_p = msg;

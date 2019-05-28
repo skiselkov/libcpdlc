@@ -429,6 +429,7 @@ typedef struct {
 	char		from[CPDLC_CALLSIGN_LEN];
 	char		to[CPDLC_CALLSIGN_LEN];
 	bool		is_logon;
+	bool		is_logoff;
 	char		*logon_data;
 	unsigned	num_segs;
 	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
@@ -445,7 +446,7 @@ CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API bool cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg,
-    int *consumed);
+    int *consumed, char *reason, unsigned reason_cap);
 
 CPDLC_API void cpdlc_msg_set_to(cpdlc_msg_t *msg, const char *to);
 CPDLC_API const char *cpdlc_msg_get_to(const cpdlc_msg_t *msg);

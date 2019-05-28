@@ -71,6 +71,7 @@
 #define	DEFAULT_PORT_TCP	17622
 #define	DEFAULT_PORT_LWS	17623
 
+#define	CONNECTION_TIMEOUT	30	/* seconds */
 #define	KEEPALIVE_TIMEOUT	300	/* seconds */
 
 #ifdef	CPDLC_CLIENT_LWS
@@ -147,6 +148,7 @@ struct cpdlc_client_s {
 	} pollinfo;
 #else	/* !CPDLC_CLIENT_LWS */
 	int				sock;
+	time_t				conn_begin_time;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;
 	gnutls_session_t		session;
@@ -746,6 +748,7 @@ init_conn(cpdlc_client_t *cl)
 			return;
 		}
 		new_status = CPDLC_LOGON_CONNECTING_LINK;
+		cl->conn_begin_time = time(NULL);
 	} else {
 		new_status = CPDLC_LOGON_HANDSHAKING_LINK;
 	}
@@ -773,7 +776,11 @@ complete_conn(cpdlc_client_t *cl)
 
 	switch (res) {
 	case 0:
-		/* Still in progress */
+		/* Still in progress, check timeout */
+		if (time(NULL) - cl->conn_begin_time > CONNECTION_TIMEOUT) {
+			set_logon_failure(cl, "Connection timeout");
+			goto errout;
+		}
 		return;
 	case 1:
 		/* Connection attempt completed. Let's see about the result. */
@@ -854,7 +861,13 @@ tls_handshake(cpdlc_client_t *cl)
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
 	}
 
+	/*
+	 * gnutls_handshake can block for network traffic, so drop the
+	 * client lock here temporarily.
+	 */
+	mutex_exit(&cl->lock);
 	ret = gnutls_handshake(cl->session);
+	mutex_enter(&cl->lock);
 	if (ret < GNUTLS_E_SUCCESS) {
 		if (ret != GNUTLS_E_AGAIN) {
 			set_logon_failure(cl, "TLS handshake error: %s",
@@ -1044,12 +1057,15 @@ process_input(cpdlc_client_t *cl)
 	while (consumed_total < cl->inbuf_sz) {
 		int consumed;
 		cpdlc_msg_t *msg;
+		char error[sizeof (cl->logon_failure)];
 
 		/* Try to decode a message from our accumulated input. */
 		ASSERT3S(consumed_total, <=, cl->inbuf_sz);
 		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], &msg,
-		    &consumed)) {
+		    &consumed, error, sizeof (error))) {
 			cl->logon_status = CPDLC_LOGON_NONE;
+			cpdlc_strlcpy(cl->logon_failure, error,
+			    sizeof (cl->logon_failure));
 			break;
 		}
 		/* No more complete messages pending? */

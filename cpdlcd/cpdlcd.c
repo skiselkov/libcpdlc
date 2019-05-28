@@ -126,6 +126,11 @@ typedef enum {
 	LOGON_COMPLETE
 } logon_status_t;
 
+typedef struct {
+	char	ident[CALLSIGN_LEN];
+	list_t	node;
+} ident_list_t;
+
 /*
  * Master connection tracking structure. This structure holds all the state
  * associated with a client connection. It is held in the `conns_tcp' and
@@ -154,7 +159,7 @@ typedef struct {
 	/* protected by `lock' */
 	logon_status_t		logon_status;
 	/* Actual identity after a successful LOGON */
-	char			from[CALLSIGN_LEN];
+	list_t			from_list;
 	char			to[CALLSIGN_LEN];
 	/* Identity requested by a LOGON message */
 	char			logon_from[CALLSIGN_LEN];
@@ -890,12 +895,35 @@ handle_accepts(listen_sock_t *ls)
 		gnutls_transport_set_int(conn->session, conn->fd);
 
 		mutex_init(&conn->lock);
+		list_create(&conn->from_list, sizeof (ident_list_t),
+		    offsetof(ident_list_t, node));
 
 		mutex_enter(&conns_tcp_lock);
 		list_insert_tail(&conns_tcp, conn);
 		conns_tcp_dirty = true;
 		mutex_exit(&conns_tcp_lock);
 	}
+}
+
+static void
+conns_by_from_remove(conn_t *conn, const char ident[CALLSIGN_LEN])
+{
+	const list_t *l;
+
+	mutex_enter(&conns_by_from_lock);
+
+	l = htbl_lookup_multi(&conns_by_from, ident);
+	ASSERT(l != NULL);
+	for (void *mv = list_head(l); mv != NULL; mv = list_next(l, mv)) {
+		conn_t *c = HTBL_VALUE_MULTI(mv);
+
+		if (conn == c) {
+			htbl_remove_multi(&conns_by_from, ident, mv);
+			break;
+		}
+	}
+
+	mutex_exit(&conns_by_from_lock);
 }
 
 /*
@@ -906,7 +934,7 @@ handle_accepts(listen_sock_t *ls)
 static void
 conn_reset_logon(conn_t *conn)
 {
-	const list_t *l;
+	ident_list_t *idl;
 
 	ASSERT(conn != NULL);
 
@@ -925,20 +953,11 @@ conn_reset_logon(conn_t *conn)
 	 * If the logon has completed, we MUST have had this connection
 	 * inserted in the conns_by_from hashtable.
 	 */
-	mutex_enter(&conns_by_from_lock);
-	l = htbl_lookup_multi(&conns_by_from, conn->from);
-	ASSERT(l != NULL);
-	for (void *mv = list_head(l); mv != NULL; mv = list_next(l, mv)) {
-		conn_t *c = HTBL_VALUE_MULTI(mv);
-
-		if (conn == c) {
-			htbl_remove_multi(&conns_by_from, conn->from, mv);
-			break;
-		}
+	while ((idl = list_remove_head(&conn->from_list)) != NULL) {
+		conns_by_from_remove(conn, idl->ident);
+		free(idl);
 	}
-	mutex_exit(&conns_by_from_lock);
 	conn->is_atc = false;
-	memset(conn->from, 0, sizeof (conn->from));
 	memset(conn->to, 0, sizeof (conn->to));
 	memset(conn->logon_from, 0, sizeof (conn->logon_from));
 	memset(conn->logon_to, 0, sizeof (conn->logon_to));
@@ -972,6 +991,7 @@ close_conn(conn_t *conn)
 	}
 
 	mutex_destroy(&conn->lock);
+	list_destroy(&conn->from_list);
 	free(conn->inbuf);
 	free(conn->outbuf);
 
@@ -1040,19 +1060,30 @@ complete_logon(conn_t *conn)
 		cpdlc_msg_seg_set_arg(msg, 0, 0, "LOGON REQUIRES TO= HEADER",
 		    NULL);
 	} else if (conn->logon_success) {
+		ident_list_t *idl = safe_calloc(1, sizeof (*idl));
+
 		conn->logon_status = LOGON_COMPLETE;
+
 		lacf_strlcpy(conn->to, conn->logon_to, sizeof (conn->to));
-		lacf_strlcpy(conn->from, conn->logon_from, sizeof (conn->from));
+		lacf_strlcpy(idl->ident, conn->logon_from, sizeof (idl->ident));
+		list_insert_tail(&conn->from_list, idl);
+
 		mutex_enter(&conns_by_from_lock);
-		htbl_set(&conns_by_from, conn->from, conn);
+		htbl_set(&conns_by_from, idl->ident, conn);
 		mutex_exit(&conns_by_from_lock);
+
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
 		cpdlc_msg_set_from(msg, "ATN");
 	} else {
 		conn->logon_status = LOGON_NONE;
+
 		cpdlc_msg_set_logon_data(msg, "FAILURE");
 		cpdlc_msg_set_from(msg, "ATN");
 	}
+
+	memset(conn->logon_to, 0, sizeof (conn->logon_to));
+	memset(conn->logon_from, 0, sizeof (conn->logon_from));
+
 	conn_send_msg(conn, msg);
 	cpdlc_msg_free(msg);
 
@@ -1081,6 +1112,20 @@ complete_logons(void)
 	mutex_exit(&conns_lws_lock);
 }
 
+static void
+conn_remove_ident(conn_t *conn, const char *ident)
+{
+	for (ident_list_t *idl = list_head(&conn->from_list);
+	    idl != NULL; idl = list_next(&conn->from_list, idl)) {
+		if (strcmp(idl->ident, ident) == 0) {
+			conns_by_from_remove(conn, idl->ident);
+			list_remove(&conn->from_list, idl);
+			free(idl);
+			break;
+		}
+	}
+}
+
 /*
  * Processes an incoming LOGON message. When all conditions to continue
  * with the logon are met, this function fires off a background
@@ -1106,8 +1151,26 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 		send_error_msg(conn, msg, "LOGON REQUIRES FROM= HEADER");
 		return;
 	}
-	/* Clear a previous logon */
-	conn_reset_logon(conn);
+	/* Clear any previous logon on non-ATC connections */
+	if (!conn->is_atc) {
+		conn_reset_logon(conn);
+	} else {
+		/*
+		 * For ATC connections, just remove the identity we're trying
+		 * to remove.
+		 */
+		conn_remove_ident(conn, cpdlc_msg_get_from(msg));
+	}
+	if (list_count(&conn->from_list) == 0) {
+		conn->logoff_time = time(NULL);
+		conn->logon_status = LOGON_NONE;
+		conn->logon_success = false;
+		conn->is_atc = false;
+	}
+	if (msg->is_logoff) {
+		mutex_exit(&conn->lock);
+		return;
+	}
 	if (cpdlc_msg_get_to(msg) != NULL) {
 		lacf_strlcpy(conn->logon_to, cpdlc_msg_get_to(msg),
 		    sizeof (conn->logon_to));
@@ -1362,7 +1425,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	}
 	mutex_exit(&conn->lock);
 
-	if (msg->is_logon) {
+	if (msg->is_logon || msg->is_logoff) {
 		/* Logon messages do not get forwarded. */
 		process_logon_msg(conn, msg);
 		return;
@@ -1389,6 +1452,13 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		lacf_strlcpy(to, msg->to, sizeof (to));
 	} else if (conn->to[0] != '\0') {
 		lacf_strlcpy(to, conn->to, sizeof (to));
+		/*
+		 * Message has no TO= target set, but the connection has
+		 * one, so copy that into the message. This makes sure
+		 * that ATC stations that do multi-logon can discriminate
+		 * their own endpoint.
+		 */
+		cpdlc_msg_set_to(msg, conn->to);
 	} else {
 		/*
 		 * ATC stations MUST provide a TO= header, as they
@@ -1415,10 +1485,14 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	}
 	/*
 	 * Stamp the message with its sender connection. No matter what
-	 * FROM= header the client provided, this overrides it.
+	 * FROM= header the client provided, this overrides it. On ATC
+	 * connections, we allow other IDs.
 	 */
-	ASSERT(conn->from[0] != '\0');
-	cpdlc_msg_set_from(msg, conn->from);
+	ASSERT(list_count(&conn->from_list) != 0);
+	if (cpdlc_msg_get_from(msg)[0] == '\0' || !conn->is_atc) {
+		ident_list_t *idl = list_head(&conn->from_list);
+		cpdlc_msg_set_from(msg, idl->ident);
+	}
 	/*
 	 * If there is at least one connection matching the identity of
 	 * the intended recipient, forward the message without storing it.
@@ -1465,12 +1539,13 @@ conn_process_input(conn_t *conn)
 	while (consumed_total < (int)conn->inbuf_sz) {
 		int consumed;
 		cpdlc_msg_t *msg;
+		char error[128] = { 0 };
 
 		if (!cpdlc_msg_decode(
 		    (const char *)&conn->inbuf[consumed_total], &msg,
-		    &consumed)) {
-			logMsg("Error decoding message from client %s",
-			    conn->addr_str);
+		    &consumed, error, sizeof (error))) {
+			logMsg("Error decoding message from client %s: %s",
+			    conn->addr_str, error);
 			return (false);
 		}
 		/* No more complete messages pending? */
@@ -1566,7 +1641,7 @@ conn_read_input(conn_t *conn)
 
 	for (;;) {
 		uint8_t buf[READ_BUF_SZ];
-		size_t max_inbuf_sz = (conn->from[0] != '\0' ?
+		size_t max_inbuf_sz = (list_count(&conn->from_list) != 0 ?
 		    MAX_BUF_SZ : MAX_BUF_SZ_NO_LOGON);
 		int bytes;
 
@@ -2049,6 +2124,12 @@ tls_fini(void)
 	gnutls_global_deinit();
 }
 
+static void
+log_dbg_string(const char *str)
+{
+	fputs(str, stderr);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -2056,7 +2137,7 @@ main(int argc, char *argv[])
 	const char *conf_path = NULL;
 
 	/* Initialize libacfutils' logMsg and crc64 functions */
-	log_init((logfunc_t)puts, "cpdlcd");
+	log_init(log_dbg_string, "cpdlcd");
 	crc64_init();
 	/* Initialize cURL's global data structures */
 	curl_global_init(CURL_GLOBAL_ALL);
@@ -2180,6 +2261,8 @@ conn_established_lws(conn_t *conn, struct lws *wsi)
 	sockaddr2str(&conn->sockaddr, conn->addr_str);
 
 	mutex_init(&conn->lock);
+	list_create(&conn->from_list, sizeof (ident_list_t),
+	    offsetof(ident_list_t, node));
 
 	mutex_enter(&conns_lws_lock);
 	list_insert_tail(&conns_lws, conn);
