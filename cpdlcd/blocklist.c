@@ -193,8 +193,10 @@ blocklist_refresh(void)
 	if (filename[0] == '\0')
 		return (false);
 	if (stat(filename, &st) != 0) {
-		logMsg("Error refreshing blocklist %s: stat failed: %s",
-		    filename, strerror(errno));
+		if (errno != ENOENT) {
+			logMsg("Error refreshing blocklist %s: stat failed: %s",
+			    filename, strerror(errno));
+		}
 		return (false);
 	}
 	if (st.st_mtime == update_time) {
