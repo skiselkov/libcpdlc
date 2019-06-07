@@ -51,7 +51,6 @@ typedef struct {
 static time_t	update_time = 0;
 static char	filename[PATH_MAX] = { 0 };
 static mutex_t	lock;
-static bool	table_inited = false;
 static htbl_t	table;
 static bool	blocklist_entry = true;
 
@@ -59,16 +58,14 @@ void
 blocklist_init(void)
 {
 	mutex_init(&lock);
+	htbl_create(&table, 2, sizeof (block_addr_t), 0);
 }
 
 void
 blocklist_fini(void)
 {
-	if (table_inited) {
-		htbl_empty(&table, NULL, NULL);
-		htbl_destroy(&table);
-		table_inited = false;
-	}
+	htbl_empty(&table, NULL, NULL);
+	htbl_destroy(&table);
 	mutex_destroy(&lock);
 }
 
@@ -104,13 +101,9 @@ blocklist_refresh_impl(void)
 	mutex_enter(&lock);
 
 	/* Empty out the old blocklist data */
-	if (table_inited) {
-		htbl_empty(&table, NULL, NULL);
-		htbl_destroy(&table);
-		table_inited = false;
-	}
+	htbl_empty(&table, NULL, NULL);
+	htbl_destroy(&table);
 	htbl_create(&table, num_lines, sizeof (block_addr_t), 0);
-	table_inited = true;
 
 	while (!feof(fp)) {
 		char buf[128];
