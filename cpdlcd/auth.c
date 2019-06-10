@@ -195,9 +195,9 @@ parse_auth_response(const char *buf, bool *auth_result, bool *auth_atc)
 
 	for (size_t i = 0; i < num_comps; i++) {
 		strtolower(comps[i]);
-		if (strncmp(comps[i], "auth=", 5) == 0) {
+		if (strncasecmp(comps[i], "AUTH=", 5) == 0) {
 			*auth_result = !!atoi(&comps[i][5]);
-		} else if (strncmp(comps[i], "atc=", 4) == 0) {
+		} else if (strncasecmp(comps[i], "ATC=", 4) == 0) {
 			*auth_atc = !!atoi(&comps[i][4]);
 		}
 	}

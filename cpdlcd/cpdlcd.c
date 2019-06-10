@@ -481,12 +481,12 @@ print_usage(const char *progname, FILE *fp)
 }
 
 static bool
-add_listen_sock_lws(const char *hostname, int port, const char *name_port)
+add_listen_sock_lws(const char *iface, int port, const char *name_port)
 {
 	struct lws_context_creation_info info;
 	listen_lws_t *lws = safe_calloc(1, sizeof (*lws));
 
-	ASSERT(hostname != NULL);
+	ASSERT(iface != NULL);
 	ASSERT3S(port, >, 0);
 	ASSERT3S(port, <, UINT16_MAX);
 
@@ -495,6 +495,17 @@ add_listen_sock_lws(const char *hostname, int port, const char *name_port)
 	info.port = port;
 	info.protocols = proto_list_lws;
 	info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+	if (strcmp(iface, "loopback") == 0) {
+#if	APL || SUN
+		info.iface = "lo0";
+#elif	LIN
+		info.iface = "lo";
+#else
+#error	"Unsupported platform"
+#endif
+	} else if (strcmp(iface, "*") != 0) {
+		info.iface = iface;
+	}
 
 	info.gid = -1;
 	info.uid = -1;
@@ -535,7 +546,17 @@ add_listen_sock_tcp(const char *hostname, int port, const char *name_port)
 
 	snprintf(portbuf, sizeof (portbuf), "%d", port);
 
-	error = getaddrinfo(hostname, portbuf, &hints, &ai_full);
+	if (strcmp(hostname, "*") == 0) {
+		/* Allow listening on the wildcard hostname */
+		hints.ai_flags = AI_PASSIVE;
+		error = getaddrinfo(NULL, portbuf, &hints, &ai_full);
+	} else if (strcmp(hostname, "localhost") == 0) {
+		/* Grab the appropriate loopback address */
+		error = getaddrinfo(NULL, portbuf, &hints, &ai_full);
+	} else {
+		/* Do the hostname lookup properly */
+		error = getaddrinfo(hostname, portbuf, &hints, &ai_full);
+	}
 	if (error != 0) {
 		logMsg("Invalid listen directive \"%s\": %s", name_port,
 		    gai_strerror(error));
@@ -641,17 +662,17 @@ add_listen_sock(const char *name_port, bool lws)
 static gnutls_pkcs_encrypt_flags_t
 str2encflags(const char *value)
 {
-	if (strcmp(value, "3DES") == 0)
+	if (strcasecmp(value, "3DES") == 0)
 		return (GNUTLS_PKCS_PBES2_3DES);
-	if (strcmp(value, "RC4") == 0)
+	if (strcasecmp(value, "RC4") == 0)
 		return (GNUTLS_PKCS_PKCS12_ARCFOUR);
-	if (strcmp(value, "AES128") == 0)
+	if (strcasecmp(value, "AES128") == 0)
 		return (GNUTLS_PKCS_PBES2_AES_128);
-	if (strcmp(value, "AES192") == 0)
+	if (strcasecmp(value, "AES192") == 0)
 		return (GNUTLS_PKCS_PBES2_AES_192);
-	if (strcmp(value, "AES256") == 0)
+	if (strcasecmp(value, "AES256") == 0)
 		return (GNUTLS_PKCS_PBES2_AES_256);
-	if (strcmp(value, "PCKS12/3DES") == 0)
+	if (strcasecmp(value, "PCKS12/3DES") == 0)
 		return (GNUTLS_PKCS_PKCS12_3DES);
 	return (GNUTLS_PKCS_PLAIN);
 }
@@ -756,17 +777,18 @@ parse_config(const char *conf_path)
 	 */
 	cookie = NULL;
 	while (conf_walk(conf, &key, &value, &cookie)) {
-		if (strncmp(key, "listen/", 7) == 0) {
+		if (strncmp(key, "listen/tcp/", 11) == 0) {
 			if (!add_listen_sock(value, false))
 				goto errout;
-		} else if (strncmp(key, "listen_lws/", 11) == 0) {
+		} else if (strncmp(key, "listen/lws/", 11) == 0) {
 			if (!add_listen_sock(value, true))
 				goto errout;
 		}
 	}
 
 	if (list_count(&listen_socks) == 0 &&
-	    !add_listen_sock("localhost", false)) {
+	    (!add_listen_sock("localhost", false) ||
+	    !add_listen_sock("loopback", true))) {
 		goto errout;
 	}
 	auth_init(auth_url, auth_cainfo, auth_username, auth_password);

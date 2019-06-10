@@ -42,7 +42,7 @@ typedef struct {
 
 static bool		inited = false;
 static avl_tree_t	tree;
-static uint64_t		msgquota_max = 128 << 10;	/* 128 KiB */
+static uint64_t		msgquota_max = 16 << 10;	/* 16 KiB */
 
 static int
 msgquota_compar(const void *a, const void *b)
@@ -64,7 +64,8 @@ msgquota_init(uint64_t max_bytes)
 
 	avl_create(&tree, msgquota_compar, sizeof (msgquota_t),
 	    offsetof(msgquota_t, node));
-	msgquota_max = max_bytes;
+	if (max_bytes != 0)
+		msgquota_max = max_bytes;
 }
 
 void
