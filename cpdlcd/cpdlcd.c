@@ -2101,12 +2101,7 @@ tls_init(void)
 	gnutls_certificate_set_known_dh_params(x509_creds,
 	    GNUTLS_SEC_PARAM_HIGH);
 #endif	/* GNUTLS_VERSION_NUMBER */
-#if	GNUTLS_VERSION_NUMBER >= 0x030603
-	TLS_CHK(gnutls_priority_init2(&prio_cache, NULL, NULL,
-	    GNUTLS_PRIORITY_INIT_DEF_APPEND));
-#else	/* GNUTLS_VERSION_NUMBER */
 	TLS_CHK(gnutls_priority_init(&prio_cache, NULL, NULL));
-#endif	/* GNUTLS_VERSION_NUMBER */
 
 	return (true);
 #undef	TLS_CHK
