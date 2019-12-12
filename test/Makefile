@@ -44,9 +44,9 @@ clean :
 	rm -f msgtest $(MSGTEST_OBJS) client_test $(CLIENT_TEST_OBJS)
 
 msgtest : $(MSGTEST_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 client_test : $(CLIENT_TEST_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(CLIENT_TEST_LIBS) $(LIBS)
+	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(CLIENT_TEST_LIBS) $(LIBS)
 
 include ../Makefile.rules

@@ -103,8 +103,13 @@
  * `conns_tcp_lock', whereas for libwebsocket connections, we want to
  * be holding `conns_lws_lock'.
  */
-#define	CONNS_MUTEX_HELD(conn)	((conn)->is_lws ? \
-	MUTEX_HELD(&conns_lws_lock) : MUTEX_HELD(&conns_tcp_lock))
+#define	ASSERT_CONNS_MUTEX_HELD(conn) \
+	do { \
+		if ((conn)->is_lws) \
+			ASSERT_MUTEX_HELD(&conns_lws_lock); \
+		else \
+			ASSERT_MUTEX_HELD(&conns_tcp_lock); \
+	} while (0)
 
 /*
  * Logon status enum:
@@ -294,6 +299,7 @@ static bool		do_shutdown = false;
 static int		default_port = 17622;
 static int		default_port_lws = 17623;
 static bool		req_client_cert = false;
+static FILE		*msg_log_file = NULL;
 
 static void lws_worker(void *userinfo);
 static int http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
@@ -724,6 +730,11 @@ parse_config(const char *conf_path)
 	const char *auth_url = NULL, *auth_cainfo = NULL;
 	const char *auth_username = NULL, *auth_password = NULL;
 
+	if (msg_log_file != NULL) {
+		fclose(msg_log_file);
+		msg_log_file = NULL;
+	}
+
 	if (conf == NULL) {
 		if (errline == -1)
 			logMsg("Can't open %s: %s", conf_path, strerror(errno));
@@ -770,6 +781,14 @@ parse_config(const char *conf_path)
 		msgquota_max = parse_bytes(value);
 	if (conf_get_str(conf, "msgqueue/max", &value))
 		queued_msg_max_bytes = parse_bytes(value);
+	if (conf_get_str(conf, "msglog", &value)) {
+		msg_log_file = fopen(value, "a");
+		if (msg_log_file == NULL) {
+			logMsg("Can't open msglog %s: %s", value,
+			    strerror(errno));
+			goto errout;
+		}
+	}
 
 	/*
 	 * Must go after all TLS parameters have been parsed, because
@@ -997,7 +1016,7 @@ static void
 close_conn(conn_t *conn)
 {
 	ASSERT(conn != NULL);
-	ASSERT(CONNS_MUTEX_HELD(conn));
+	ASSERT_CONNS_MUTEX_HELD(conn);
 
 	/*
 	 * Must be done before unlinking the connection from any list,
@@ -1065,7 +1084,7 @@ complete_logon(conn_t *conn)
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn);
-	ASSERT(CONNS_MUTEX_HELD(conn));
+	ASSERT_CONNS_MUTEX_HELD(conn);
 
 	mutex_enter(&conn->lock);
 
@@ -1158,7 +1177,7 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 {
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
-	ASSERT(CONNS_MUTEX_HELD(conn));
+	ASSERT_CONNS_MUTEX_HELD(conn);
 
 	mutex_enter(&conn->lock);
 
@@ -1214,6 +1233,67 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	mutex_exit(&conn->lock);
 }
 
+static void
+conn_log_buf(conn_t *conn, const char *buf, bool inout)
+{
+	time_t now;
+	struct tm tm;
+	char datebuf[64];
+
+	ASSERT(conn != NULL);
+	ASSERT(buf != NULL);
+
+	if (msg_log_file == NULL)
+		return;
+
+	now = time(NULL);
+	gmtime_r(&now, &tm);
+	strftime(datebuf, sizeof (datebuf), "%Y%m%d_%H%M%SZ", &tm);
+	fprintf(msg_log_file, "%s:%s:%s:%s", datebuf, conn->addr_str,
+	    inout ? "IN" : "OUT", buf);
+	fflush(msg_log_file);
+}
+
+static void
+conn_log_msg(conn_t *conn, const cpdlc_msg_t *msg, bool inout)
+{
+	char *buf;
+	int l;
+	cpdlc_msg_t *copymsg = NULL;
+
+	ASSERT(conn != NULL);
+	ASSERT(msg != NULL);
+
+	if (msg_log_file == NULL)
+		return;
+
+	/* Don't log anything prior to LOGON (except for the actual logon) */
+	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon)
+		return;
+	/* Don't log ping & pong packets, they're not interesting */
+	if (msg->pkt_type == CPDLC_PKT_PING || msg->pkt_type == CPDLC_PKT_PONG)
+		return;
+
+	/*
+	 * LOGON messages are special, we don't to log the logon data, as
+	 * that could dump user passwords into the log.
+	 */
+	if (msg->is_logon) {
+		copymsg = cpdlc_msg_copy(msg);
+		cpdlc_msg_set_logon_data(copymsg, "hidden");
+		msg = copymsg;
+	}
+
+	l = cpdlc_msg_encode(msg, NULL, 0);
+	buf = safe_malloc(l + 1);
+	cpdlc_msg_encode(msg, buf, l + 1);
+	conn_log_buf(conn, buf, inout);
+	free(buf);
+
+	if (copymsg != NULL)
+		cpdlc_msg_free(copymsg);
+}
+
 /*
  * Prepares a new buffer for transmission to a particular connection.
  * The buffer is queued on the connections `outbuf'. This is later
@@ -1258,6 +1338,7 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	l = cpdlc_msg_encode(msg, NULL, 0);
 	buf = safe_malloc(l + 1);
 	cpdlc_msg_encode(msg, buf, l + 1);
+	conn_log_buf(conn, buf, false);
 	conn_send_buf(conn, buf, l);
 	free(buf);
 
@@ -1433,7 +1514,9 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
-	ASSERT(CONNS_MUTEX_HELD(conn));
+	ASSERT_CONNS_MUTEX_HELD(conn);
+
+	conn_log_msg(conn, msg, true);
 
 	/*
 	 * If the user isn't logged on, don't allow anything other than
@@ -1555,8 +1638,8 @@ conn_process_input(conn_t *conn)
 
 	ASSERT(conn != NULL);
 	ASSERT(conn->inbuf_sz != 0);
-	ASSERT(CONNS_MUTEX_HELD(conn));
-	ASSERT(MUTEX_HELD(&conn->lock));
+	ASSERT_CONNS_MUTEX_HELD(conn);
+	ASSERT_MUTEX_HELD(&conn->lock);
 
 	while (consumed_total < (int)conn->inbuf_sz) {
 		int consumed;
@@ -1659,7 +1742,7 @@ static bool
 conn_read_input(conn_t *conn)
 {
 	ASSERT(conn != NULL);
-	ASSERT(MUTEX_HELD(&conns_tcp_lock));
+	ASSERT_MUTEX_HELD(&conns_tcp_lock);
 
 	for (;;) {
 		uint8_t buf[READ_BUF_SZ];
@@ -1752,7 +1835,7 @@ conn_write_output(conn_t *conn)
 
 	ASSERT(conn != NULL);
 	ASSERT(conn->outbuf_sz != 0);
-	ASSERT(MUTEX_HELD(&conns_tcp_lock));
+	ASSERT_MUTEX_HELD(&conns_tcp_lock);
 
 	mutex_enter(&conn->lock);
 	/*
@@ -2152,6 +2235,7 @@ main(int argc, char *argv[])
 {
 	int opt;
 	const char *conf_path = NULL;
+	bool encrypt_silent = false;
 
 	/* Initialize libacfutils' logMsg and crc64 functions */
 	log_init(log_dbg_string, "cpdlcd");
@@ -2163,7 +2247,7 @@ main(int argc, char *argv[])
 	lacf_strlcpy(tls_keyfile, "cpdlcd_key.pem", sizeof (tls_keyfile));
 	lacf_strlcpy(tls_certfile, "cpdlcd_cert.pem", sizeof (tls_certfile));
 
-	while ((opt = getopt(argc, argv, "hc:dp:")) != -1) {
+	while ((opt = getopt(argc, argv, "hc:dp:es")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_usage(argv[0], stdout);
@@ -2181,6 +2265,13 @@ main(int argc, char *argv[])
 				    "integer between 0 and %d", UINT16_MAX);
 				return (1);
 			}
+			break;
+		case 'e':
+			if (!auth_encrypt_userpwd(encrypt_silent))
+				return (1);
+			return (0);
+		case 's':
+			encrypt_silent = true;
 			break;
 		default:
 			print_usage(argv[0], stderr);
@@ -2214,6 +2305,11 @@ main(int argc, char *argv[])
 	tls_fini();
 	fini_structs();
 	curl_global_cleanup();
+
+	if (msg_log_file != NULL) {
+		fclose(msg_log_file);
+		msg_log_file = NULL;
+	}
 
 	return (0);
 }

@@ -34,8 +34,9 @@ handle_buf(const char *buf)
 {
 	int consumed;
 	cpdlc_msg_t *msg;
+	char reason[128];
 
-	if (cpdlc_msg_decode(buf, &msg, &consumed)) {
+	if (cpdlc_msg_decode(buf, &msg, &consumed, reason, sizeof (reason))) {
 		unsigned l;
 		char *newbuf;
 
@@ -52,6 +53,8 @@ handle_buf(const char *buf)
 		free(newbuf);
 
 		cpdlc_msg_free(msg);
+	} else {
+		fprintf(stderr, "%s\n", reason);
 	}
 }
 

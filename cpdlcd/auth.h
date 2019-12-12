@@ -60,6 +60,8 @@ auth_sess_key_t auth_sess_open(const cpdlc_msg_t *logon_msg,
     const void *sockaddr, auth_done_cb_t done_cb, void *userinfo);
 void auth_sess_kill(auth_sess_key_t key);
 
+bool auth_encrypt_userpwd(bool silent);
+
 #ifdef	__cplusplus
 }
 #endif

@@ -31,15 +31,19 @@
 #include <stdlib.h>
 
 #ifdef	_WIN32
-#include <windows.h>
 #include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#define	USE_SELECT	1
 #else	/* !_WIN32 */
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <poll.h>
+#include <sys/select.h>
 #include <unistd.h>
+#define	USE_SELECT	1
 #endif	/* !_WIN32 */
 
 #ifdef	CPDLC_CLIENT_LWS
@@ -83,6 +87,29 @@
 #ifndef	PATH_MAX
 #define	PATH_MAX		256	/* chars */
 #endif
+
+#ifdef	_WIN32
+
+#define	SOCKET_IS_VALID(sock)	((sock) != INVALID_SOCKET)
+typedef SOCKET socktype_t;
+static inline bool
+conn_in_progress(void)
+{
+	int err = WSAGetLastError();
+	return (err == WSAEINPROGRESS || err == WSAEWOULDBLOCK);
+}
+
+#else	/* !defined(_WIN32) */
+
+#define	SOCKET_IS_VALID(sock)	((sock) != -1)
+typedef int socktype_t;
+static inline bool
+conn_in_progress(void)
+{
+	return (errno == EINPROGRESS);
+}
+
+#endif	/* !defined(_WIN32) */
 
 typedef struct outmsgbuf_s {
 	cpdlc_msg_token_t	token;
@@ -147,7 +174,7 @@ struct cpdlc_client_s {
 		bool			new_msgs;
 	} pollinfo;
 #else	/* !CPDLC_CLIENT_LWS */
-	int				sock;
+	socktype_t			sock;
 	time_t				conn_begin_time;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;
@@ -225,6 +252,18 @@ static struct lws_protocols proto_list_lws[] = {
 
 #endif	/* CPDLC_CLIENT_LWS */
 
+static const char *
+get_last_socket_error(void)
+{
+#ifdef	_WIN32
+	static char buf[128];
+	snprintf(buf, sizeof (buf), "WSA error %d", WSAGetLastError());
+	return (buf);
+#else	/* !defined(_WIN32) */
+	return (strerror(errno));
+#endif	/* !defined(_WIN32) */
+}
+
 static void
 set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 {
@@ -256,6 +295,17 @@ check_keepalive(cpdlc_client_t *cl)
 
 #ifndef	CPDLC_CLIENT_LWS
 
+#ifdef	_WIN32
+
+static bool
+set_fd_nonblock(int fd)
+{
+	u_long mode = 1;
+	return (ioctlsocket(fd, FIONBIO, &mode) == NO_ERROR);
+}
+
+#else	/* !defined(_WIN32) */
+
 static bool
 set_fd_nonblock(int fd)
 {
@@ -263,6 +313,8 @@ set_fd_nonblock(int fd)
 	return ((flags = fcntl(fd, F_GETFL)) >= 0 &&
 	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
 }
+
+#endif	/* !defined(_WIN32) */
 
 #endif	/* !CPDLC_CLIENT_LWS */
 
@@ -294,13 +346,13 @@ logon_worker(void *userinfo)
 			ASSERT(cl->lws_sock != NULL);
 			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
 #else	/* !CPDLC_CLIENT_LWS */
-			ASSERT(cl->sock != -1);
+			ASSERT(SOCKET_IS_VALID(cl->sock));
 			complete_conn(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_HANDSHAKING_LINK:
 #ifndef	CPDLC_CLIENT_LWS
-			ASSERT(cl->sock != -1);
+			ASSERT(SOCKET_IS_VALID(cl->sock));
 			tls_handshake(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
@@ -581,8 +633,12 @@ reset_link_state(cpdlc_client_t *cl)
 		gnutls_certificate_free_credentials(cl->xcred);
 		cl->xcred = NULL;
 	}
-	if (cl->sock != -1) {
+	if (SOCKET_IS_VALID(cl->sock)) {
+#ifdef	_WIN32
+		shutdown(cl->sock, SD_BOTH);
+#else
 		shutdown(cl->sock, SHUT_RDWR);
+#endif
 		cl->sock = -1;
 	}
 #endif	/* !CPDLC_CLIENT_LWS */
@@ -708,7 +764,7 @@ static void
 init_conn(cpdlc_client_t *cl)
 {
 	struct addrinfo *ai;
-	int sock;
+	socktype_t sock;
 	cpdlc_logon_status_t new_status;
 
 	ASSERT(cl != NULL);
@@ -724,15 +780,15 @@ init_conn(cpdlc_client_t *cl)
 	cl->ai_cur = cl->ai_cur->ai_next;
 
 	sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-	if (sock == -1) {
-		set_logon_failure(cl, "%s", strerror(errno));
+	if (!SOCKET_IS_VALID(sock)) {
+		set_logon_failure(cl, "%s", get_last_socket_error());
 		/* Try the next address in line, if one is available */
 		init_conn(cl);
 		return;
 	}
 	if (!set_fd_nonblock(sock)) {
 		close(sock);
-		set_logon_failure(cl, "%s", strerror(errno));
+		set_logon_failure(cl, "%s", get_last_socket_error());
 		init_conn(cl);
 		return;
 	}
@@ -741,9 +797,9 @@ init_conn(cpdlc_client_t *cl)
 	 * attempt will continue async.
 	 */
 	if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
-		if (errno != EINPROGRESS) {
+		if (!conn_in_progress()) {
 			close(sock);
-			set_logon_failure(cl, "%s", strerror(errno));
+			set_logon_failure(cl, "%s", get_last_socket_error());
 			init_conn(cl);
 			return;
 		}
@@ -761,18 +817,33 @@ init_conn(cpdlc_client_t *cl)
 static void
 complete_conn(cpdlc_client_t *cl)
 {
+#if	USE_SELECT
+	fd_set wfds;
+	struct timeval tv = { .tv_usec = WORKER_POLL_INTVAL * 1000 };
+#else
 	struct pollfd pfd = { .events = POLLOUT };
-	int so_error, res;
+#endif
+	int so_error;
+	int res;
 	socklen_t so_error_len = sizeof (so_error);
 
 	ASSERT(cl != NULL);
 	ASSERT3S(cl->logon_status, ==, CPDLC_LOGON_CONNECTING_LINK);
 
+#if	USE_SELECT
+	FD_ZERO(&wfds);
+	FD_SET(cl->sock, &wfds);
+
+	mutex_exit(&cl->lock);
+	res = select(cl->sock + 1, NULL, &wfds, NULL, &tv);
+	mutex_enter(&cl->lock);
+#else	/* !defined(_WIN32) */
 	pfd.fd = cl->sock;
 
 	mutex_exit(&cl->lock);
 	res = poll(&pfd, 1, WORKER_POLL_INTVAL);
 	mutex_enter(&cl->lock);
+#endif	/* !defined(_WIN32) */
 
 	switch (res) {
 	case 0:
@@ -784,20 +855,20 @@ complete_conn(cpdlc_client_t *cl)
 		return;
 	case 1:
 		/* Connection attempt completed. Let's see about the result. */
-		if (getsockopt(cl->sock, SOL_SOCKET, SO_ERROR, &so_error,
-		    &so_error_len) < 0) {
-			set_logon_failure(cl, "%s", strerror(errno));
+		if (getsockopt(cl->sock, SOL_SOCKET, SO_ERROR,
+		    (char *)&so_error, &so_error_len) < 0) {
+			set_logon_failure(cl, "%s", get_last_socket_error());
 			goto errout;
 		}
 		if (so_error != 0) {
-			set_logon_failure(cl, "%s", strerror(so_error));
+			set_logon_failure(cl, "%s", get_last_socket_error());
 			goto errout;
 		}
 		/* Success! */
 		cl->logon_status = CPDLC_LOGON_HANDSHAKING_LINK;
 		return;
 	default:
-		set_logon_failure(cl, "%s", strerror(errno));
+		set_logon_failure(cl, "select: %s", strerror(errno));
 		goto errout;
 	}
 errout:
@@ -806,6 +877,24 @@ errout:
 	cl->sock = -1;
 	/* Try the next socket in line, if one is available */
 	init_conn(cl);
+}
+
+static void
+report_gnutls_verify_error(cpdlc_client_t *cl)
+{
+	gnutls_certificate_type_t type;
+	int status;
+	gnutls_datum_t out;
+
+	ASSERT(cl != NULL);
+	ASSERT(cl->session != NULL);
+
+	type = gnutls_certificate_type_get(cl->session);
+	status = gnutls_session_get_verify_cert_status(cl->session);
+	gnutls_certificate_verification_status_print(status, type, &out, 0);
+	set_logon_failure(cl, "TLS certificate verification error: %s",
+	    out.data);
+	gnutls_free(out.data);
 }
 
 /*
@@ -855,7 +944,7 @@ tls_handshake(cpdlc_client_t *cl)
 		TLS_CHK(gnutls_credentials_set(cl->session,
 		    GNUTLS_CRD_CERTIFICATE, cl->xcred));
 		gnutls_session_set_verify_cert(cl->session, cl->host, 0);
-		ASSERT(cl->sock != -1);
+		ASSERT(SOCKET_IS_VALID(cl->sock));
 		gnutls_transport_set_int(cl->session, cl->sock);
 		gnutls_handshake_set_timeout(cl->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
@@ -870,8 +959,12 @@ tls_handshake(cpdlc_client_t *cl)
 	mutex_enter(&cl->lock);
 	if (ret < GNUTLS_E_SUCCESS) {
 		if (ret != GNUTLS_E_AGAIN) {
-			set_logon_failure(cl, "TLS handshake error: %s",
-			    gnutls_strerror(ret));
+			if (ret == GNUTLS_E_CERTIFICATE_VERIFICATION_ERROR) {
+				report_gnutls_verify_error(cl);
+			} else {
+				set_logon_failure(cl, "TLS handshake error: "
+				    "%s", gnutls_strerror(ret));
+			}
 			cl->logon_status = CPDLC_LOGON_NONE;
 		}
 		return;
@@ -1343,17 +1436,37 @@ static bool
 poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
     unsigned *num_out_tokens)
 {
+#if	USE_SELECT
+	fd_set rfds, wfds;
+	int do_send = 0;
+	struct timeval tv = { .tv_usec = WORKER_POLL_INTVAL * 1000 };
+#else
 	struct pollfd pfd;
+#endif
 	int ret;
 	bool new_msgs = false;
 
 	ASSERT(cl != NULL);
 	ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
 	ASSERT(cl->session != NULL);
-	ASSERT(cl->sock != -1);
+	ASSERT(SOCKET_IS_VALID(cl->sock));
 	ASSERT(out_tokens != NULL);
 	ASSERT(num_out_tokens != NULL);
 
+#if	USE_SELECT
+	FD_ZERO(&rfds);
+	FD_ZERO(&wfds);
+
+	FD_SET(cl->sock, &rfds);
+	do_send = (list_head(&cl->outmsgbufs.sending) != NULL);
+	if (do_send)
+		FD_SET(cl->sock, &wfds);
+
+	/* Release the lock to allow for state updates while running */
+	mutex_exit(&cl->lock);
+	ret = select(cl->sock + 1, &rfds, do_send ? &wfds : NULL, NULL, &tv);
+	mutex_enter(&cl->lock);
+#else	/* !defined(_WIN32) */
 	pfd.fd = cl->sock;
 	pfd.events = POLLIN;
 	if (list_head(&cl->outmsgbufs.sending) != NULL)
@@ -1363,17 +1476,29 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	mutex_exit(&cl->lock);
 	ret = poll(&pfd, 1, WORKER_POLL_INTVAL);
 	mutex_enter(&cl->lock);
+#endif	/* !defined(_WIN32) */
+
 	/* Poll error or external shutdown request */
 	if (ret < 0 || cl->logon_status == CPDLC_LOGON_NONE) {
 		cl->logon_status = CPDLC_LOGON_NONE;
 		return (false);
 	}
 
+#if	USE_SELECT
+	if (FD_ISSET(cl->sock, &rfds))
+		new_msgs = do_msg_input(cl);
+	/* In case input killed the connection, recheck logon_status */
+	if (cl->logon_status != CPDLC_LOGON_NONE && do_send &&
+	    FD_ISSET(cl->sock, &wfds)) {
+		*out_tokens = do_msg_output(cl, num_out_tokens);
+	}
+#else	/* !defined(_WIN32) */
 	if (pfd.revents & POLLIN)
 		new_msgs = do_msg_input(cl);
 	/* In case input killed the connection, recheck logon_status */
 	if (cl->logon_status != CPDLC_LOGON_NONE && (pfd.revents & POLLOUT))
 		*out_tokens = do_msg_output(cl, num_out_tokens);
+#endif	/* !defined(_WIN32) */
 
 	return (new_msgs);
 }
@@ -1500,6 +1625,8 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 	cpdlc_msg_encode(msg, &outmsgbuf->buf[SENDBUF_PRE_PAD],
 	    outmsgbuf->bufsz + 1);
 	outmsgbuf->track_sent = track_sent;
+
+	printf("send: %s", outmsgbuf->buf);
 
 	list_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);
 

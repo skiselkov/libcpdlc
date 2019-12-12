@@ -1,0 +1,39 @@
+# This is a sample userlist file cpdlcd. File-based authentication of
+# connections can be used instead of HTTPS-based for testing and/or
+# simple deployments.
+#
+# This file consists of lines of text, separated by ':' as follows:
+#
+# name:password:options
+#
+# Here "name" is matched to the "FROM" field in the CPDLC LOGON message.
+# The "password" field is a hashed version of the "LOGON" data field
+# from the CPDLC message. In this case, the LOGON field is treated as
+# the user password. You can create these hashes by invoking cpdlcd
+# itself with the "-e" option:
+#
+# $ cpdlcd -e
+# Password: Hello World
+# $5$40tdajNc5UU$5KypKvYMhBQehZTn8r7JFF9p6/a9ootY.XuzvwtSCHD
+#
+# Then simply concatenate the username with the hashed password and
+# place it in the userlist file. If the username identifies an ATC
+# station, append the "atc" option to the end of the line.
+
+# By default, cpdlcd denies a LOGON attempt if the username field
+# wasn't found in the userlist file. For convenience of testing,
+# you may switch this policy by uncommenting the following line:
+#
+# policy:allow
+
+# KFOO is an ATC station, so it has an "atc" option.
+KFOO:$5$40tdajNc5UU$5KypKvYMhBQehZTn8r7JFF9p6/a9ootY.XuzvwtSCHD:atc
+
+# KBAR is an ATC station that has no password enforcement (hence the
+# password hash field is left empty). Please note, that this is
+# incredibly insecure and should never be used for anything other
+# than local testing.
+KBAR::atc
+
+# N12345 is an aircraft station, so its options field is left empty.
+N12345:$5$kGInBiqpg8Y$LV6fOjfLTWU4YgRvFPN0Wl1j88LaHLXyMGYGeOAc5jB:

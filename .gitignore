@@ -7,6 +7,14 @@ ca_key.pem
 cpdlcd/cpdlcd
 cpdlcd/cpdlcd_*.pem
 cpdlcd/test.conf
+cpdlcd/test.userlist
 test/cpdlc_cert.pem
 fansgui/cpdlc_cert.pem
 fansgui/fansgui
+fansgui/fansgui.exe
+test/build/CMakeCache.txt
+test/build/CMakeFiles/
+test/build/Makefile
+test/build/client_test
+test/build/cmake_install.cmake
+test/build/msgtest

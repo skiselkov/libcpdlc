@@ -529,6 +529,11 @@ cleanup(void)
 		hand_cursor = NULL;
 	}
 	glfwTerminate();
+	lacf_glew_fini();
+
+#ifdef	_WIN32
+	WSACleanup();
+#endif
 }
 
 static void
@@ -559,6 +564,29 @@ window_draw(void)
 	glfwSwapBuffers(window);
 }
 
+#ifdef	_WIN32
+static bool
+do_wsa_startup(void)
+{
+	WSADATA wsa_data;
+	int err;
+
+	err = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+	if (err != 0) {
+		logMsg("WSAStartup failed with error: %d", err);
+		return (false);
+	}
+	/* confirm that the WinSock DLL supports 2.2. */
+	if (LOBYTE(wsa_data.wVersion) != 2 || HIBYTE(wsa_data.wVersion) != 2) {
+		logMsg("Could not find a usable version of Winsock.dll");
+		return (false);
+	}
+
+	return (true);
+}
+
+#endif	/* defined(_WIN32) */
+
 int
 main(void)
 {
@@ -566,6 +594,12 @@ main(void)
 
 	memset(font_bitmaps, 0, sizeof (font_bitmaps));
 	log_init(do_log_msg, "fansgui");
+	lacf_glew_init();
+
+#ifdef	_WIN32
+	if (!do_wsa_startup())
+		goto errout;
+#endif	/* defined(_WIN32) */
 
 	if (!load_imgs())
 		goto errout;

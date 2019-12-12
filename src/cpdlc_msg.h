@@ -439,6 +439,7 @@ const cpdlc_msg_info_t *cpdlc_ul_infos;
 const cpdlc_msg_info_t *cpdlc_dl_infos;
 
 CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(cpdlc_pkt_t pkt_type);
+CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,

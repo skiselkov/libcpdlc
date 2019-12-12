@@ -27,6 +27,7 @@
 #define	_LIBCPDLC_THREAD_H_
 
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -161,7 +162,7 @@ cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 #define	thread_t	HANDLE
 #define	thread_id_t	DWORD
 typedef struct {
-	bool_t			inited;
+	BOOL			inited;
 	CRITICAL_SECTION	cs;
 } mutex_t;
 #define	condvar_t	CONDITION_VARIABLE
@@ -169,14 +170,14 @@ typedef struct {
 
 #define	mutex_init(x) \
 	do { \
-		(x)->inited = B_TRUE; \
+		(x)->inited = TRUE; \
 		InitializeCriticalSection(&(x)->cs); \
 	} while (0)
 #define	mutex_destroy(x) \
 	do { \
 		ASSERT((x)->inited); \
 		DeleteCriticalSection(&(x)->cs); \
-		(x)->inited = B_FALSE; \
+		(x)->inited = FALSE; \
 	} while (0)
 #define	mutex_enter(x) \
 	do { \

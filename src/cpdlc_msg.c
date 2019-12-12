@@ -421,15 +421,48 @@ cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 	return (msg);
 }
 
+cpdlc_msg_t *
+cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
+{
+	cpdlc_msg_t *newmsg = safe_calloc(1, sizeof (cpdlc_msg_t));
+
+	memcpy(newmsg, oldmsg, sizeof (*newmsg));
+	if (oldmsg->logon_data != NULL)
+		newmsg->logon_data = strdup(oldmsg->logon_data);
+
+	for (unsigned i = 0; i < oldmsg->num_segs; i++) {
+		const cpdlc_msg_seg_t *oldseg = &oldmsg->segs[i];
+		cpdlc_msg_seg_t *newseg = &newmsg->segs[i];
+
+		if (oldseg->info == NULL)
+			continue;
+		for (unsigned j = 0; j < oldseg->info->num_args; j++) {
+			if (oldseg->info->args[j] == CPDLC_ARG_ROUTE &&
+			    oldseg->args[j].route != NULL) {
+				newseg->args[j].route = strdup(
+				    oldseg->args[j].route);
+			} else if (oldseg->info->args[j] ==
+			    CPDLC_ARG_FREETEXT &&
+			    oldseg->args[j].freetext != NULL) {
+				newseg->args[j].freetext = strdup(
+				    oldseg->args[j].freetext);
+			}
+		}
+	}
+
+	return (newmsg);
+}
+
 void
 cpdlc_msg_free(cpdlc_msg_t *msg)
 {
 	ASSERT(msg != NULL);
 
+	free(msg->logon_data);
+
 	for (unsigned i = 0; i < msg->num_segs; i++) {
 		cpdlc_msg_seg_t *seg = &msg->segs[i];
 
-		free(msg->logon_data);
 		if (seg->info == NULL)
 			continue;
 		for (unsigned j = 0; j < seg->info->num_args; j++) {

@@ -28,11 +28,15 @@ include ../Makefile.com
 ifeq ($(PLATFORM_NAME),linux-64)
 	PLATFORM_LIBS = -lGL -lX11 -ldl
 else
-	PLATFORM_LIBS = \
-	    -framework OpenGL \
-	    -framework IOKit \
-	    -framework CoreVideo \
-	    -framework Cocoa
+	ifeq ($(PLATFORM_NAME),mac-64)
+		PLATFORM_LIBS = \
+		    -framework OpenGL \
+		    -framework IOKit \
+		    -framework CoreVideo \
+		    -framework Cocoa
+	else
+		PLATFORM_LIBS += -lopengl32
+	endif
 endif
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
@@ -40,14 +44,19 @@ CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags)
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
-	$(PLATFORM_LIBS) -lpthread -lm 
+	$(PLATFORM_LIBS) -lpthread -lm
 
-ifeq ($(LWS),yes)
-	CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)
-	LIBS += $(LWS_LIBS)
+ifeq ($(PLATFORM_NAME),win-64)
+	CFLAGS += -I../gnutls-win64/lib
+	LIBS += ../gnutls-win64/lib/libgnutls.dll.a
 else
-	CFLAGS += $(shell pkg-config gnutls --cflags)
-	LIBS += $(shell pkg-config gnutls --libs)
+	ifeq ($(LWS),yes)
+		CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)
+		LIBS += $(LWS_LIBS)
+	else
+		CFLAGS += $(shell pkg-config gnutls --cflags)
+		LIBS += $(shell pkg-config gnutls --libs)
+	endif
 endif
 
 # clang doesn't properly support optimized debug code.
@@ -60,11 +69,18 @@ OBJS = \
 	fansgui.o \
 	$(CORE_SRC_OBJS) \
 	$(FANS_OBJS)
+ifeq ($(PLATFORM_NAME),win-64)
+	OUTBIN=fansgui.exe
+else
+	OUTBIN=fansgui
+endif
 
-all : fansgui
+all : $(OUTBIN)
 
-fansgui : $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+$(OUTBIN) : $(OBJS)
+	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean :
 	rm -f fansgui $(OBJS)
+
+include ../Makefile.rules

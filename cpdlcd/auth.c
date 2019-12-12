@@ -32,6 +32,7 @@
 
 #include <acfutils/avl.h>
 #include <acfutils/assert.h>
+#include <acfutils/base64.h>
 #include <acfutils/helpers.h>
 #include <acfutils/hexcode.h>
 #include <acfutils/safe_alloc.h>
@@ -352,6 +353,100 @@ auth_fini(void)
 	mutex_destroy(&lock);
 }
 
+static void
+auth_file(const cpdlc_msg_t *logon_msg, auth_done_cb_t done_cb, void *userinfo)
+{
+	FILE *fp;
+	CURL *curl;
+	char *from = NULL, *to = NULL;
+	char *line = NULL;
+	size_t linecap = 0;
+	bool success = false, failure = false, policy_allow = false;
+	unsigned linenum = 0;
+
+	ASSERT(logon_msg != NULL);
+	ASSERT(done_cb != NULL);
+	ASSERT3U(strlen(auth_url), >, 7);
+
+	/* This is simply to get curl_easy_escape */
+	curl = curl_easy_init();
+
+	fp = fopen(&auth_url[7], "r");
+	if (fp == NULL) {
+		logMsg("Can't open auth/url %s: %s", auth_url, strerror(errno));
+		goto errout;
+	}
+	ASSERT(cpdlc_msg_get_logon_data(logon_msg) != NULL);
+	ASSERT(cpdlc_msg_get_from(logon_msg) != NULL);
+
+	from = curl_easy_escape(curl, cpdlc_msg_get_from(logon_msg), 0);
+	if (cpdlc_msg_get_to(logon_msg) != NULL)
+		to = curl_easy_escape(curl, cpdlc_msg_get_to(logon_msg), 0);
+
+	while (parser_get_next_line(fp, &line, &linecap, &linenum) > 0 &&
+	    !success) {
+		char **comps;
+		size_t n_comps;
+
+		comps = strsplit(line, ":", false, &n_comps);
+		if (n_comps != 2 && n_comps != 3) {
+			logMsg("%s:%d: malformed line, each line must "
+			    "have exactly 2 or 3 parts, separated by "
+			    "whitespace", auth_url, linenum);
+			continue;
+		}
+		if (strcasecmp(comps[0], "policy") == 0) {
+			policy_allow = (strcasecmp(comps[1], "allow") == 0);
+			continue;
+		}
+		if (strcmp(comps[0], from) == 0) {
+			char *encr = crypt(cpdlc_msg_get_logon_data(logon_msg),
+			    comps[1]);
+
+			if (comps[1][0] == '\0' ||
+			    strcmp(comps[1], encr) == 0) {
+				bool is_atc = false;
+				/* logon success, determine if it's ATC */
+				if (n_comps == 3 &&
+				    strcasecmp(comps[2], "atc") == 0) {
+					is_atc = true;
+				}
+				done_cb(true, is_atc, userinfo);
+				success = true;
+			} else {
+				failure = true;
+			}
+			free_strlist(comps, n_comps);
+			break;
+		}
+
+		free_strlist(comps, n_comps);
+	}
+
+	if (!success) {
+		if (!failure && policy_allow)
+			done_cb(true, false, userinfo);
+		else
+			done_cb(false, false, userinfo);
+	}
+
+	curl_free(from);
+	curl_free(to);
+	curl_easy_cleanup(curl);
+	lacf_free(line);
+	fclose(fp);
+
+	return;
+errout:
+	done_cb(false, false, userinfo);
+	curl_free(from);
+	curl_free(to);
+	curl_easy_cleanup(curl);
+	lacf_free(line);
+	if (fp != NULL)
+		fclose(fp);
+}
+
 /*
  * Initiates a new authentication session. The session will run in
  * a background thread and call a completion callback when the remote
@@ -399,6 +494,10 @@ auth_sess_open(const cpdlc_msg_t *logon_msg, const void *sockaddr,
 
 	if (auth_url[0] == '\0') {
 		done_cb(true, true, userinfo);
+		return (0);
+	}
+	if (strncmp(auth_url, "file://", 7) == 0) {
+		auth_file(logon_msg, done_cb, userinfo);
 		return (0);
 	}
 
@@ -498,4 +597,60 @@ auth_sess_kill(auth_sess_key_t key)
 	if (sess != NULL)
 		sess->kill = true;
 	mutex_exit(&lock);
+}
+
+bool
+auth_encrypt_userpwd(bool silent)
+{
+	enum { SALT_SZ = 8 };
+	size_t cap = 0;
+	char *password = NULL;
+	char saltraw[SALT_SZ];
+	char saltstr[BASE64_ENC_SIZE(SALT_SZ) + 8] = { 0 };
+	char *buf;
+	FILE *fp;
+
+	if (!silent) {
+		printf("Password: ");
+		fflush(stdout);
+	}
+
+	if (getline(&password, &cap, stdin) <= 0) {
+		fprintf(stderr, "Error: expected password input\n");
+		return (false);
+	}
+	ASSERT3U(strlen(password), >, 0);
+	/* Strip a trailing newline */
+	if (password[strlen(password) - 1] == '\n')
+		password[strlen(password) - 1] = '\0';
+
+	fp = fopen("/dev/urandom", "r");
+	if (fp == NULL) {
+		fprintf(stderr, "Can't open /dev/urandom: %s\n",
+		    strerror(errno));
+		lacf_free(password);
+		return (false);
+	}
+	if (fread(saltraw, 1, sizeof (saltraw), fp) != SALT_SZ) {
+		fprintf(stderr, "Can't read /dev/urandom: short byte "
+		    "count read\n");
+		fclose(fp);
+		lacf_free(password);
+		return (false);
+	}
+	fclose(fp);
+
+	lacf_strlcpy(saltstr, "$5$", sizeof (saltstr));
+	base64_encode((const uint8_t *)saltraw, sizeof (saltraw),
+	    (uint8_t *)&saltstr[3]);
+	saltstr[strlen(saltstr) - 1] = '$';
+
+	buf = crypt(password, saltstr);
+	ASSERT(buf != NULL);
+
+	printf("%s\n", buf);
+
+	lacf_free(password);
+
+	return (true);
 }

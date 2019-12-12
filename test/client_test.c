@@ -276,14 +276,11 @@ draw_screen(void)
 int
 main(void)
 {
-	const char *hostname = "localhost";
-	const char *ca_file = "ca_cert.pem";
-	int port = 0;
 	struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
 
 	init_term();
 
-	fans = fans_alloc(hostname, port, ca_file);
+	fans = fans_alloc(NULL, NULL);
 	ASSERT(fans != NULL);
 
 	draw_screen();
