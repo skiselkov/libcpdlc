@@ -24,8 +24,8 @@
 
 include ../Makefile.com
 
-CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG -I$(SRCPREFIX) \
-    $(PLATFORM_DEFS) $(shell pkg-config gnutls --cflags)
+CFLAGS += -W -Wall -Wextra -Werror -O0 -g -DDEBUG -std=c99 \
+    -I$(SRCPREFIX) $(PLATFORM_DEFS) $(shell pkg-config gnutls --cflags)
 LIBS += $(shell pkg-config gnutls --libs) -lpthread -lm
 CLIENT_TEST_LIBS += -lncursesw
 

@@ -26,8 +26,8 @@ include ../Makefile.vars
 include ../Makefile.com
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
-	$(PLATFORM_DEFS) -D_GNU_SOURCE -D_POSIX_SOURCE -I$(ACFUTILS)/src \
-	$(LWS_CFLAGS) \
+	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE -D_POSIX_SOURCE \
+	-I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
