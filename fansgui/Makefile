@@ -46,7 +46,7 @@ LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs)
 
 ifeq ($(PLATFORM_NAME),win-64)
-	CFLAGS += -I../gnutls-win64/lib
+	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)
 	LIBS += ../gnutls-win64/lib/libgnutls.dll.a
 else
 	ifeq ($(LWS),yes)

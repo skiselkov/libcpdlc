@@ -91,3 +91,12 @@ ACFUTILS=../libacfutils
 GNUTLS=../gnutls-3.6.11.1
 NETTLE=../nettle-3.5
 PKG_CONFIG_PATH=$(GNUTLS)/install/lib/pkgconfig:$(NETTLE)/install/lib/pkgconfig
+
+# Older MinGW doesn't contain these, so define them here
+MATH_DEFINES=\
+    -DM_PI=3.14159265358979323846 \
+    -DM_PI_2=1.57079632679489661923 \
+    -DM_PI_4=0.785398163397448309616 \
+    -DM_1_PI=0.318309886183790671538 \
+    -DM_2_PI=0.636619772367581343076 \
+    -DM_2_SQRTPI=1.12837916709551257390
