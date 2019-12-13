@@ -20,8 +20,8 @@ else
 fi
 
 if [[ "$BUILDWIN" == 1 ]]; then
-	UBUNTU_PACKAGES="$UBUNTU_PACKAGES mingw-w64-x86-64-dev \
-gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
+	UBUNTU_PACKAGES="$UBUNTU_PACKAGES autoconf automake libtool \
+mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
 fi
 
 echo "---------------------------------------------------------------
