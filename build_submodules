@@ -9,7 +9,22 @@ libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools"
 
 set -e
 
-echo "The following packages are required to build cpdlcd and fansgui:
+echo -n "Would you like to build the GUI portions as well? [y/N] "
+read
+if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
+	BUILDGLFW=1
+	BUILDWIN=1
+else
+	BUILDGLFW=0
+	BUILDWIN=0
+fi
+
+if [[ "$BUILDWIN" == 1 ]]; then
+	UBUNTU_PACKAGES="$UBUNTU_PACKAGES mingw-w64-x86-64-dev"
+fi
+
+echo "---------------------------------------------------------------
+The following packages are required to build cpdlcd and fansgui:
   $UBUNTU_PACKAGES"
 echo -n "Would you like me to apt-get these for you now? [y/N] "
 read
@@ -41,11 +56,25 @@ fi
 if ! [ -f libacfutils/build_deps ]; then
 	git submodule update libacfutils
 fi
-if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ]; then
-	(
-	    cd libacfutils && ./build_deps -m && cd qmake && \
-		./build-win-lin -ilE
-	)
+
+if [[ "$BUILDWIN" == 0 ]]; then
+	if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ]; then
+		(
+		    cd libacfutils && ./build_deps -m && cd qmake && \
+		    ./build-win-lin -ilE
+		) || exit 1
+	fi
+else
+	if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ] ||
+	    ! [ -f "libacfutils/qmake/win64/libacfutils.a" ]; then
+		(
+		    cd libacfutils && ./build_deps && cd qmake && \
+		    ./build-win-lin -E
+		) || exit 1
+	fi
+fi
+if [[ "$BUILDGLFW" == 1 ]]; then
+	( cd libacfutils/glfw && ./build_glfw_deps ) || exit 1
 fi
 
 [ -d "${LWS}" ] || tar xJf "${LWS}.tar.xz"
@@ -54,7 +83,7 @@ if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
 	    cd "${LWS}" && \
 		cmake . && \
 		make -j4
-	)
+	) || exit 1
 fi
 
 [ -d "${NETTLE}" ] || tar xzf "${NETTLE}.tar.gz"
@@ -64,7 +93,7 @@ if ! [ -f "${NETTLE}/install/lib/libnettle.a" ]; then
 		./configure --enable-mini-gmp --disable-shared \
 		--enable-static --prefix="$(pwd)/install" && \
 		make -j4 && make install
-	)
+	) || exit 1
 fi
 
 [ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
@@ -77,5 +106,5 @@ if ! [ -f "${GNUTLS}/install/lib/libgnutls.a" ]; then
 		--with-included-unistring --without-p11-kit --disable-doc \
 		--disable-tools --disable-cxx --disable-tests &&
 		make -j4 && make install
-	)
+	) || exit 1
 fi

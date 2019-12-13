@@ -41,12 +41,9 @@ endif
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
-	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)
+
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
-	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --static \
-	--libs gnutls) \
-	$(PLATFORM_LIBS) -lpthread -lm
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs)
 
 ifeq ($(PLATFORM_NAME),win-64)
 	CFLAGS += -I../gnutls-win64/lib
@@ -59,7 +56,12 @@ else
 		CFLAGS += $(shell pkg-config gnutls --cflags)
 		LIBS += $(shell pkg-config gnutls --libs)
 	endif
+	CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
+	    pkg-config --cflags gnutls)
+	LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
+	    --static --libs gnutls)
 endif
+LIBS += $(PLATFORM_LIBS) -lpthread -lm
 
 # clang doesn't properly support optimized debug code.
 ifeq ($(PLATFORM_NAME),mac-64)
