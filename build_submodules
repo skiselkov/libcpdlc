@@ -21,6 +21,7 @@ fi
 
 if [[ "$BUILDWIN" == 1 ]]; then
 	UBUNTU_PACKAGES="$UBUNTU_PACKAGES autoconf automake libtool \
+libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
 mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
 fi
 
