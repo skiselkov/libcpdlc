@@ -83,6 +83,6 @@ FANS_OBJS=\
 	$(FANS)/fans_scratchpad.o \
 	$(FANS)/fans_vrfy.o
 
-LWS_CFLAGS=-I../libwebsockets/include
-LWS_LIBS=../libwebsockets/lib/libwebsockets.a
-LWS_OBJS=../libwebsockets/lib/libwebsockets.a
+LWS_CFLAGS=-I../libwebsockets-3.1.0/include
+LWS_LIBS=../libwebsockets-3.1.0/lib/libwebsockets.a
+LWS_OBJS=../libwebsockets-3.1.0/lib/libwebsockets.a

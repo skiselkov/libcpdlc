@@ -2,13 +2,15 @@
 
 NETTLE=nettle-3.5
 GNUTLS=gnutls-3.6.11.1
+LWS=libwebsockets-3.1.0
 
 set -e
 
+[ -d "${LWS}" ] || tar xJf "${LWS}.tar.xz"
 (
-    cd libwebsockets
-    cmake .
-    make -j4
+    cd "${LWS}" && \
+	cmake . && \
+	make -j4
 )
 
 [ -d "${NETTLE}" ] || tar xzf "${NETTLE}.tar.gz"

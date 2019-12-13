@@ -21,3 +21,4 @@ test/build/cmake_install.cmake
 test/build/msgtest
 gnutls-3.6.11.1
 nettle-3.5
+libwebsockets-3.1.0
