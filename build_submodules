@@ -54,7 +54,7 @@ fi
 
 # Refresh & build libacfutils
 if ! [ -f libacfutils/build_deps ]; then
-	git submodule update libacfutils
+	git submodule init libacfutils && git submodule update libacfutils
 fi
 
 if [[ "$BUILDWIN" == 0 ]]; then
@@ -108,3 +108,7 @@ if ! [ -f "${GNUTLS}/install/lib/libgnutls.a" ]; then
 		make -j4 && make install
 	) || exit 1
 fi
+
+echo "---------------------------------------------------------
+ALL DONE! You can now 'cd' into 'cpdlcd' and type 'make'.
+---------------------------------------------------------"
