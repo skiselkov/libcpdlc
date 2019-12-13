@@ -38,7 +38,11 @@ else
 	endif
 endif
 
-CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
+BOGUS_WARNINGS=\
+    -Wno-unused-result \
+    -Wno-missing-field-initializers
+
+CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
 
