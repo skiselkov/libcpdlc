@@ -25,15 +25,22 @@
 include ../Makefile.vars
 include ../Makefile.com
 
+GNUTLS=gnutls-3.6.11.1
+NETTLE=nettle-3.5
+
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE -D_POSIX_SOURCE \
 	-I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
-	$(shell pkg-config gnutls --cflags)
+	$(shell PKG_CONFIG_PATH=../$(GNUTLS)/install/lib/pkgconfig \
+	pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
-	$(shell pkg-config gnutls --libs) \
-	-lcrypt -lpthread -lm
+	$(shell PKG_CONFIG_PATH=../$(GNUTLS)/install/lib/pkgconfig \
+	    pkg-config --static --libs gnutls) \
+	$(shell PKG_CONFIG_PATH=../$(NETTLE)/install/lib/pkgconfig \
+	    pkg-config --static --libs nettle) \
+	-lm -lpthread -Wl,-Bstatic -lcrypt -Wl,-Bdynamic
 
 DAEMON_OBJS=\
 	auth.o \
@@ -42,14 +49,20 @@ DAEMON_OBJS=\
 	msgquota.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/cpdlc_msg.o
 
 all : cpdlcd
+
+redist : cpdlcd.tar.gz
+
+cpdlcd.tar.gz : cpdlcd
+	mkdir cpdlcd-redist
+	cp cpdlcd cpdlcd-redist/
 
 clean :
 	rm -f cpdlcd $(DAEMON_OBJS)
 
-cpdlcd : $(DAEMON_OBJS)
+cpdlcd : $(DAEMON_OBJS) $(LWS_OBJS)
 	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 include ../Makefile.rules

@@ -18,3 +18,5 @@ test/build/Makefile
 test/build/client_test
 test/build/cmake_install.cmake
 test/build/msgtest
+gnutls-3.6.11.1
+nettle-3.5

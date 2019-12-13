@@ -24,3 +24,6 @@
 
 %.o : %.c
 	$(HOSTCC) $(CFLAGS) -c -o $@ $^
+
+../libwebsockets/lib/libwebsockets.a :
+	( cd ../libwebsockets && cmake . && make )

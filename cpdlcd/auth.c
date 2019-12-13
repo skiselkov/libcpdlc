@@ -641,7 +641,7 @@ auth_encrypt_userpwd(bool silent)
 	fclose(fp);
 
 	lacf_strlcpy(saltstr, "$5$", sizeof (saltstr));
-	base64_encode((const uint8_t *)saltraw, sizeof (saltraw),
+	lacf_base64_encode((const uint8_t *)saltraw, sizeof (saltraw),
 	    (uint8_t *)&saltstr[3]);
 	saltstr[strlen(saltstr) - 1] = '$';
 

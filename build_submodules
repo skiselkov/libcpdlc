@@ -1,0 +1,30 @@
+#!/bin/bash
+
+NETTLE=nettle-3.5
+GNUTLS=gnutls-3.6.11.1
+
+set -e
+
+(
+    cd libwebsockets
+    cmake .
+    make -j4
+)
+
+[ -d "${NETTLE}" ] || tar xzf "${NETTLE}.tar.gz"
+(
+    cd "${NETTLE}" && \
+	./configure --enable-mini-gmp --disable-shared --enable-static \
+	--prefix="$(pwd)/install" && \
+	make -j4 && make install
+)
+
+[ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
+(
+    cd "${GNUTLS}" && PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig \
+	./configure --prefix=$(pwd)/install --enable-static --disable-shared \
+	--with-included-libtasn1 --with-included-unistring \
+	--without-p11-kit --disable-doc --disable-tools --disable-cxx \
+	--disable-tests &&
+	make -j4 && make install
+)
