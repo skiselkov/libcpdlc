@@ -5,7 +5,7 @@ GNUTLS=gnutls-3.6.11.1
 LWS=libwebsockets-3.1.0
 
 UBUNTU_PACKAGES="build-essential cmake git libglu1-mesa-dev libgmp-dev \
-libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools"
+libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools unzip"
 
 set -e
 
