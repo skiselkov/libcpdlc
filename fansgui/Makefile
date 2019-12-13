@@ -35,7 +35,7 @@ else
 		    -framework CoreVideo \
 		    -framework Cocoa
 	else
-		PLATFORM_LIBS += -lopengl32
+		PLATFORM_LIBS += -lopengl32 -mwindows
 	endif
 endif
 
@@ -79,6 +79,17 @@ all : $(OUTBIN)
 
 $(OUTBIN) : $(OBJS)
 	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(LIBS)
+ifeq ($(PLATFORM_NAME),win-64)
+	rm -rf fansgui-app
+	mkdir fansgui-app
+	cp $(OUTBIN) \
+	    $(wildcard ../gnutls-win64/bin/*.dll) \
+	    $(wildcard *.png) \
+	    ../ca_cert.pem \
+	    fansgui-app
+	zip -r fansgui-app.zip fansgui-app
+	rm -rf fansgui-app
+endif
 
 clean :
 	rm -f fansgui $(OBJS)

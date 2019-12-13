@@ -12,6 +12,7 @@ test/cpdlc_cert.pem
 fansgui/cpdlc_cert.pem
 fansgui/fansgui
 fansgui/fansgui.exe
+fansgui/fansgui-app.zip
 test/build/CMakeCache.txt
 test/build/CMakeFiles/
 test/build/Makefile

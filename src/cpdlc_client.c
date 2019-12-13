@@ -1626,8 +1626,6 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 	    outmsgbuf->bufsz + 1);
 	outmsgbuf->track_sent = track_sent;
 
-	printf("send: %s", outmsgbuf->buf);
-
 	list_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);
 
 	return (outmsgbuf->token);
