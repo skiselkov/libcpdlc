@@ -1249,7 +1249,7 @@ conn_log_buf(conn_t *conn, const char *buf, bool inout)
 	now = time(NULL);
 	gmtime_r(&now, &tm);
 	strftime(datebuf, sizeof (datebuf), "%Y%m%d_%H%M%SZ", &tm);
-	fprintf(msg_log_file, "%s:%s:%s:%s", datebuf, conn->addr_str,
+	fprintf(msg_log_file, "%s|%s|%s|%s", datebuf, conn->addr_str,
 	    inout ? "IN" : "OUT", buf);
 	fflush(msg_log_file);
 }
