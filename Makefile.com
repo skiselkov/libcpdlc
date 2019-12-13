@@ -86,3 +86,8 @@ FANS_OBJS=\
 LWS_CFLAGS=-I../libwebsockets-3.1.0/include
 LWS_LIBS=../libwebsockets-3.1.0/lib/libwebsockets.a
 LWS_OBJS=../libwebsockets-3.1.0/lib/libwebsockets.a
+
+ACFUTILS=../libacfutils
+GNUTLS=../gnutls-3.6.11.1
+NETTLE=../nettle-3.5
+PKG_CONFIG_PATH=$(GNUTLS)/install/lib/pkgconfig:$(NETTLE)/install/lib/pkgconfig

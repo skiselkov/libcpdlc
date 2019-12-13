@@ -4,29 +4,78 @@ NETTLE=nettle-3.5
 GNUTLS=gnutls-3.6.11.1
 LWS=libwebsockets-3.1.0
 
+UBUNTU_PACKAGES="build-essential cmake git libglu1-mesa-dev libgmp-dev \
+libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools"
+
 set -e
 
+echo "The following packages are required to build cpdlcd and fansgui:
+  $UBUNTU_PACKAGES"
+echo -n "Would you like me to apt-get these for you now? [y/N] "
+read
+if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
+	sudo apt-get install $UBUNTU_PACKAGES
+fi
+
+# Check cmake version installed:
+CMAKE_VERSION=$(cmake --version | awk '/cmake version /{print $3}')
+CMAKE_VERSION_MAJOR=$(echo $CMAKE_VERSION | cut -d . -f 1)
+if [ "$CMAKE_VERSION_MAJOR" -lt 3 ]; then
+	cat << EOF
+-----------------------------------------------------------
+WARNING: your cmake appears to be too old ($CMAKE_VERSION).
+libcpdlc requires at least cmake version 3.0.2. You can get a newer version
+from the following PPA:
+  sudo add-apt-repository ppa:george-edison55/cmake-3.x
+  sudo apt-get update
+  sudo apt-get install cmake
+EOF
+	echo -n "Would you like to continue anyway? [y/N] "
+	read
+	if [[ "$REPLY" != "y" ]] && [[ "$REPLY" != "Y" ]]; then
+		exit 1
+	fi
+fi
+
+# Refresh & build libacfutils
+if ! [ -f libacfutils/build_deps ]; then
+	git submodule update libacfutils
+fi
+if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ]; then
+	(
+	    cd libacfutils && ./build_deps -m && cd qmake && \
+		./build-win-lin -ilE
+	)
+fi
+
 [ -d "${LWS}" ] || tar xJf "${LWS}.tar.xz"
-(
-    cd "${LWS}" && \
-	cmake . && \
-	make -j4
-)
+if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
+	(
+	    cd "${LWS}" && \
+		cmake . && \
+		make -j4
+	)
+fi
 
 [ -d "${NETTLE}" ] || tar xzf "${NETTLE}.tar.gz"
-(
-    cd "${NETTLE}" && \
-	./configure --enable-mini-gmp --disable-shared --enable-static \
-	--prefix="$(pwd)/install" && \
-	make -j4 && make install
-)
+if ! [ -f "${NETTLE}/install/lib/libnettle.a" ]; then
+	(
+	    cd "${NETTLE}" && \
+		./configure --enable-mini-gmp --disable-shared \
+		--enable-static --prefix="$(pwd)/install" && \
+		make -j4 && make install
+	)
+fi
 
 [ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
-(
-    cd "${GNUTLS}" && PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig \
-	./configure --prefix=$(pwd)/install --enable-static --disable-shared \
-	--with-included-libtasn1 --with-included-unistring \
-	--without-p11-kit --disable-doc --disable-tools --disable-cxx \
-	--disable-tests &&
-	make -j4 && make install
-)
+if ! [ -f "${GNUTLS}/install/lib/libgnutls.a" ]; then
+	(
+	    cd "${GNUTLS}" && \
+		PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig \
+		./configure --prefix=$(pwd)/install --enable-static \
+		--disable-shared --with-included-libtasn1 \
+		--with-included-unistring --without-p11-kit --disable-doc \
+		--disable-tools --disable-cxx --disable-tests &&
+		make -j4 && make install
+	)
+fi

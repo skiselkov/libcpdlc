@@ -1,3 +1,6 @@
 [submodule "libwebsockets"]
 	path = libwebsockets
 	url = https://libwebsockets.org/repo/libwebsockets
+[submodule "libacfutils"]
+	path = libacfutils
+	url = https://github.com/skiselkov/libacfutils.git

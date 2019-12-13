@@ -22,7 +22,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-include ../Makefile.vars
 include ../Makefile.com
 
 ifeq ($(PLATFORM_NAME),linux-64)
@@ -41,9 +40,12 @@ endif
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags)
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
+	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
+	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --static \
+	--libs gnutls) \
 	$(PLATFORM_LIBS) -lpthread -lm
 
 ifeq ($(PLATFORM_NAME),win-64)

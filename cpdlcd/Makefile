@@ -22,12 +22,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-include ../Makefile.vars
 include ../Makefile.com
-
-GNUTLS=gnutls-3.6.11.1
-NETTLE=nettle-3.5
-PKG_CONFIG_PATH=../$(GNUTLS)/install/lib/pkgconfig:../$(NETTLE)/install/lib/pkgconfig
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -O0 -g -DDEBUG \
 	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE -D_POSIX_SOURCE \
