@@ -93,7 +93,7 @@ ifeq ($(PLATFORM_NAME),win-64)
 	cp $(OUTBIN) \
 	    $(wildcard ../gnutls-win64/bin/*.dll) \
 	    $(wildcard *.png) \
-	    ../ca_cert.pem \
+	    $(wildcard ../ca_cert.pem) \
 	    fansgui-app
 	zip -r fansgui-app.zip fansgui-app
 	rm -rf fansgui-app
