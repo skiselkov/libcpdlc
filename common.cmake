@@ -95,7 +95,13 @@ set(FANS_HEADERS
     ${FANSPREFIX}/fans_vrfy.h
     )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=0 -DIBM=0 -DLIN=1")
+if(WIN32)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=0 -DIBM=1 -DLIN=0")
+elseif(APPLE)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=1 -DIBM=0 -DLIN=0")
+else()
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DAPL=0 -DIBM=0 -DLIN=1")
+endif()
 
 set(LIBCPDLC_INCLUDES "../../src")
 set(FANS_INCLUDES "../../fans")
@@ -104,6 +110,3 @@ FIND_LIBRARY(GNUTLS_LIBRARY "gnutls")
 FIND_LIBRARY(PTHREAD_LIBRARY "pthread")
 FIND_LIBRARY(MATH_LIBRARY "m")
 FIND_LIBRARY(NCURSESW_LIBRARY "ncursesw")
-
-#LWS_CFLAGS=$(shell pkg-config libwebsockets --cflags)
-#LWS_LIBS=$(shell pkg-config libwebsockets --libs)
