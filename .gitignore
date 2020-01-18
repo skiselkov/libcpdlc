@@ -22,3 +22,8 @@ test/build/msgtest
 gnutls-3.6.11.1
 nettle-3.5
 libwebsockets-3.1.0
+cpdlc_atc/build/CMakeCache.txt
+cpdlc_atc/build/CMakeFiles
+cpdlc_atc/build/Makefile
+cpdlc_atc/build/cmake_install.cmake
+cpdlc_atc/build/cpdlc_atc
