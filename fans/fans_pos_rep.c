@@ -40,7 +40,7 @@ verify_pos_rep(fans_t *box)
 	int l = 0;
 	char buf[1024];
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	APPEND_SNPRINTF(buf, l, "POSITION REPORT");
 }
@@ -49,46 +49,46 @@ verify_pos_rep(fans_t *box)
 static void
 set_rpt_wpt(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->pos_rep.rpt_wpt, pos, sizeof (*pos));
 }
 
 static void
 set_nxt_fix(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->pos_rep.nxt_fix, pos, sizeof (*pos));
 }
 
 static void
 set_nxt_fix1(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->pos_rep.nxt_fix1, pos, sizeof (*pos));
 }
 
 static void
 set_cur_pos(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->pos_rep.cur_pos, pos, sizeof (*pos));
 }
 
 static bool
 can_verify_pos_rep(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return (true);
 }
 
 static void
 verify_pos_rep(fans_t *box)
 {
-	UNUSED(box);
+	CPDLC_UNUSED(box);
 }
 
 static void
@@ -165,7 +165,7 @@ fans_pos_rep_init_cb(fans_t *box)
 {
 	fms_wpt_info_t wptinfo;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	/* The POS REP page can send freetext as well */
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
@@ -190,7 +190,7 @@ fans_pos_rep_init_cb(fans_t *box)
 void
 fans_pos_rep_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 3);
 
@@ -206,7 +206,7 @@ fans_pos_rep_draw_cb(fans_t *box)
 
 	if (can_verify_pos_rep(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
@@ -214,7 +214,7 @@ fans_pos_rep_draw_cb(fans_t *box)
 bool
 fans_pos_rep_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		fans_scratchpad_xfer_pos(box, &box->pos_rep.rpt_wpt,

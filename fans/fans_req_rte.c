@@ -36,7 +36,7 @@
 static void
 draw_main_page(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "DIRECT TO");
 	fans_put_pos(box, LSK1_ROW, 0, false, &box->rte_req.dct, false, false);
@@ -55,7 +55,7 @@ draw_main_page(fans_t *box)
 static bool
 can_verify_rte_req(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return (box->rte_req.dct.set || box->rte_req.wx_dev.set ||
 	    box->rte_req.hdg.set || box->rte_req.trk.set);
 }
@@ -85,7 +85,7 @@ verify_rte_req(fans_t *box)
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.hdg.hdg,
 		    &box->rte_req.hdg.tru);
 	} else {
-		ASSERT(box->rte_req.trk.set);
+		CPDLC_ASSERT(box->rte_req.trk.set);
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM71_REQ_GND_TRK_deg, 0);
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.trk.hdg,
@@ -98,8 +98,8 @@ verify_rte_req(fans_t *box)
 static void
 set_dct(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->rte_req.dct, pos, sizeof (box->rte_req.dct));
 	box->rte_req.wx_dev.set = false;
 	box->rte_req.hdg.set = false;
@@ -109,8 +109,8 @@ set_dct(fans_t *box, const fms_pos_t *pos)
 static void
 set_wx_dev(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	box->rte_req.dct.set = false;
 	memcpy(&box->rte_req.wx_dev, pos, sizeof (box->rte_req.wx_dev));
 	box->rte_req.hdg.set = false;
@@ -120,14 +120,14 @@ set_wx_dev(fans_t *box, const fms_pos_t *pos)
 void
 fans_req_rte_init_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(&box->rte_req, 0, sizeof (box->rte_req));
 }
 
 void
 fans_req_rte_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_page_title(box, "FANS  ROUTE REQ");
 
@@ -143,7 +143,7 @@ fans_req_rte_draw_cb(fans_t *box)
 
 	if (can_verify_rte_req(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
@@ -151,7 +151,7 @@ fans_req_rte_draw_cb(fans_t *box)
 bool
 fans_req_rte_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		fans_scratchpad_xfer_pos(box, &box->rte_req.dct,

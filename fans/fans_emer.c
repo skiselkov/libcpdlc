@@ -120,8 +120,8 @@ verify_emer(fans_t *box)
 static void
 set_divert(fans_t *box, const fms_pos_t *pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
 	memcpy(&box->emer.divert, pos, sizeof (*pos));
 }
 
@@ -192,7 +192,7 @@ fans_emer_init_cb(fans_t *box)
 	int cur_alt, sel_alt;
 
 	/* The EMER page can send freetext as well */
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(&box->emer, 0, sizeof (box->emer));
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
@@ -208,7 +208,7 @@ fans_emer_init_cb(fans_t *box)
 void
 fans_emer_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -220,13 +220,13 @@ fans_emer_draw_cb(fans_t *box)
 	else
 		fans_req_draw_freetext(box);
 
-	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<VERIFY");
+	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<CPDLC_VERIFY");
 }
 
 bool
 fans_emer_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->emer.pan = !box->emer.pan;

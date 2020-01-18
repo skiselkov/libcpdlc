@@ -47,8 +47,8 @@ verify_freetext_msg(fans_t *box)
 	char buf[sizeof (box->freetext)] = { 0 };
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
-	ASSERT(box != NULL);
-	ASSERT(freetext_msg_ready(box));
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(freetext_msg_ready(box));
 
 	for (int i = 0; i < MAX_FREETEXT_LINES; i++) {
 		if (box->freetext[i][0] != '\0')
@@ -64,7 +64,7 @@ verify_freetext_msg(fans_t *box)
 void
 fans_freetext_init_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(box->freetext, 0, sizeof (box->freetext));
 }
 
@@ -73,7 +73,7 @@ fans_freetext_draw_cb(fans_t *box)
 {
 	enum { MAX_LINES = 4 };
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -95,7 +95,7 @@ fans_freetext_draw_cb(fans_t *box)
 
 	if (freetext_msg_ready(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 }
 
@@ -104,7 +104,7 @@ fans_freetext_key_cb(fans_t *box, fms_key_t key)
 {
 	enum { MAX_LINES = 4 };
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4) {
 		int line = key - FMS_KEY_LSK_L1 + box->subpage * MAX_LINES;

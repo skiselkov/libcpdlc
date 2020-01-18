@@ -34,11 +34,11 @@ void
 fans_verify_msg(fans_t *box, cpdlc_msg_t *msg, const char *title,
     unsigned ret_page, bool is_req)
 {
-	ASSERT(box != NULL);
-	ASSERT(msg != NULL);
-	ASSERT(title != NULL);
-	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
-	ASSERT(ret_page != FMS_PAGE_VRFY);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(title != NULL);
+	CPDLC_ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	CPDLC_ASSERT(ret_page != FMS_PAGE_VRFY);
 
 	cpdlc_strlcpy(box->verify.title, title, sizeof (box->verify.title));
 	box->verify.ret_page = ret_page;
@@ -56,11 +56,11 @@ fans_vrfy_draw_cb(fans_t *box)
 	char **lines = NULL;
 	unsigned n_lines = 0;
 
-	ASSERT(box != NULL);
-	ASSERT(box->verify.msg != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->verify.msg != NULL);
 
 	fans_msg2lines(box->verify.msg, &lines, &n_lines);
-	ASSERT(n_lines != 0);
+	CPDLC_ASSERT(n_lines != 0);
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
 	fans_put_page_title(box, "FANS  VRFY %s", box->verify.title);
@@ -84,12 +84,12 @@ fans_vrfy_draw_cb(fans_t *box)
 bool
 fans_vrfy_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_R5) {
 		cpdlc_msg_thr_id_t thr_id;
 
-		ASSERT(box->verify.msg != NULL);
+		CPDLC_ASSERT(box->verify.msg != NULL);
 		thr_id = cpdlc_msglist_send(box->msglist, box->verify.msg,
 		    CPDLC_NO_MSG_THR_ID);
 		/* Message is consumed by msglist */

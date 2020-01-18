@@ -55,14 +55,14 @@ fans_update_scratchpad(fans_t *box)
 bool
 fans_scratchpad_is_delete(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return (strcmp(box->scratchpad, "DELETE") == 0);
 }
 
 void
 fans_scratchpad_clear(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(box->scratchpad, 0, sizeof (box->scratchpad));
 }
 
@@ -71,7 +71,7 @@ fans_scratchpad_pm(fans_t *box)
 {
 	int n;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	n = strlen(box->scratchpad);
 	if (n == 0) {
@@ -136,11 +136,11 @@ fans_scratchpad_xfer_multi(fans_t *box, void *userinfo, size_t buf_sz,
 {
 	const char *error = NULL;
 
-	ASSERT(box != NULL);
-	ASSERT(buf_sz != 0);
-	ASSERT(parse_func != NULL);
-	ASSERT(insert_func != NULL);
-	ASSERT(delete_func != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(buf_sz != 0);
+	CPDLC_ASSERT(parse_func != NULL);
+	CPDLC_ASSERT(insert_func != NULL);
+	CPDLC_ASSERT(delete_func != NULL);
 
 	if (strlen(box->scratchpad) == 0) {
 		if (read_func != NULL) {
@@ -197,8 +197,8 @@ fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg)
 	int new_hdg;
 	const char *error = NULL;
 
-	ASSERT(box != NULL);
-	ASSERT(hdg != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(hdg != NULL);
 
 	if (hdg->set) {
 		if (hdg->tru)
@@ -237,8 +237,8 @@ fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
 {
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
-	ASSERT(box != NULL);
-	ASSERT(useralt != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(useralt != NULL);
 
 	if (useralt->alt.alt != 0)
 		fans_print_alt(useralt, userbuf, sizeof (userbuf));
@@ -266,10 +266,10 @@ void
 fans_scratchpad_xfer_pos(fans_t *box, fms_pos_t *pos,
     unsigned ret_page, pos_pick_done_cb_t done_cb)
 {
-	ASSERT(box != NULL);
-	ASSERT(pos != NULL);
-	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
-	ASSERT(done_cb != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(pos != NULL);
+	CPDLC_ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	CPDLC_ASSERT(done_cb != NULL);
 
 	if (pos->set)
 		fans_scratchpad_xfer_pos_impl(box, pos);
@@ -283,9 +283,9 @@ fans_scratchpad_xfer_uint(fans_t *box, unsigned *value, bool *set,
 {
 	char buf[16] = { 0 };
 
-	ASSERT(box != NULL);
-	ASSERT(value != NULL);
-	ASSERT(set != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(value != NULL);
+	CPDLC_ASSERT(set != NULL);
 
 	if (*set)
 		snprintf(buf, sizeof (buf), "%d", *value);
@@ -312,8 +312,8 @@ fans_scratchpad_xfer_time(fans_t *box, fms_time_t *usertime,
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	int hrs, mins;
 
-	ASSERT(box != NULL);
-	ASSERT(usertime != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(usertime != NULL);
 
 	if (usertime->set) {
 		snprintf(userbuf, sizeof (userbuf), "%02d%02d", usertime->hrs,
@@ -343,9 +343,9 @@ parse_dir(char *buf, cpdlc_dir_t *dir)
 {
 	char first, last, c;
 
-	ASSERT(buf != NULL);
-	ASSERT(strlen(buf) != 0);
-	ASSERT(dir != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(strlen(buf) != 0);
+	CPDLC_ASSERT(dir != NULL);
 
 	first = buf[0];
 	last = buf[strlen(buf) - 1];
@@ -372,8 +372,8 @@ fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
 {
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
-	ASSERT(box != NULL);
-	ASSERT(useroff != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(useroff != NULL);
 
 	fans_print_off(useroff, userbuf, sizeof (userbuf));
 	if (autooff != NULL)
@@ -403,8 +403,8 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
 {
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 
-	ASSERT(box != NULL);
-	ASSERT(userspd != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(userspd != NULL);
 
 	if (userspd->spd.spd != 0)
 		fans_print_spd(userspd, userbuf, sizeof (userbuf));
@@ -431,8 +431,8 @@ fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *usertemp,
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	int new_temp;
 
-	ASSERT(box != NULL);
-	ASSERT(usertemp != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(usertemp != NULL);
 
 	if (usertemp->set)
 		snprintf(userbuf, sizeof (userbuf), "%d", usertemp->temp);

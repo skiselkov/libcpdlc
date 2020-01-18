@@ -34,20 +34,19 @@
 extern "C" {
 #endif
 
-#ifndef	VERIFY
 /*
- * ASSERT() and VERIFY() are assertion test macros. If the condition
- * expression provided as the argument to the macro evaluates as non-true,
- * the program prints a debug message specifying exactly where and what
- * condition was violated, a stack backtrace and a dumps core by
- * calling abort().
+ * CPDLC_ASSERT() and CPDLC_VERIFY() are assertion test macros. If the
+ * condition expression provided as the argument to the macro evaluates
+ * as non-true, the program prints a debug message specifying exactly
+ * where and what condition was violated, a stack backtrace and a dumps
+ * core by calling abort().
  *
- * The difference between ASSERT and VERIFY is that ASSERT compiles to
- * a no-op unless -DDEBUG is provided to the compiler. VERIFY always
- * checks its condition and dumps if it is non-true.
+ * The difference between CPDLC_ASSERT and CPDLC_VERIFY is that CPDLC_ASSERT
+ * compiles to a no-op unless -DDEBUG is provided to the compiler.
+ * CPDLC_VERIFY always checks its condition and dumps if it is non-true.
  */
 
-#define	VERIFY_MSG(x, fmt, ...) \
+#define	CPDLC_VERIFY_MSG(x, fmt, ...) \
 	do { \
 		if (!(x)) { \
 			cpdlc_assfail_impl(cpdlc_ass_basename(__FILE__), \
@@ -56,9 +55,9 @@ extern "C" {
 			abort(); \
 		} \
 	} while (0)
-#define	VERIFY(x)	VERIFY_MSG(x, "%s", "")
+#define	CPDLC_VERIFY(x)	CPDLC_VERIFY_MSG(x, "%s", "")
 
-#define	VERIFY3_impl(x, op, y, type, fmt) \
+#define	CPDLC_VERIFY3_impl(x, op, y, type, fmt) \
 	do { \
 		type tmp_x = (type)(x); \
 		type tmp_y = (type)(y); \
@@ -69,52 +68,50 @@ extern "C" {
 			abort(); \
 		} \
 	} while (0)
-#define	VERIFY3S(x, op, y)	VERIFY3_impl(x, op, y, long, "%lu")
-#define	VERIFY3U(x, op, y)	VERIFY3_impl(x, op, y, unsigned long, "0x%lx")
-#define	VERIFY3F(x, op, y)	VERIFY3_impl(x, op, y, double, "%f")
-#define	VERIFY3P(x, op, y)	VERIFY3_impl(x, op, y, void *, "%p")
-#define	VERIFY0(x)		VERIFY3S((x), ==, 0)
-#endif	/* !defined(VERIFY) */
+#define	CPDLC_VERIFY3S(x, op, y) CPDLC_VERIFY3_impl(x, op, y, long, "%lu")
+#define	CPDLC_VERIFY3U(x, op, y) \
+	CPDLC_VERIFY3_impl(x, op, y, unsigned long, "0x%lx")
+#define	CPDLC_VERIFY3F(x, op, y) CPDLC_VERIFY3_impl(x, op, y, double, "%f")
+#define	CPDLC_VERIFY3P(x, op, y) CPDLC_VERIFY3_impl(x, op, y, void *, "%p")
+#define	CPDLC_VERIFY0(x)	CPDLC_VERIFY3S((x), ==, 0)
 
-#ifndef	ASSERT
 #ifdef	DEBUG
-#define	ASSERT(x)		VERIFY(x)
-#define	ASSERT3S(x, op, y)	VERIFY3S(x, op, y)
-#define	ASSERT3U(x, op, y)	VERIFY3U(x, op, y)
-#define	ASSERT3F(x, op, y)	VERIFY3F(x, op, y)
-#define	ASSERT3P(x, op, y)	VERIFY3P(x, op, y)
-#define	ASSERT0(x)		VERIFY0(x)
-#define	ASSERT_MSG(x, fmt, ...)	VERIFY_MSG(x, fmt, __VA_ARGS__)
+#define	CPDLC_ASSERT(x)			CPDLC_VERIFY(x)
+#define	CPDLC_ASSERT3S(x, op, y)	CPDLC_VERIFY3S(x, op, y)
+#define	CPDLC_ASSERT3U(x, op, y)	CPDLC_VERIFY3U(x, op, y)
+#define	CPDLC_ASSERT3F(x, op, y)	CPDLC_VERIFY3F(x, op, y)
+#define	CPDLC_ASSERT3P(x, op, y)	CPDLC_VERIFY3P(x, op, y)
+#define	CPDLC_ASSERT0(x)		CPDLC_VERIFY0(x)
+#define	CPDLC_ASSERT_MSG(x, fmt, ...)	CPDLC_VERIFY_MSG(x, fmt, __VA_ARGS__)
 #else	/* !DEBUG */
-#define	ASSERT(x)		UNUSED(x)
-#define	ASSERT3S(x, op, y)	UNUSED((x) op (y))
-#define	ASSERT3U(x, op, y)	UNUSED((x) op (y))
-#define	ASSERT3F(x, op, y)	UNUSED((x) op (y))
-#define	ASSERT3P(x, op, y)	UNUSED((x) op (y))
-#define	ASSERT0(x)		UNUSED(x)
-#define	ASSERT_MSG(x, fmt, ...)	UNUSED(x)
+#define	CPDLC_ASSERT(x)			CPDLC_UNUSED(x)
+#define	CPDLC_ASSERT3S(x, op, y)	CPDLC_UNUSED((x) op (y))
+#define	CPDLC_ASSERT3U(x, op, y)	CPDLC_UNUSED((x) op (y))
+#define	CPDLC_ASSERT3F(x, op, y)	CPDLC_UNUSED((x) op (y))
+#define	CPDLC_ASSERT3P(x, op, y)	CPDLC_UNUSED((x) op (y))
+#define	CPDLC_ASSERT0(x)		CPDLC_UNUSED(x)
+#define	CPDLC_ASSERT_MSG(x, fmt, ...)	CPDLC_UNUSED(x)
 #endif	/* !DEBUG */
-#endif	/* !defined(ASSERT) */
 
 /*
  * Compile-time assertion. The condition 'x' must be constant.
  */
-#ifndef	CTASSERT
-#if	defined(__GNUC__) || defined(__clang__)
-#define	CTASSERT(x)		_CTASSERT(x, __LINE__)
-#define	_CTASSERT(x, y)		__CTASSERT(x, y)
-#define	__CTASSERT(x, y)	\
+#if     __STDC_VERSION__ >= 201112L
+#define CPDLC_CTASSERT(x)		_Static_assert((x), #x)
+#elif	defined(__GNUC__) || defined(__clang__)
+#define	CPDLC_CTASSERT(x)		_CPDLC_CTASSERT(x, __LINE__)
+#define	_CPDLC_CTASSERT(x, y)		__CPDLC_CTASSERT(x, y)
+#define	__CPDLC_CTASSERT(x, y)	\
 	typedef char __compile_time_assertion__ ## y [(x) ? 1 : -1] \
 	    __attribute__((unused))
 #else	/* !defined(__GNUC__) && !defined(__clang__) */
-#define	CTASSERT(x)
+#define	CPDLC_CTASSERT(x)
 #endif	/* !defined(__GNUC__) && !defined(__clang__) */
-#endif	/* !defined(CTASSERT) */
 
 #if	defined(__GNUC__) || defined(__clang__)
-#define	BUILTIN_STRRCHR __builtin_strrchr
+#define	CPDLC_BUILTIN_STRRCHR __builtin_strrchr
 #else	/* !defined(__GNUC__) && !defined(__clang__) */
-#define	BUILTIN_STRRCHR strrchr
+#define	CPDLC_BUILTIN_STRRCHR strrchr
 #endif	/* !defined(__GNUC__) && !defined(__clang__) */
 
 /*
@@ -123,8 +120,9 @@ extern "C" {
  * below just chops it out at compile time.
  */
 #define	cpdlc_ass_basename(f) \
-	(BUILTIN_STRRCHR(f, '/') ? BUILTIN_STRRCHR(f, '/') + 1 : \
-	    (BUILTIN_STRRCHR(f, '\\') ? BUILTIN_STRRCHR(f, '\\') + 1 : (f)))
+	(CPDLC_BUILTIN_STRRCHR(f, '/') ? CPDLC_BUILTIN_STRRCHR(f, '/') + 1 : \
+	    (CPDLC_BUILTIN_STRRCHR(f, '\\') ? \
+	    CPDLC_BUILTIN_STRRCHR(f, '\\') + 1 : (f)))
 
 typedef void (*cpdlc_assfail_t)(const char *filename, int line,
     const char *msg, void *userinfo);

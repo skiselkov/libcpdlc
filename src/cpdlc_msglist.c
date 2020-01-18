@@ -72,8 +72,8 @@ static bool
 msg_is_dl_req(const cpdlc_msg_t *msg)
 {
 	int msg_type;
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	msg_type = msg->segs[0].info->msg_type;
 	return ((msg_type >= CPDLC_DM6_REQ_alt &&
 	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE) ||
@@ -86,17 +86,17 @@ msg_is_dl_req(const cpdlc_msg_t *msg)
 static bool
 msg_dl_req_resp(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
-	ASSERT(msg->segs[0].info->is_dl);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg->segs[0].info->is_dl);
 	return (msg->segs[0].info->resp == CPDLC_RESP_Y);
 }
 
 static bool
 msg_is_ul_req(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return (msg->segs[0].info->resp == CPDLC_RESP_WU ||
 	    msg->segs[0].info->resp == CPDLC_RESP_AN ||
 	    msg->segs[0].info->resp == CPDLC_RESP_NE);
@@ -105,8 +105,8 @@ msg_is_ul_req(const cpdlc_msg_t *msg)
 static bool
 msg_is_stby(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return ((msg->segs[0].info->is_dl &&
 	    msg->segs[0].info->msg_type == CPDLC_DM2_STANDBY) ||
 	    (!msg->segs[0].info->is_dl &&
@@ -117,8 +117,8 @@ static bool
 msg_is_accept(const cpdlc_msg_t *msg)
 {
 	int msg_type;
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	msg_type = msg->segs[0].info->msg_type;
 	return ((msg->segs[0].info->is_dl &&
 	    (msg_type == CPDLC_DM0_WILCO || msg_type == CPDLC_DM4_AFFIRM)) ||
@@ -129,8 +129,8 @@ static bool
 msg_is_reject(const cpdlc_msg_t *msg)
 {
 	int msg_type;
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	msg_type = msg->segs[0].info->msg_type;
 	return ((msg->segs[0].info->is_dl &&
 	    (msg_type == CPDLC_DM1_UNABLE || msg_type == CPDLC_DM5_NEGATIVE ||
@@ -143,8 +143,8 @@ msg_is_reject(const cpdlc_msg_t *msg)
 static bool
 is_error_msg(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return ((msg->segs[0].info->is_dl &&
 	    msg->segs[0].info->msg_type == CPDLC_DM62_ERROR_errorinfo) ||
 	    (!msg->segs[0].info->is_dl &&
@@ -154,8 +154,8 @@ is_error_msg(const cpdlc_msg_t *msg)
 static bool
 msg_is_rgr(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return ((msg->segs[0].info->is_dl &&
 	    msg->segs[0].info->msg_type == CPDLC_DM3_ROGER) ||
 	    (!msg->segs[0].info->is_dl &&
@@ -165,8 +165,8 @@ msg_is_rgr(const cpdlc_msg_t *msg)
 static bool
 msg_is_link_mgmt(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return (!msg->segs[0].info->is_dl &&
 	    (msg->segs[0].info->msg_type == CPDLC_UM161_END_SVC ||
 	    msg->segs[0].info->msg_type == CPDLC_UM160_NEXT_DATA_AUTHORITY_id));
@@ -175,8 +175,8 @@ msg_is_link_mgmt(const cpdlc_msg_t *msg)
 static bool
 is_disregard_msg(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return (!msg->segs[0].info->is_dl &&
 	    msg->segs[0].info->msg_type == CPDLC_UM168_DISREGARD);
 }
@@ -195,15 +195,15 @@ thr_get_timeout(msg_thr_t *thr)
 {
 	unsigned timeout = UINT32_MAX;
 
-	ASSERT(thr != NULL);
+	CPDLC_ASSERT(thr != NULL);
 	for (msg_bucket_t *bucket = list_head(&thr->buckets); bucket != NULL;
 	    bucket = list_next(&thr->buckets, bucket)) {
 		const cpdlc_msg_t *msg = bucket->msg;
 
-		ASSERT(msg != NULL);
+		CPDLC_ASSERT(msg != NULL);
 		for (unsigned i = 0, n = cpdlc_msg_get_num_segs(msg); i < n;
 		    i++) {
-			ASSERT(msg->segs[i].info != NULL);
+			CPDLC_ASSERT(msg->segs[i].info != NULL);
 			if (msg->segs[i].info->timeout != 0 &&
 			    msg->segs[i].info->timeout < timeout) {
 				timeout = msg->segs[i].info->timeout;
@@ -274,9 +274,9 @@ dfl_get_time_func(void *unused, unsigned *hours, unsigned *mins)
 {
 	time_t now = time(NULL);
 	const struct tm *tm = localtime(&now);
-	UNUSED(unused);
-	ASSERT(hours != NULL);
-	ASSERT(mins != NULL);
+	CPDLC_UNUSED(unused);
+	CPDLC_ASSERT(hours != NULL);
+	CPDLC_ASSERT(mins != NULL);
 	*hours = tm->tm_hour;
 	*mins = tm->tm_min;
 }
@@ -284,7 +284,7 @@ dfl_get_time_func(void *unused, unsigned *hours, unsigned *mins)
 static msg_thr_t *
 find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 {
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 
 	if (thr_id != CPDLC_NO_MSG_THR_ID) {
 		for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
@@ -292,7 +292,7 @@ find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 			if (thr->thr_id == thr_id)
 				return (thr);
 		}
-		VERIFY_MSG(0, "Invalid message thread ID %x", thr_id);
+		CPDLC_VERIFY_MSG(0, "Invalid message thread ID %x", thr_id);
 	} else {
 		msg_thr_t *thr = safe_calloc(1, sizeof (*thr));
 		thr->thr_id = msglist->next_thr_id++;
@@ -308,10 +308,10 @@ free_msg_thr(msg_thr_t *thr)
 {
 	msg_bucket_t *bucket;
 
-	ASSERT(thr != NULL);
+	CPDLC_ASSERT(thr != NULL);
 
 	while ((bucket = list_remove_head(&thr->buckets)) != NULL) {
-		ASSERT(bucket->msg != NULL);
+		CPDLC_ASSERT(bucket->msg != NULL);
 		cpdlc_msg_free(bucket->msg);
 		free(bucket);
 	}
@@ -324,10 +324,10 @@ msg_matches_bucket(const cpdlc_msg_t *msg, const msg_bucket_t *bucket)
 {
 	unsigned min, mrn;
 
-	ASSERT(msg != NULL);
-	ASSERT(bucket != NULL);
-	ASSERT(bucket->msg != NULL);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(bucket != NULL);
+	CPDLC_ASSERT(bucket->msg != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 
 	min = cpdlc_msg_get_min(bucket->msg);
 	mrn = cpdlc_msg_get_mrn(msg);
@@ -341,8 +341,8 @@ msg_matches_bucket(const cpdlc_msg_t *msg, const msg_bucket_t *bucket)
 msg_thr_t *
 msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 {
-	ASSERT(msglist != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	if (cpdlc_msg_get_mrn(msg) == CPDLC_INVALID_MSG_SEQ_NR)
 		return (NULL);
@@ -357,7 +357,7 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 			continue;
 		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
 		    bucket != NULL; bucket = list_prev(&thr->buckets, bucket)) {
-			ASSERT(bucket->msg != NULL);
+			CPDLC_ASSERT(bucket->msg != NULL);
 			if (msg_matches_bucket(msg, bucket))
 				return (thr);
 		}
@@ -374,9 +374,9 @@ msg_recv_cb(cpdlc_client_t *cl)
 	unsigned num_upd_thrs = 0;
 	cpdlc_msglist_update_cb_t update_cb;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	msglist = cpdlc_client_get_cb_userinfo(cl);
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 
 	mutex_enter(&msglist->lock);
 
@@ -391,7 +391,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 		bucket = safe_calloc(1, sizeof (*bucket));
 		bucket->msg = msg;
 		bucket->tok = CPDLC_INVALID_MSG_TOKEN;
-		ASSERT(msglist->get_time_func != NULL);
+		CPDLC_ASSERT(msglist->get_time_func != NULL);
 		msglist->get_time_func(msglist->userinfo, &bucket->hours,
 		    &bucket->mins);
 		bucket->time = time(NULL);
@@ -422,7 +422,7 @@ cpdlc_msglist_alloc(cpdlc_client_t *cl)
 {
 	cpdlc_msglist_t *msglist = safe_calloc(1, sizeof (*msglist));
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	cpdlc_client_set_msg_recv_cb(cl, msg_recv_cb);
 	cpdlc_client_set_cb_userinfo(cl, msglist);
@@ -441,7 +441,7 @@ cpdlc_msglist_free(cpdlc_msglist_t *msglist)
 {
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 
 	while ((thr = list_remove_head(&msglist->thr)) != NULL)
 		free_msg_thr(thr);
@@ -452,7 +452,7 @@ cpdlc_msglist_free(cpdlc_msglist_t *msglist)
 void
 cpdlc_msglist_update(cpdlc_msglist_t *msglist)
 {
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 
 	mutex_enter(&msglist->lock);
 
@@ -470,14 +470,14 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	msg_thr_t		*thr;
 	msg_bucket_t		*bucket;
 
-	ASSERT(msglist != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	thr = find_msg_thr(msglist, thr_id);
 	if (thr_id == CPDLC_NO_MSG_THR_ID)
 		thr->status = CPDLC_MSG_THR_OPEN;
 	else
-		ASSERT(!thr_status_is_final(thr->status));
+		CPDLC_ASSERT(!thr_status_is_final(thr->status));
 	thr_id = thr->thr_id;
 
 	/* Assign the appropriate MIN and MRN flags */
@@ -494,7 +494,7 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	bucket->msg = msg;
 	bucket->tok = cpdlc_client_send_msg(msglist->cl, msg);
 	bucket->sent = true;
-	ASSERT(msglist->get_time_func != NULL);
+	CPDLC_ASSERT(msglist->get_time_func != NULL);
 	msglist->get_time_func(msglist->userinfo, &bucket->hours,
 	    &bucket->mins);
 	bucket->time = time(NULL);
@@ -509,8 +509,8 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 {
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	mutex_enter(&msglist->lock);
 	thr = msglist_send_impl(msglist, msg, thr_id);
@@ -527,8 +527,8 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 {
 	unsigned thr_i = 0;
 
-	ASSERT(msglist != NULL);
-	ASSERT(cap != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(cap != NULL);
 
 	mutex_enter(&msglist->lock);
 	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
@@ -537,7 +537,7 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 		    thr_status_is_final(thr->status))
 			continue;
 		if (thr_i < *cap) {
-			ASSERT(thr_ids != NULL);
+			CPDLC_ASSERT(thr_ids != NULL);
 			thr_ids[thr_i] = thr->thr_id;
 		}
 		thr_i++;
@@ -557,8 +557,8 @@ cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
 	msg_thr_t		*thr;
 	cpdlc_msg_thr_status_t	status;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -575,8 +575,8 @@ cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 {
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -591,8 +591,8 @@ cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
 	unsigned count;
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -610,17 +610,17 @@ cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	msg_thr_t *thr;
 	msg_bucket_t *bucket;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 
 	thr = find_msg_thr(msglist, thr_id);
-	ASSERT3U(msg_nr, <, list_count(&thr->buckets));
+	CPDLC_ASSERT3U(msg_nr, <, list_count(&thr->buckets));
 	bucket = list_head(&thr->buckets);
 	for (unsigned i = 0; i < msg_nr; i++)
 		bucket = list_next(&thr->buckets, bucket);
-	ASSERT(bucket != NULL);
+	CPDLC_ASSERT(bucket != NULL);
 	if (msg_p != NULL)
 		*msg_p = bucket->msg;
 	if (token_p != NULL)
@@ -640,8 +640,8 @@ cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 {
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -657,8 +657,8 @@ cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	msg_thr_t *thr;
 	bool result;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -673,8 +673,8 @@ cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 {
 	msg_thr_t *thr;
 
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
@@ -686,7 +686,7 @@ cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 void
 cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist, void *userinfo)
 {
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 	mutex_enter(&msglist->lock);
 	msglist->userinfo = userinfo;
 	mutex_exit(&msglist->lock);
@@ -695,7 +695,7 @@ cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist, void *userinfo)
 void *
 cpdlc_msglist_get_userinfo(cpdlc_msglist_t *msglist)
 {
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 	/* Reading a pointer is atomic, no locking req'd */
 	return (msglist->userinfo);
 }
@@ -704,7 +704,7 @@ void
 cpdlc_msglist_set_update_cb(cpdlc_msglist_t *msglist,
     cpdlc_msglist_update_cb_t update_cb)
 {
-	ASSERT(msglist != NULL);
+	CPDLC_ASSERT(msglist != NULL);
 	mutex_enter(&msglist->lock);
 	msglist->update_cb = update_cb;
 	mutex_exit(&msglist->lock);
@@ -714,8 +714,8 @@ void
 cpdlc_msglist_set_get_time_func(cpdlc_msglist_t *msglist,
     cpdlc_get_time_func_t func)
 {
-	ASSERT(msglist != NULL);
-	ASSERT(func != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(func != NULL);
 	mutex_enter(&msglist->lock);
 	msglist->get_time_func = func;
 	mutex_exit(&msglist->lock);

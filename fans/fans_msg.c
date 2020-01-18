@@ -70,8 +70,8 @@ msg_log_draw_thr(fans_t *box, cpdlc_msg_thr_id_t thr_id, unsigned row)
 	const cpdlc_msg_t *msg;
 	char buf[64];
 
-	ASSERT(box != NULL);
-	ASSERT3U(row, <, 5);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT3U(row, <, 5);
 
 	draw_thr_hdr(box, 2 * row + 1, thr_id);
 
@@ -89,7 +89,7 @@ fans_msg_log_draw_cb(fans_t *box)
 	cpdlc_msg_thr_id_t *thr_ids;
 	unsigned num_thr_ids;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	thr_ids = fans_get_thr_ids(box, &num_thr_ids, box->msg_log_open);
 	if (num_thr_ids == 0) {
@@ -121,7 +121,7 @@ fans_msg_log_key_cb(fans_t *box, fms_key_t key)
 {
 	enum { MSG_LOG_LINES = 4 };
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4) {
 		unsigned num_thr_ids;
@@ -147,8 +147,8 @@ fans_msg_log_key_cb(fans_t *box, fms_key_t key)
 static const cpdlc_msg_t *
 msg_get_last_uplink(fans_t *box)
 {
-	ASSERT(box != NULL);
-	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 
 	for (unsigned i = 0,
 	    n = cpdlc_msglist_get_thr_msg_count(box->msglist, box->thr_id);
@@ -173,8 +173,8 @@ msg_can_resp(fans_t *box, cpdlc_resp_type_t resp)
 	    CPDLC_LOGON_COMPLETE)
 		return (false);
 
-	ASSERT(box != NULL);
-	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 	msg = msg_get_last_uplink(box);
 	return (msg != NULL && msg->segs[0].info->resp == resp);
 }
@@ -217,7 +217,7 @@ send_quick_resp(fans_t *box, int msg_type)
 {
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	cpdlc_msg_add_seg(msg, true, msg_type, 0);
 	cpdlc_msglist_send(box->msglist, msg, box->thr_id);
@@ -250,7 +250,7 @@ send_standby(fans_t *box)
 static void
 draw_response_section(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
 	    FMS_COLOR_CYAN, FMS_FONT_SMALL, "--------RESPONSE--------");
@@ -290,8 +290,8 @@ fans_msg_thr_draw_cb(fans_t *box)
 	char **lines = NULL;
 	unsigned n_lines = 0;
 
-	ASSERT(box != NULL);
-	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 
 	cpdlc_msglist_thr_mark_seen(box->msglist, box->thr_id);
 
@@ -316,7 +316,7 @@ fans_msg_thr_draw_cb(fans_t *box)
 bool
 fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L6) {
 		fans_set_page(box, FMS_PAGE_MSG_LOG, false);

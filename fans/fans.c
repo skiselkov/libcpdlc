@@ -173,8 +173,8 @@ static void put_cur_time(fans_t *box);
 void
 fans_set_thr_id(fans_t *box, cpdlc_msg_thr_id_t thr_id)
 {
-	ASSERT(box != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 	box->thr_id = thr_id;
 	cpdlc_msglist_thr_mark_seen(box->msglist, thr_id);
 }
@@ -184,11 +184,11 @@ fans_set_page(fans_t *box, unsigned page_nr, bool init)
 {
 	fms_page_t *page;
 
-	ASSERT(box != NULL);
-	ASSERT3U(page_nr, <, FMS_NUM_PAGES);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT3U(page_nr, <, FMS_NUM_PAGES);
 	page = &fms_pages[page_nr];
-	ASSERT(page->draw_cb != NULL);
-	ASSERT(page->key_cb != NULL);
+	CPDLC_ASSERT(page->draw_cb != NULL);
+	CPDLC_ASSERT(page->key_cb != NULL);
 
 	box->page = page;
 	box->subpage = 0;
@@ -201,7 +201,7 @@ fans_set_page(fans_t *box, unsigned page_nr, bool init)
 void
 fans_set_num_subpages(fans_t *box, unsigned num)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	box->num_subpages = num;
 	box->subpage %= num;
 }
@@ -209,7 +209,7 @@ fans_set_num_subpages(fans_t *box, unsigned num)
 void
 fans_set_error(fans_t *box, const char *error)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (error != NULL)
 		cpdlc_strlcpy(box->error_msg, error, sizeof (box->error_msg));
@@ -225,10 +225,10 @@ put_str_v(fans_t *box, unsigned row, unsigned col, bool align_right,
 	int l;
 	va_list ap2;
 
-	ASSERT(box != NULL);
-	ASSERT(fmt != NULL);
-	ASSERT3U(row, <, FMS_ROWS);
-	ASSERT3U(col, <, FMS_COLS);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(fmt != NULL);
+	CPDLC_ASSERT3U(row, <, FMS_ROWS);
+	CPDLC_ASSERT3U(col, <, FMS_COLS);
 
 	va_copy(ap2, ap);
 	l = vsnprintf(NULL, 0, fmt, ap);
@@ -259,10 +259,10 @@ fans_put_str(fans_t *box, unsigned row, unsigned col, bool align_right,
 	int l;
 	va_list ap;
 
-	ASSERT(box != NULL);
-	ASSERT3U(color, <=, FMS_COLOR_MAGENTA);
-	ASSERT3U(size, <=, FMS_FONT_LARGE);
-	ASSERT(fmt != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT3U(color, <=, FMS_COLOR_MAGENTA);
+	CPDLC_ASSERT3U(size, <=, FMS_FONT_LARGE);
+	CPDLC_ASSERT(fmt != NULL);
 
 	va_start(ap, fmt);
 	l = put_str_v(box, row, col, align_right, color, size, fmt, ap);
@@ -283,8 +283,8 @@ fans_put_page_title(fans_t *box, const char *fmt, ...)
 static void
 lsk2row(int lsk_key_id, int *row, bool *align_right)
 {
-	ASSERT(row != NULL);
-	ASSERT(align_right);
+	CPDLC_ASSERT(row != NULL);
+	CPDLC_ASSERT(align_right);
 	if (lsk_key_id >= FMS_KEY_LSK_L1 && lsk_key_id <= FMS_KEY_LSK_L6) {
 		*row = 2 * (lsk_key_id - FMS_KEY_LSK_L1) + 2;
 		*align_right = false;
@@ -293,7 +293,7 @@ lsk2row(int lsk_key_id, int *row, bool *align_right)
 		*row = 2 * (lsk_key_id - FMS_KEY_LSK_R1) + 2;
 		*align_right = true;
 	} else {
-		VERIFY_MSG(0, "Invalid lsk_key_id = %x", lsk_key_id);
+		CPDLC_VERIFY_MSG(0, "Invalid lsk_key_id = %x", lsk_key_id);
 	}
 }
 
@@ -394,7 +394,7 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
     const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
     bool req, bool units)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const cpdlc_arg_t *, alt, useralt->alt.alt != 0,
 	    useralt, autoalt);
 
@@ -422,7 +422,7 @@ fans_put_spd(fans_t *box, int row, int col, bool align_right,
 {
 	char buf[8];
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const cpdlc_arg_t *, spd, userspd->spd.spd != 0,
 	    userspd, autospd);
 
@@ -445,8 +445,8 @@ void
 fans_put_hdg(fans_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req)
 {
-	ASSERT(box != NULL);
-	ASSERT(hdg != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(hdg != NULL);
 
 	if (hdg->set) {
 		fans_put_str(box, row, col + 2, align_right, FMS_COLOR_WHITE,
@@ -464,7 +464,7 @@ fans_put_time(fans_t *box, int row, int col, bool align_right,
     const fms_time_t *usertime, const fms_time_t *autotime, bool req,
     bool colon)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const fms_time_t *, t, usertime->set, usertime, autotime);
 
 	if (t != NULL && t->set) {
@@ -486,7 +486,7 @@ void
 fans_put_temp(fans_t *box, int row, int col, bool align_right,
     const fms_temp_t *usertemp, const fms_temp_t *autotemp, bool req)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const fms_temp_t *, temp, usertemp->set, usertemp, autotemp);
 	if (temp != NULL && temp->set) {
 		fans_put_str(box, row, col + 2, align_right, color,
@@ -503,8 +503,8 @@ void
 fans_put_pos(fans_t *box, int row, int col, bool align_right,
     const fms_pos_t *userpos, const fms_pos_t *autopos, bool req)
 {
-	ASSERT(box != NULL);
-	ASSERT(userpos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(userpos != NULL);
 
 	if (userpos->set) {
 		char buf[16];
@@ -530,11 +530,11 @@ void
 fans_put_off(fans_t *box, int row, int col, bool align_right,
     const fms_off_t *useroff, const fms_off_t *autooff, bool req)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const fms_off_t *, off, useroff->nm != 0, useroff, autooff);
 
 	if (off != NULL && off->nm != 0) {
-		ASSERT(off->dir == CPDLC_DIR_LEFT ||
+		CPDLC_ASSERT(off->dir == CPDLC_DIR_LEFT ||
 		    off->dir == CPDLC_DIR_RIGHT);
 		fans_put_str(box, row, col, align_right, color, font, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
@@ -548,7 +548,7 @@ void
 fans_put_wind(fans_t *box, int row, int col, bool align_right,
     const fms_wind_t *userwind, const fms_wind_t *autowind, bool req)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const fms_wind_t *, wind, userwind->set, userwind, autowind);
 
 	if (wind != NULL && wind->set) {
@@ -565,7 +565,7 @@ fans_put_wind(fans_t *box, int row, int col, bool align_right,
 static void
 clear_screen(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	for (unsigned row = 0; row < FMS_ROWS; row++) {
 		for (unsigned col = 0; col < FMS_COLS; col++) {
@@ -579,7 +579,7 @@ clear_screen(fans_t *box)
 static void
 update_error_msg(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	fans_put_str(box, ERROR_MSG_ROW, 0, false, FMS_COLOR_AMBER,
 	    FMS_FONT_LARGE, "%s", box->error_msg);
 }
@@ -593,7 +593,7 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 		memcpy(&box->funcs, funcs, sizeof (*funcs));
 	box->userinfo = userinfo;
 	box->cl = cpdlc_client_alloc(false);
-	ASSERT(box->cl != NULL);
+	CPDLC_ASSERT(box->cl != NULL);
 	cpdlc_client_set_host(box->cl, "localhost");
 	box->msglist = cpdlc_msglist_alloc(box->cl);
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
@@ -607,9 +607,9 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 void
 fans_free(fans_t *box)
 {
-	ASSERT(box != NULL);
-	ASSERT(box->msglist != NULL);
-	ASSERT(box->cl != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->msglist != NULL);
+	CPDLC_ASSERT(box->cl != NULL);
 
 	if (box->verify.msg != NULL)
 		cpdlc_msg_free(box->verify.msg);
@@ -621,15 +621,15 @@ fans_free(fans_t *box)
 cpdlc_client_t *
 fans_get_client(const fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return (box->cl);
 }
 
 const fms_char_t *
 fans_get_screen_row(const fans_t *box, unsigned row)
 {
-	ASSERT(box != NULL);
-	ASSERT3U(row, <, FMS_ROWS);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT3U(row, <, FMS_ROWS);
 	return (box->scr[row]);
 }
 
@@ -638,7 +638,7 @@ del_key(fans_t *box)
 {
 	unsigned l;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->error_msg[0] != '\0') {
 		if (strlen(box->error_msg) > ERROR_MSG_MAX) {
@@ -664,9 +664,9 @@ del_key(fans_t *box)
 void
 fans_push_key(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
-	ASSERT(box->page != NULL);
-	ASSERT(box->page->key_cb != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->page != NULL);
+	CPDLC_ASSERT(box->page->key_cb != NULL);
 
 	/* Clear any errors on a new LSK entry */
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_R6 &&
@@ -702,8 +702,8 @@ fans_push_char(fans_t *box, char c)
 {
 	unsigned len;
 
-	ASSERT(box != NULL);
-	ASSERT(c != 0);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(c != 0);
 
 	if (strcmp(box->scratchpad, "DELETE") == 0)
 		memset(box->scratchpad, 0, sizeof (box->scratchpad));
@@ -720,7 +720,7 @@ update_cda(fans_t *box)
 {
 	cpdlc_logon_status_t st;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 	if (st == CPDLC_LOGON_COMPLETE) {
 		char cda[8];
@@ -732,12 +732,12 @@ update_cda(fans_t *box)
 void
 fans_update(fans_t *box)
 {
-	ASSERT(box != NULL);
-	ASSERT(box->page != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->page != NULL);
 
 	cpdlc_msglist_update(box->msglist);
 	clear_screen(box);
-	ASSERT(box->page->draw_cb != NULL);
+	CPDLC_ASSERT(box->page->draw_cb != NULL);
 	box->page->draw_cb(box);
 	draw_atc_msg_lsk(box);
 	if (box->page->has_return) {
@@ -754,7 +754,7 @@ fans_update(fans_t *box)
 void
 fans_put_page_ind(fans_t *box, fms_color_t color)
 {
-	ASSERT(box->num_subpages != 0);
+	CPDLC_ASSERT(box->num_subpages != 0);
 	fans_put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%d/%d",
 	    box->subpage + 1, box->num_subpages);
 }
@@ -764,7 +764,7 @@ fans_put_atc_status(fans_t *box)
 {
 	cpdlc_logon_status_t st;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	if (st != CPDLC_LOGON_COMPLETE) {
@@ -779,7 +779,7 @@ put_cur_time(fans_t *box)
 	time_t now;
 	const struct tm *tm;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	now = time(NULL);
 	tm = localtime(&now);
@@ -792,8 +792,8 @@ fans_get_thr_ids(fans_t *box, unsigned *num_thr_ids, bool ignore_closed)
 {
 	cpdlc_msg_thr_id_t *thr_ids;
 
-	ASSERT(box != NULL);
-	ASSERT(num_thr_ids != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(num_thr_ids != NULL);
 
 	*num_thr_ids = 0;
 	cpdlc_msglist_get_thr_ids(box->msglist, ignore_closed, NULL,
@@ -835,7 +835,7 @@ fans_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty)
 	case CPDLC_MSG_THR_CONN_ENDED:
 		return ("CONN ENDED");
 	default:
-		VERIFY_MSG(0, "Invalid thread status %x", st);
+		CPDLC_VERIFY_MSG(0, "Invalid thread status %x", st);
 	}
 }
 
@@ -846,7 +846,7 @@ get_new_thr_id(fans_t *box)
 	cpdlc_msg_thr_id_t *thr_ids;
 	cpdlc_msg_thr_id_t thr_id = CPDLC_NO_MSG_THR_ID;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	thr_ids = fans_get_thr_ids(box, &num_thr_ids, true);
 	for (unsigned i = 0; i < num_thr_ids; i++) {
@@ -869,7 +869,7 @@ draw_atc_msg_lsk(fans_t *box)
 	cpdlc_msg_thr_id_t thr_id;
 	cpdlc_logon_status_t logon;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
 	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
@@ -884,7 +884,7 @@ handle_atc_msg_lsk(fans_t *box)
 	cpdlc_msg_thr_id_t thr_id;
 	cpdlc_logon_status_t logon;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
 	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
@@ -899,9 +899,9 @@ fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p)
 	char buf[1024];
 	const char *start, *cur, *end, *last_sp;
 
-	ASSERT(msg != NULL);
-	ASSERT(lines_p != NULL);
-	ASSERT(n_lines_p != NULL);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(lines_p != NULL);
+	CPDLC_ASSERT(n_lines_p != NULL);
 
 	cpdlc_msg_readable(msg, buf, sizeof (buf));
 	last_sp = strchr(buf, ' ');
@@ -935,10 +935,10 @@ void
 fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
     char ***lines_p, unsigned *n_lines_p)
 {
-	ASSERT(msglist != NULL);
-	ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
-	ASSERT(lines_p != NULL);
-	ASSERT(n_lines_p != NULL);
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(lines_p != NULL);
+	CPDLC_ASSERT(n_lines_p != NULL);
 
 	for (unsigned i = 0, n = cpdlc_msglist_get_thr_msg_count(msglist,
 	    thr_id); i < n; i++) {
@@ -972,8 +972,8 @@ fans_free_lines(char **lines, unsigned n_lines)
 void
 fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 {
-	ASSERT(box != NULL);
-	ASSERT(step_at != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(step_at != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "STEP AT");
 	switch (step_at->type) {
@@ -1001,20 +1001,20 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 		}
 		break;
 	default:
-		VERIFY(0);
+		CPDLC_VERIFY(0);
 	}
 }
 
 void
 fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 {
-	ASSERT(box != NULL);
-	ASSERT(step_at != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(step_at != NULL);
 
 	if (key == FMS_KEY_LSK_R1) {
 		step_at->type = (step_at->type + 1) % NUM_STEP_AT_TYPES;
 	} else if (step_at->type != STEP_AT_NONE) {
-		ASSERT3U(key, ==, FMS_KEY_LSK_R2);
+		CPDLC_ASSERT3U(key, ==, FMS_KEY_LSK_R2);
 
 		if (step_at->type == STEP_AT_TIME) {
 			fans_scratchpad_xfer_time(box, &step_at->tim, NULL);
@@ -1028,7 +1028,7 @@ fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 bool
 fans_step_at_can_send(const fms_step_at_t *step_at)
 {
-	ASSERT(step_at != NULL);
+	CPDLC_ASSERT(step_at != NULL);
 	return (step_at->type == STEP_AT_NONE ||
 	    (step_at->type == STEP_AT_TIME && step_at->tim.set) ||
 	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
@@ -1037,8 +1037,8 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 void
 fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 {
-	ASSERT(box != NULL);
-	ASSERT(spd != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(spd != NULL);
 	memset(spd, 0, sizeof (*spd));
 	if (box->funcs.get_cur_spd != NULL && box->funcs.get_cur_spd(
 	    box->userinfo, &spd->spd.mach, &spd->spd.spd)) {
@@ -1050,7 +1050,7 @@ int
 fans_get_cur_alt(const fans_t *box)
 {
 	int alt = 0;
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	if (box->funcs.get_cur_alt != NULL)
 		alt = box->funcs.get_cur_alt(box->userinfo);
 	return (MIN(MAX(alt, 0), MAX_ALT));
@@ -1060,7 +1060,7 @@ int
 fans_get_sel_alt(const fans_t *box)
 {
 	int alt = 0;
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	if (box->funcs.get_sel_alt != NULL)
 		alt = box->funcs.get_sel_alt(box->userinfo);
 	return (MIN(MAX(alt, 0), MAX_ALT));
@@ -1070,8 +1070,8 @@ bool
 get_wpt_common(const fans_t *box, fans_get_wpt_info_t func,
     fms_wpt_info_t *info)
 {
-	ASSERT(box != NULL);
-	ASSERT(info != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(info != NULL);
 	memset(info, 0, sizeof (*info));
 	if (func != NULL) {
 		bool res = func(box->userinfo, info);
@@ -1115,7 +1115,7 @@ fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info)
 int
 fans_get_offset(const fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	if (box->funcs.get_offset != NULL)
 		return (box->funcs.get_offset(box->userinfo));
 	return (0);
@@ -1124,9 +1124,9 @@ fans_get_offset(const fans_t *box)
 bool
 fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins)
 {
-	ASSERT(box != NULL);
-	ASSERT(hrs != NULL);
-	ASSERT(mins != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(hrs != NULL);
+	CPDLC_ASSERT(mins != NULL);
 	if (box->funcs.get_fuel != NULL)
 		return (box->funcs.get_fuel(box->userinfo, hrs, mins));
 	return (false);
@@ -1135,8 +1135,8 @@ fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins)
 void
 fans_get_sat(const fans_t *box, fms_temp_t *temp)
 {
-	ASSERT(box != NULL);
-	ASSERT(temp != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(temp != NULL);
 	if (box->funcs.get_sat != NULL)
 		temp->set = box->funcs.get_sat(box->userinfo, &temp->temp);
 	else
@@ -1146,8 +1146,8 @@ fans_get_sat(const fans_t *box, fms_temp_t *temp)
 void
 fans_get_wind(const fans_t *box, fms_wind_t *wind)
 {
-	ASSERT(box != NULL);
-	ASSERT(wind != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(wind != NULL);
 	memset(wind, 0, sizeof (*wind));
 	if (box->funcs.get_wind != NULL &&
 	    box->funcs.get_wind(box->userinfo, &wind->deg, &wind->spd)) {
@@ -1160,8 +1160,8 @@ fans_get_wind(const fans_t *box, fms_wind_t *wind)
 void
 fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos)
 {
-	ASSERT(info != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(pos != NULL);
 
 	memset(pos, 0, sizeof (*pos));
 	pos->set = true;
@@ -1172,8 +1172,8 @@ fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos)
 void
 fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim)
 {
-	ASSERT(info != NULL);
-	ASSERT(tim != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(tim != NULL);
 
 	memset(tim, 0, sizeof (*tim));
 	if (info->time_set) {
@@ -1186,8 +1186,8 @@ fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim)
 void
 fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt)
 {
-	ASSERT(info != NULL);
-	ASSERT(alt != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(alt != NULL);
 
 	memset(alt, 0, sizeof (*alt));
 	if (info->alt_set) {
@@ -1199,8 +1199,8 @@ fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt)
 void
 fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd)
 {
-	ASSERT(info != NULL);
-	ASSERT(spd != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(spd != NULL);
 
 	memset(spd, 0, sizeof (*spd));
 	if (info->spd_set) {

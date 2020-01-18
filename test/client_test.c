@@ -49,7 +49,7 @@ static int lsk_nr = 0;
 static void
 handle_signal(int signum)
 {
-	UNUSED(signum);
+	CPDLC_UNUSED(signum);
 	if (fans != NULL)
 		fans_free(fans);
 	if (win != NULL)
@@ -68,7 +68,7 @@ init_term(void)
 	keypad(stdscr, true);
 	nodelay(win, true);
 	noecho();
-	ASSERT(win != NULL);
+	CPDLC_ASSERT(win != NULL);
 	start_color();
 
 	init_pair(FMS_COLOR_WHITE, COLOR_WHITE, COLOR_BLACK);
@@ -281,7 +281,7 @@ main(void)
 	init_term();
 
 	fans = fans_alloc(NULL, NULL);
-	ASSERT(fans != NULL);
+	CPDLC_ASSERT(fans != NULL);
 
 	draw_screen();
 	for (;;) {

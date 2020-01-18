@@ -33,7 +33,7 @@
 void
 fans_requests_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_page_title(box, "FANS  REQUESTS");
 
@@ -60,7 +60,7 @@ fans_requests_key_cb(fans_t *box, fms_key_t key)
 {
 	enum { MAX_LINES = 4 };
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
@@ -99,8 +99,8 @@ fans_requests_key_cb(fans_t *box, fms_key_t key)
 void
 fans_req_add_common(fans_t *box, cpdlc_msg_t *msg)
 {
-	ASSERT(box != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	if (box->req_common.due_wx) {
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM65_DUE_TO_WX, 0);
@@ -138,7 +138,7 @@ fans_req_add_common(fans_t *box, cpdlc_msg_t *msg)
 void
 fans_req_draw_due(fans_t *box, bool due_tfc)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "DUE TO WX");
 	fans_put_altn_selector(box, LSK2_ROW, false, box->req_common.due_wx,
@@ -158,8 +158,8 @@ fans_req_draw_due(fans_t *box, bool due_tfc)
 void
 fans_req_key_due(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
-	ASSERT(key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4);
 	if (key == FMS_KEY_LSK_L2) {
 		box->req_common.due_wx = !box->req_common.due_wx;
 		box->req_common.due_ac = false;
@@ -178,7 +178,7 @@ fans_req_key_due(fans_t *box, fms_key_t key)
 void
 fans_req_draw_freetext(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "REMARKS");
 
@@ -200,8 +200,8 @@ fans_req_key_freetext(fans_t *box, fms_key_t key)
 {
 	int line;
 
-	ASSERT(box != NULL);
-	ASSERT(key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4);
 
 	line = key - FMS_KEY_LSK_L1;
 	fans_scratchpad_xfer(box, box->req_common.freetext[line],

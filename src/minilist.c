@@ -32,9 +32,9 @@
 void
 list_create(list_t *list, size_t size, size_t offset)
 {
-	ASSERT(list != NULL);
-	ASSERT(size != 0);
-	ASSERT3U(size, >=, offset + sizeof (list_node_t));
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(size != 0);
+	CPDLC_ASSERT3U(size, >=, offset + sizeof (list_node_t));
 
 	list->head = list->tail = NULL;
 	list->size = size;
@@ -45,8 +45,8 @@ list_create(list_t *list, size_t size, size_t offset)
 void
 list_destroy(list_t *list)
 {
-	ASSERT(list != NULL);
-	ASSERT0(list->count);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT0(list->count);
 	list->head = list->tail = NULL;
 	list->size = 0;
 	list->offset = 0;
@@ -55,45 +55,45 @@ list_destroy(list_t *list)
 void *
 list_head(const list_t *list)
 {
-	ASSERT(list != NULL);
+	CPDLC_ASSERT(list != NULL);
 	return (list->head);
 }
 
 void *
 list_tail(const list_t *list)
 {
-	ASSERT(list != NULL);
+	CPDLC_ASSERT(list != NULL);
 	return (list->tail);
 }
 
 void *
 list_next(const list_t *list, void *elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(elem != NULL);
 	return (P2N(list, elem)->next);
 }
 
 void *
 list_prev(const list_t *list, void *elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(elem != NULL);
 	return (P2N(list, elem)->prev);
 }
 
 size_t
 list_count(const list_t *list)
 {
-	ASSERT(list != NULL);
+	CPDLC_ASSERT(list != NULL);
 	return (list->count);
 }
 
 void
 list_insert_head(list_t *list, void *elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(elem != NULL);
 	if (list->head != NULL) {
 		/* List already populated, prepend */
 		P2N(list, list->head)->prev = elem;
@@ -112,8 +112,8 @@ list_insert_head(list_t *list, void *elem)
 void
 list_insert_tail(list_t *list, void *elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(elem != NULL);
 	if (list->tail != NULL) {
 		/* List already populated, prepend */
 		P2N(list, list->tail)->next = elem;
@@ -132,9 +132,9 @@ list_insert_tail(list_t *list, void *elem)
 void
 list_remove(list_t *list, void *elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(elem != NULL);
-	ASSERT(list->count != 0);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(elem != NULL);
+	CPDLC_ASSERT(list->count != 0);
 
 	if (list->head == elem)
 		list->head = P2N(list, elem)->next;
@@ -154,8 +154,8 @@ list_remove(list_t *list, void *elem)
 static inline void
 list_insert_between(list_t *list, void *elem, void *before, void *after)
 {
-	ASSERT(before != NULL);
-	ASSERT(after != NULL);
+	CPDLC_ASSERT(before != NULL);
+	CPDLC_ASSERT(after != NULL);
 	P2N(list, elem)->prev = before;
 	P2N(list, elem)->next = after;
 	P2N(list, before)->next = elem;
@@ -165,9 +165,9 @@ list_insert_between(list_t *list, void *elem, void *before, void *after)
 void
 list_insert_before(list_t *list, void *new_elem, void *old_elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(new_elem != NULL);
-	ASSERT(old_elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(new_elem != NULL);
+	CPDLC_ASSERT(old_elem != NULL);
 
 	if (list->head == old_elem) {
 		list_insert_head(list, new_elem);
@@ -181,9 +181,9 @@ list_insert_before(list_t *list, void *new_elem, void *old_elem)
 void
 list_insert_after(list_t *list, void *new_elem, void *old_elem)
 {
-	ASSERT(list != NULL);
-	ASSERT(new_elem != NULL);
-	ASSERT(old_elem != NULL);
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(new_elem != NULL);
+	CPDLC_ASSERT(old_elem != NULL);
 
 	if (list->tail == old_elem) {
 		list_insert_tail(list, new_elem);
@@ -199,7 +199,7 @@ list_remove_head(list_t *list)
 {
 	void *p;
 
-	ASSERT(list != NULL);
+	CPDLC_ASSERT(list != NULL);
 	p = list->head;
 	if (p != NULL)
 		list_remove(list, p);
@@ -211,7 +211,7 @@ list_remove_tail(list_t *list)
 {
 	void *p;
 
-	ASSERT(list != NULL);
+	CPDLC_ASSERT(list != NULL);
 	p = list->tail;
 	if (p != NULL)
 		list_remove(list, p);

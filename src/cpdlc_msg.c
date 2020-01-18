@@ -69,7 +69,7 @@ set_error(char *reason, unsigned cap, const char *fmt, ...)
 {
 	va_list ap;
 
-	ASSERT(fmt != NULL);
+	CPDLC_ASSERT(fmt != NULL);
 
 	if (cap == 0)
 		return;
@@ -85,13 +85,15 @@ msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 	const cpdlc_msg_info_t *infos =
 	    (is_dl ? cpdlc_dl_infos : cpdlc_ul_infos);
 
-	ASSERT3S(msg_type, >=, 0);
-	if (is_dl)
-		ASSERT3S(msg_type, <=, CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
-	else
-		ASSERT3S(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
+	CPDLC_ASSERT3S(msg_type, >=, 0);
+	if (is_dl) {
+		CPDLC_ASSERT3S(msg_type, <=,
+		    CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
+	} else {
+		CPDLC_ASSERT3S(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
+	}
 	if (is_dl && msg_type == 67) {
-		ASSERT(msg_subtype == 0 ||
+		CPDLC_ASSERT(msg_subtype == 0 ||
 		    (msg_subtype >= CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time &&
 		    msg_subtype <= CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt));
 	}
@@ -111,7 +113,7 @@ msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 unsigned
 cpdlc_escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 {
-	ASSERT(in_buf != NULL);
+	CPDLC_ASSERT(in_buf != NULL);
 
 	for (unsigned i = 0, j = 0;; i++, j++) {
 		char c = in_buf[i];
@@ -414,7 +416,7 @@ cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 {
 	cpdlc_msg_t *msg = safe_calloc(1, sizeof (cpdlc_msg_t));
 
-	ASSERT3U(pkt_type, <=, CPDLC_PKT_PONG);
+	CPDLC_ASSERT3U(pkt_type, <=, CPDLC_PKT_PONG);
 	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
 	msg->pkt_type = pkt_type;
 
@@ -456,7 +458,7 @@ cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 void
 cpdlc_msg_free(cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	free(msg->logon_data);
 
@@ -486,7 +488,7 @@ pkt_type2str(cpdlc_pkt_t pkt_type)
 	case CPDLC_PKT_PONG:
 		return ("PONG");
 	default:
-		VERIFY_MSG(0, "Invalid pkt_type %x", pkt_type);
+		CPDLC_VERIFY_MSG(0, "Invalid pkt_type %x", pkt_type);
 	}
 }
 
@@ -502,7 +504,7 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
 	if (msg->is_logon) {
 		char textbuf[64];
-		ASSERT(msg->logon_data != NULL);
+		CPDLC_ASSERT(msg->logon_data != NULL);
 		cpdlc_escape_percent(msg->logon_data, textbuf,
 		    sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGON=%s", textbuf);
@@ -548,7 +550,7 @@ readable_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s", textbuf);
 
 		if (close == end) {
-			ASSERT3U(arg, ==, info->num_args);
+			CPDLC_ASSERT3U(arg, ==, info->num_args);
 			break;
 		}
 
@@ -591,7 +593,7 @@ validate_logon_logoff_message(const cpdlc_msg_t *msg, char *reason,
 {
 	const char *msgtype;
 
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	msgtype = (msg->is_logon ? "LOGON" : "LOGOFF");
 	if (msg->is_logon && msg->is_logoff) {
@@ -1069,9 +1071,9 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 	bool pkt_type_seen = false;
 	bool skipped_cr = false;
 
-	ASSERT(in_buf != NULL);
-	ASSERT(msg_p != NULL);
-	ASSERT(consumed != NULL);
+	CPDLC_ASSERT(in_buf != NULL);
+	CPDLC_ASSERT(msg_p != NULL);
+	CPDLC_ASSERT(consumed != NULL);
 
 	term = strchr(in_buf, '\n');
 	if (term != NULL) {
@@ -1220,51 +1222,51 @@ cpdlc_msg_get_dl(const cpdlc_msg_t *msg)
 {
 	if (msg->num_segs == 0)
 		return (false);
-	ASSERT(msg->segs[0].info != NULL);
+	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	return (msg->segs[0].info->is_dl);
 }
 
 void
 cpdlc_msg_set_min(cpdlc_msg_t *msg, unsigned min)
 {
-	ASSERT(msg != NULL);
-	ASSERT(min != CPDLC_INVALID_MSG_SEQ_NR);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(min != CPDLC_INVALID_MSG_SEQ_NR);
 	msg->min = min;
 }
 
 unsigned
 cpdlc_msg_get_min(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	return (msg->min);
 }
 
 void
 cpdlc_msg_set_mrn(cpdlc_msg_t *msg, unsigned mrn)
 {
-	ASSERT(msg != NULL);
-	ASSERT(mrn != CPDLC_INVALID_MSG_SEQ_NR);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(mrn != CPDLC_INVALID_MSG_SEQ_NR);
 	msg->mrn = mrn;
 }
 
 unsigned
 cpdlc_msg_get_mrn(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	return (msg->mrn);
 }
 
 const char *
 cpdlc_msg_get_logon_data(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	return (msg->logon_data);
 }
 
 void
 cpdlc_msg_set_logon_data(cpdlc_msg_t *msg, const char *logon_data)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	free(msg->logon_data);
 	msg->logon_data = strdup(logon_data);
 	msg->is_logon = true;
@@ -1273,7 +1275,7 @@ cpdlc_msg_set_logon_data(cpdlc_msg_t *msg, const char *logon_data)
 unsigned
 cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg)
 {
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	return (msg->num_segs);
 }
 
@@ -1283,27 +1285,29 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 {
 	cpdlc_msg_seg_t *seg;
 
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(msg != NULL);
 	if (!is_dl) {
-		ASSERT3U(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
-		ASSERT0(msg_subtype);
+		CPDLC_ASSERT3U(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
+		CPDLC_ASSERT0(msg_subtype);
 	} else {
-		ASSERT3U(msg_type, <=, CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
+		CPDLC_ASSERT3U(msg_type, <=,
+		    CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
 		if (msg_subtype != 0) {
-			ASSERT3U(msg_subtype, >=,
+			CPDLC_ASSERT3U(msg_subtype, >=,
 			    CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time);
-			ASSERT3U(msg_subtype, <=,
+			CPDLC_ASSERT3U(msg_subtype, <=,
 			    CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt);
 		}
 	}
-	ASSERT_MSG(msg->num_segs == 0 || msg->segs[0].info->is_dl == is_dl,
-	    "Can't mix DM and UM message segments in a single message %p", msg);
+	CPDLC_ASSERT_MSG(msg->num_segs == 0 || msg->segs[0].info->is_dl ==
+	    is_dl, "Can't mix DM and UM message segments in a single "
+	    "message %p", msg);
 	if (msg->num_segs >= CPDLC_MAX_MSG_SEGS)
 		return (-1);
 	seg = &msg->segs[msg->num_segs];
 
 	seg->info = msg_infos_lookup(is_dl, msg_type, msg_subtype);
-	ASSERT(seg->info != NULL);
+	CPDLC_ASSERT(seg->info != NULL);
 
 	return (msg->num_segs++);
 }
@@ -1311,8 +1315,8 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 void
 cpdlc_msg_del_seg(cpdlc_msg_t *msg, unsigned seg_nr)
 {
-	ASSERT(msg != NULL);
-	ASSERT3U(seg_nr, <, msg->num_segs);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	/*
 	 * Simply shift all the message segments after this one,
 	 * forward by one step.
@@ -1328,10 +1332,10 @@ cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg, unsigned seg_nr)
 {
 	const cpdlc_msg_seg_t *seg;
 
-	ASSERT(msg != NULL);
-	ASSERT3U(seg_nr, <, msg->num_segs);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	seg = &msg->segs[seg_nr];
-	ASSERT(seg->info != NULL);
+	CPDLC_ASSERT(seg->info != NULL);
 
 	return (seg->info->num_args);
 }
@@ -1343,12 +1347,12 @@ cpdlc_msg_seg_get_arg_type(const cpdlc_msg_t *msg, unsigned seg_nr,
 	const cpdlc_msg_seg_t *seg;
 	const cpdlc_msg_info_t *info;
 
-	ASSERT(msg != NULL);
-	ASSERT3U(seg_nr, <, msg->num_segs);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	seg = &msg->segs[seg_nr];
-	ASSERT(seg->info != NULL);
+	CPDLC_ASSERT(seg->info != NULL);
 	info = seg->info;
-	ASSERT3U(arg_nr, <, info->num_args);
+	CPDLC_ASSERT3U(arg_nr, <, info->num_args);
 
 	return (info->args[arg_nr]);
 }
@@ -1361,29 +1365,29 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	cpdlc_msg_seg_t *seg;
 	cpdlc_arg_t *arg;
 
-	ASSERT(msg != NULL);
-	ASSERT3U(seg_nr, <, msg->num_segs);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	seg = &msg->segs[seg_nr];
-	ASSERT(seg->info != NULL);
+	CPDLC_ASSERT(seg->info != NULL);
 	info = seg->info;
-	ASSERT3U(arg_nr, <, info->num_args);
+	CPDLC_ASSERT3U(arg_nr, <, info->num_args);
 	arg = &seg->args[arg_nr];
 
-	ASSERT(arg_val1 != NULL);
+	CPDLC_ASSERT(arg_val1 != NULL);
 
 	switch (info->args[arg_nr]) {
 	case CPDLC_ARG_ALTITUDE:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->alt.fl = *(bool *)arg_val1;
 		arg->alt.alt = *(int *)arg_val2;
 		break;
 	case CPDLC_ARG_SPEED:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->spd.mach = *(bool *)arg_val1;
 		arg->spd.spd = *(int *)arg_val2;
 		break;
 	case CPDLC_ARG_TIME:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->time.hrs = *(int *)arg_val1;
 		arg->time.mins = *(int *)arg_val2;
 		break;
@@ -1395,7 +1399,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		break;
 	case CPDLC_ARG_DISTANCE:
 		arg->dist = *(double *)arg_val1;
-		ASSERT3F(arg->dist, >=, 0);
+		CPDLC_ASSERT3F(arg->dist, >=, 0);
 		break;
 	case CPDLC_ARG_VVI:
 		arg->vvi = *(int *)arg_val1;
@@ -1415,7 +1419,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->squawk = *(unsigned *)arg_val1;
 		break;
 	case CPDLC_ARG_ICAONAME:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		cpdlc_strlcpy(arg->icaoname.icao, arg_val1,
 		    sizeof (arg->icaoname.icao));
 		cpdlc_strlcpy(arg->icaoname.name, arg_val2,
@@ -1425,12 +1429,12 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->freq = *(double *)arg_val1;
 		break;
 	case CPDLC_ARG_DEGREES:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->deg.deg = *(unsigned *)arg_val1;
 		arg->deg.tru = *(bool *)arg_val2;
 		break;
 	case CPDLC_ARG_BARO:
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->baro.hpa = *(bool *)arg_val1;
 		arg->baro.val = *(double *)arg_val2;
 		break;
@@ -1440,9 +1444,9 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->freetext = strdup(arg_val1);
 		break;
 	default:
-		VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
-		    "invalid argument %d type %x", msg, seg_nr, info->is_dl,
-		    info->msg_type, info->msg_subtype, arg_nr,
+		CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) "
+		    "contains invalid argument %d type %x", msg, seg_nr,
+		    info->is_dl, info->msg_type, info->msg_subtype, arg_nr,
 		    info->args[arg_nr]);
 	}
 }
@@ -1455,55 +1459,55 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	const cpdlc_msg_seg_t *seg;
 	const cpdlc_arg_t *arg;
 
-	ASSERT(msg != NULL);
-	ASSERT3U(seg_nr, <, msg->num_segs);
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	seg = &msg->segs[seg_nr];
-	ASSERT(seg->info != NULL);
+	CPDLC_ASSERT(seg->info != NULL);
 	info = seg->info;
-	ASSERT3U(arg_nr, <, info->num_args);
+	CPDLC_ASSERT3U(arg_nr, <, info->num_args);
 	arg = &seg->args[arg_nr];
 
 	switch (info->args[arg_nr]) {
 	case CPDLC_ARG_ALTITUDE:
-		ASSERT(arg_val1 != NULL);
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		*(bool *)arg_val1 = arg->alt.fl;
 		*(int *)arg_val2 = arg->alt.alt;
 		return (sizeof (arg->alt));
 	case CPDLC_ARG_SPEED:
-		ASSERT(arg_val1 != NULL);
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		*(bool *)arg_val1 = arg->spd.mach;
 		*(int *)arg_val2 = arg->spd.spd;
 		return (sizeof (arg->spd));
 	case CPDLC_ARG_TIME:
-		ASSERT(arg_val1 != NULL);
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		*(int *)arg_val1 = arg->time.hrs;
 		*(int *)arg_val2 = arg->time.mins;
 		return (sizeof (arg->time));
 	case CPDLC_ARG_POSITION:
-		ASSERT(arg_val1 != NULL || str_cap == 0);
+		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		cpdlc_strlcpy(arg_val1, arg->pos, str_cap);
 		return (strlen(arg->pos));
 	case CPDLC_ARG_DIRECTION:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(cpdlc_dir_t *)arg_val1 = arg->dir;
 		return (sizeof (arg->dir));
 	case CPDLC_ARG_DISTANCE:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(double *)arg_val1 = arg->dist;
 		return (arg->dist);
 	case CPDLC_ARG_VVI:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(int *)arg_val1 = arg->vvi;
 		return (arg->vvi);
 	case CPDLC_ARG_TOFROM:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(bool *)arg_val1 = arg->tofrom;
 		return (arg->tofrom);
 	case CPDLC_ARG_ROUTE:
-		ASSERT(arg_val1 != NULL || str_cap == 0);
+		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		if (arg->route == NULL) {
 			if (str_cap > 0)
 				*(char *)arg_val1 = '\0';
@@ -1512,36 +1516,36 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		cpdlc_strlcpy(arg_val1, arg->route, str_cap);
 		return (strlen(arg->route));
 	case CPDLC_ARG_PROCEDURE:
-		ASSERT(arg_val1 != NULL || str_cap == 0);
+		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		cpdlc_strlcpy(arg_val1, arg->proc, str_cap);
 		return (strlen(arg->proc));
 	case CPDLC_ARG_SQUAWK:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(unsigned *)arg_val1 = arg->squawk;
 		return (sizeof (arg->squawk));
 	case CPDLC_ARG_ICAONAME:
-		ASSERT(arg_val1 != NULL || str_cap == 0);
+		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		cpdlc_strlcpy(arg_val1, arg->icaoname.icao, str_cap);
 		cpdlc_strlcpy(arg_val2, arg->icaoname.name, str_cap);
 		return (strlen(arg->icaoname.name));
 	case CPDLC_ARG_FREQUENCY:
-		ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
 		*(double *)arg_val1 = arg->freq;
 		return (sizeof (arg->freq));
 	case CPDLC_ARG_DEGREES:
-		ASSERT(arg_val1 != NULL);
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		*(unsigned *)arg_val1 = arg->deg.deg;
 		*(bool *)arg_val2 = arg->deg.tru;
 		return (sizeof (arg->deg));
 	case CPDLC_ARG_BARO:
-		ASSERT(arg_val1 != NULL);
-		ASSERT(arg_val2 != NULL);
+		CPDLC_ASSERT(arg_val1 != NULL);
+		CPDLC_ASSERT(arg_val2 != NULL);
 		*(bool *)arg_val1 = arg->baro.hpa;
 		*(double *)arg_val2 = arg->baro.val;
 		return (sizeof (arg->baro));
 	case CPDLC_ARG_FREETEXT:
-		ASSERT(arg_val1 != NULL || str_cap == 0);
+		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		if (arg->freetext == NULL) {
 			if (str_cap > 0)
 				*(char *)arg_val1 = '\0';
@@ -1550,7 +1554,7 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		cpdlc_strlcpy(arg_val1, arg->freetext, str_cap);
 		return (strlen(arg->freetext));
 	}
-	VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains invalid "
-	    "argument %d type %x", msg, seg_nr, info->is_dl, info->msg_type,
-	    info->msg_subtype, arg_nr, info->args[arg_nr]);
+	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
+	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,
+	    info->msg_type, info->msg_subtype, arg_nr, info->args[arg_nr]);
 }

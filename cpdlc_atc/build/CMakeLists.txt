@@ -36,6 +36,7 @@ SET(SRC
     ${LIBCPDLC_SOURCES}
     )
 SET(HDR
+    ../main.h
     ../imgui/imconfig.h
     ../imgui/imgui_internal.h
     ../imgui/imstb_textedit.h
@@ -51,24 +52,32 @@ SET(ALL_SRC ${SRC} ${HDR})
 LIST(SORT ALL_SRC)
 add_executable(cpdlc_atc ${ALL_SRC})
 
-FIND_LIBRARY(GLFW_LIBRARY "glfw3" "../glfw/src")
-if(WIN32)
-	FIND_LIBRARY(OPENGL_LIBRARY "opengl32")
-elseif(APPLE)
-	FIND_LIBRARY(OPENGL_LIBRARY "OpenGL")
-else()
-	FIND_LIBRARY(OPENGL_LIBRARY "GL")
-endif()
-
 target_include_directories(cpdlc_atc PUBLIC
     ${LIBCPDLC_INCLUDES}
+    "../../libacfutils/src"
     "../imgui"
     "../imgui/examples"
     "../glfw/include"
     "../gl3w/include"
     )
 
+FIND_LIBRARY(GLFW_LIBRARY "glfw3" "../glfw/src")
+if(WIN32)
+	FIND_LIBRARY(OPENGL_LIBRARY "opengl32")
+	FIND_LIBRARY(ACFUTILS_LIBRARY "acfutils"
+	    "../../libacfutils/qmake/win64")
+elseif(APPLE)
+	FIND_LIBRARY(OPENGL_LIBRARY "OpenGL")
+	FIND_LIBRARY(ACFUTILS_LIBRARY "acfutils"
+	    "../../libacfutils/qmake/mac64")
+else()
+	FIND_LIBRARY(OPENGL_LIBRARY "GL")
+	FIND_LIBRARY(ACFUTILS_LIBRARY "acfutils"
+	    "../../libacfutils/qmake/lin64")
+endif()
+
 target_link_libraries(cpdlc_atc
+    ${ACFUTILS_LIBRARY}
     ${GLFW_LIBRARY}
     ${OPENGL_LIBRARY}
     ${OPENGL_PLATFORM_LIBRARY}

@@ -175,18 +175,18 @@ typedef struct {
 	} while (0)
 #define	mutex_destroy(x) \
 	do { \
-		ASSERT((x)->inited); \
+		CPDLC_ASSERT((x)->inited); \
 		DeleteCriticalSection(&(x)->cs); \
 		(x)->inited = FALSE; \
 	} while (0)
 #define	mutex_enter(x) \
 	do { \
-		ASSERT((x)->inited); \
+		CPDLC_ASSERT((x)->inited); \
 		EnterCriticalSection(&(x)->cs); \
 	} while (0)
 #define	mutex_exit(x) \
 	do { \
-		ASSERT((x)->inited); \
+		CPDLC_ASSERT((x)->inited); \
 		LeaveCriticalSection(&(x)->cs); \
 	} while (0)
 
@@ -194,8 +194,9 @@ typedef struct {
 	((*(thrp) = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)proc, arg, \
 	    0, NULL)) != NULL)
 #define	thread_join(thrp) \
-	VERIFY3S(WaitForSingleObject(*(thrp), INFINITE), ==, WAIT_OBJECT_0)
-#define	thread_set_name(name)		UNUSED(name)
+	CPDLC_VERIFY3S(WaitForSingleObject(*(thrp), INFINITE), ==, \
+	    WAIT_OBJECT_0)
+#define	thread_set_name(name)		CPDLC_UNUSED(name)
 
 static inline uint64_t
 cpdlc_thread_microclock(void)
@@ -207,7 +208,7 @@ cpdlc_thread_microclock(void)
 }
 
 #define	cv_wait(cv, mtx) \
-	VERIFY(SleepConditionVariableCS((cv), &(mtx)->cs, INFINITE))
+	CPDLC_VERIFY(SleepConditionVariableCS((cv), &(mtx)->cs, INFINITE))
 static inline int
 cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 {

@@ -41,7 +41,7 @@ fans_parse_time(const char *buf, int *hrs_p, int *mins_p)
 {
 	int num, hrs, mins, len;
 
-	ASSERT(buf != NULL);
+	CPDLC_ASSERT(buf != NULL);
 
 	len = strlen(buf);
 	for (int i = 0; i < MIN(len, 4); i++) {
@@ -84,9 +84,9 @@ fans_parse_alt(const char *str, unsigned field_nr, void *data)
 {
 	cpdlc_arg_t arg;
 
-	ASSERT(str != NULL);
-	UNUSED(field_nr);
-	ASSERT(data != NULL);
+	CPDLC_ASSERT(str != NULL);
+	CPDLC_UNUSED(field_nr);
+	CPDLC_ASSERT(data != NULL);
 
 	memset(&arg, 0, sizeof (arg));
 
@@ -131,11 +131,11 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 	cpdlc_arg_t *inarg, *outarg;
 	size_t offset;
 
-	ASSERT(box != NULL);
-	ASSERT(data != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(data != NULL);
 	inarg = data;
 	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
 
 	if (field_nr >= 2)
@@ -166,9 +166,9 @@ fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	cpdlc_arg_t *outarg;
 	size_t offset;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
@@ -187,9 +187,9 @@ fans_parse_spd(const char *str, unsigned field_nr, void *data)
 {
 	cpdlc_arg_t *arg;
 
-	ASSERT(str != NULL);
-	UNUSED(field_nr);
-	ASSERT(data != NULL);
+	CPDLC_ASSERT(str != NULL);
+	CPDLC_UNUSED(field_nr);
+	CPDLC_ASSERT(data != NULL);
 	arg = data;
 
 	if (strlen(str) < 2)
@@ -222,11 +222,11 @@ fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
 	cpdlc_arg_t *inarg, *outarg;
 	size_t offset;
 
-	ASSERT(box != NULL);
-	ASSERT(data != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(data != NULL);
 	inarg = data;
 	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
 
 	if (field_nr >= 2)
@@ -257,9 +257,9 @@ fans_read_spd_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	cpdlc_arg_t *outarg;
 	size_t offset;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
@@ -278,9 +278,9 @@ fans_parse_wind(const char *str, unsigned field_nr, void *data)
 {
 	fms_wind_t *out_wind;
 
-	ASSERT(str != NULL);
-	ASSERT(field_nr == 0 || field_nr == 1);
-	ASSERT(data != NULL);
+	CPDLC_ASSERT(str != NULL);
+	CPDLC_ASSERT(field_nr == 0 || field_nr == 1);
+	CPDLC_ASSERT(data != NULL);
 	out_wind = data;
 
 	if (field_nr == 0) {
@@ -305,10 +305,10 @@ fans_insert_wind_block(fans_t *box, unsigned field_nr, void *data,
 {
 	fms_wind_t *in_wind, *out_wind;
 
-	ASSERT(box != NULL);
-	ASSERT(data != NULL);
-	ASSERT(field_nr == 0 || field_nr == 1);
-	ASSERT(userinfo != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(data != NULL);
+	CPDLC_ASSERT(field_nr == 0 || field_nr == 1);
+	CPDLC_ASSERT(userinfo != NULL);
 
 	in_wind = data;
 	out_wind = userinfo;
@@ -331,8 +331,8 @@ fans_read_wind_block(fans_t *box, void *userinfo,
 {
 	fms_wind_t *wind;
 
-	ASSERT(box != NULL);
-	ASSERT(userinfo != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(userinfo != NULL);
 	wind = userinfo;
 	if (wind->set) {
 		snprintf(str, READ_FUNC_BUF_SZ, "%03d/%d",
@@ -343,8 +343,8 @@ fans_read_wind_block(fans_t *box, void *userinfo,
 const char *
 fans_delete_wind(fans_t *box, void *userinfo)
 {
-	ASSERT(box != NULL);
-	ASSERT(userinfo != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(userinfo != NULL);
 	memset(userinfo, 0, sizeof (fms_wind_t));
 	return (NULL);
 }
@@ -355,9 +355,9 @@ fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 	cpdlc_arg_t *outarg;
 	size_t offset;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
 	memset(outarg, 0, 2 * sizeof (cpdlc_arg_t));
 
@@ -367,7 +367,7 @@ fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 int
 fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap)
 {
-	ASSERT(arg != NULL);
+	CPDLC_ASSERT(arg != NULL);
 	if (arg->alt.fl)
 		return (snprintf(str, cap, "FL%d", arg->alt.alt / 100));
 	return (snprintf(str, cap, "%d", arg->alt.alt));
@@ -376,7 +376,7 @@ fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap)
 int
 fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap)
 {
-	ASSERT(arg != NULL);
+	CPDLC_ASSERT(arg != NULL);
 	if (arg->spd.mach)
 		return (snprintf(str, cap, "M%d", arg->spd.spd / 10));
 	return (snprintf(str, cap, "%d", arg->spd.spd));
@@ -385,7 +385,7 @@ fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap)
 int
 fans_print_off(const fms_off_t *off, char *buf, size_t cap)
 {
-	ASSERT(off != NULL);
+	CPDLC_ASSERT(off != NULL);
 	if (off->nm != 0) {
 		return (snprintf(buf, cap, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm));
@@ -398,8 +398,8 @@ void
 fans_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
     pos_print_style_t style)
 {
-	ASSERT(pos != NULL);
-	ASSERT(buf != NULL);
+	CPDLC_ASSERT(pos != NULL);
+	CPDLC_ASSERT(buf != NULL);
 
 	if (!pos->set) {
 		if (style == POS_PRINT_PRETTY) {
@@ -464,8 +464,8 @@ parse_deg_mins(const char *buf, unsigned num_deg_digits,
 {
 	double deg_max;
 
-	ASSERT(buf != NULL);
-	ASSERT(num_deg_digits == 2 || num_deg_digits == 3);
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(num_deg_digits == 2 || num_deg_digits == 3);
 	deg_max = (num_deg_digits == 2 ? 89 : 179);
 
 	if (strlen(buf) <= num_deg_digits) {
@@ -511,7 +511,7 @@ is_valid_icao_code(const char *icao)
 static void
 strip_spaces(char *buf)
 {
-	ASSERT(buf != NULL);
+	CPDLC_ASSERT(buf != NULL);
 	for (int i = 0, n = strlen(buf); i < n; i++) {
 		if (isspace(buf[i]))
 			memmove(&buf[i], &buf[i + 1], (n - i) + 1);
@@ -521,8 +521,8 @@ strip_spaces(char *buf)
 const char *
 fans_parse_pos(const char *buf, fms_pos_t *pos)
 {
-	ASSERT(buf != NULL);
-	ASSERT(pos != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(pos != NULL);
 
 	if (strlen(buf) == 0) {
 		pos->set = false;

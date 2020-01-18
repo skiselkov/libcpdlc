@@ -50,7 +50,7 @@ draw_main_page(fans_t *box)
 void
 fans_req_vmc_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -62,14 +62,14 @@ fans_req_vmc_draw_cb(fans_t *box)
 	else
 		fans_req_draw_freetext(box);
 
-	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<VERIFY");
+	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<CPDLC_VERIFY");
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 
 bool
 fans_req_vmc_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 &&
 	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {

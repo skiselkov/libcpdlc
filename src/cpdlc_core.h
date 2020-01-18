@@ -31,14 +31,14 @@ extern "C" {
 #endif
 
 #if	defined(_MSC_VER)
-#define	CPDLC_API	__declspec(dllexport)
-#define	UNUSED_ATTR	__attribute__((unused))
+#define	CPDLC_API		__declspec(dllexport)
+#define	CPDLC_UNUSED_ATTR	__attribute__((unused))
 #else	/* !defined(_MSC_VER) */
 #define	CPDLC_API
-#define	UNUSED_ATTR	__attribute__((unused))
+#define	CPDLC_UNUSED_ATTR	__attribute__((unused))
 #endif	/* !defined(_MSC_VER) */
 
-#define	UNUSED(x)	(void)(x)
+#define	CPDLC_UNUSED(x)	(void)(x)
 
 #if	__STDC_VERSION__ < 199901L
 # if	defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)

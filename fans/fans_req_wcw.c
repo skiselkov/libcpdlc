@@ -36,7 +36,7 @@
 static bool
 can_verify_wcw_req(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return (box->wcw_req.alt.alt.alt != 0 ||
 	    box->wcw_req.spd[0].spd.spd != 0 || box->wcw_req.back_on_rte ||
 	    box->wcw_req.alt_chg);
@@ -86,7 +86,7 @@ verify_wcw_req(fans_t *box)
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM53_WHEN_CAN_WE_EXPECT_HIGHER_ALT, 0);
 	} else {
-		ASSERT3U(box->wcw_req.alt_chg, ==, ALT_CHG_LOWER);
+		CPDLC_ASSERT3U(box->wcw_req.alt_chg, ==, ALT_CHG_LOWER);
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM52_WHEN_CAN_WE_EXPECT_LOWER_ALT, 0);
 	}
@@ -131,14 +131,14 @@ draw_main_page(fans_t *box)
 void
 fans_req_wcw_init_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(&box->wcw_req, 0, sizeof (box->wcw_req));
 }
 
 void
 fans_req_wcw_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -152,7 +152,7 @@ fans_req_wcw_draw_cb(fans_t *box)
 
 	if (can_verify_wcw_req(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
@@ -160,7 +160,7 @@ fans_req_wcw_draw_cb(fans_t *box)
 bool
 fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		char buf[8];

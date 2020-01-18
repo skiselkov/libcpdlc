@@ -281,7 +281,7 @@ set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 static void
 check_keepalive(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	if (time(NULL) - cl->last_data_rdwr < KEEPALIVE_TIMEOUT)
 		return;
@@ -323,7 +323,7 @@ logon_worker(void *userinfo)
 {
 	cpdlc_client_t *cl = userinfo;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	mutex_enter(&cl->lock);
 
@@ -343,16 +343,16 @@ logon_worker(void *userinfo)
 		switch (cl->logon_status) {
 		case CPDLC_LOGON_CONNECTING_LINK:
 #ifdef	CPDLC_CLIENT_LWS
-			ASSERT(cl->lws_sock != NULL);
+			CPDLC_ASSERT(cl->lws_sock != NULL);
 			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
 #else	/* !CPDLC_CLIENT_LWS */
-			ASSERT(SOCKET_IS_VALID(cl->sock));
+			CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
 			complete_conn(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_HANDSHAKING_LINK:
 #ifndef	CPDLC_CLIENT_LWS
-			ASSERT(SOCKET_IS_VALID(cl->sock));
+			CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
 			tls_handshake(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
@@ -379,7 +379,7 @@ logon_worker(void *userinfo)
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		default:
-			VERIFY_MSG(0, "client reached impossible "
+			CPDLC_VERIFY_MSG(0, "client reached impossible "
 			    "logon_status = %x", cl->logon_status);
 		}
 		/* Schedules a keepalive message if necessary */
@@ -459,7 +459,7 @@ clear_key_data(cpdlc_client_t *cl)
 void
 cpdlc_client_free(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	mutex_enter(&cl->lock);
 	if (cl->worker_started) {
@@ -470,8 +470,8 @@ cpdlc_client_free(cpdlc_client_t *cl)
 		mutex_exit(&cl->lock);
 	}
 
-	ASSERT3P(cl->inbuf, ==, NULL);
-	ASSERT0(cl->inbuf_sz);
+	CPDLC_ASSERT3P(cl->inbuf, ==, NULL);
+	CPDLC_ASSERT0(cl->inbuf_sz);
 
 	list_destroy(&cl->outmsgbufs.sending);
 	list_destroy(&cl->outmsgbufs.sent);
@@ -498,7 +498,7 @@ cpdlc_client_free(cpdlc_client_t *cl)
 void
 cpdlc_client_set_host(cpdlc_client_t *cl, const char *host)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	if (host != NULL)
 		cpdlc_strlcpy(cl->host, host, sizeof (cl->host));
@@ -510,14 +510,14 @@ cpdlc_client_set_host(cpdlc_client_t *cl, const char *host)
 const char *
 cpdlc_client_get_host(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	return (cl->host);
 }
 
 void
 cpdlc_client_set_port(cpdlc_client_t *cl, unsigned port)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->port = port;
 	mutex_exit(&cl->lock);
@@ -526,14 +526,14 @@ cpdlc_client_set_port(cpdlc_client_t *cl, unsigned port)
 unsigned
 cpdlc_client_get_port(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	return (cl->port);
 }
 
 void
 cpdlc_client_set_ca_file(cpdlc_client_t *cl, const char *cafile)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	free(cl->cafile);
 	cl->cafile = NULL;
@@ -545,7 +545,7 @@ cpdlc_client_set_ca_file(cpdlc_client_t *cl, const char *cafile)
 const char *
 cpdlc_client_get_ca_file(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	return (cl->cafile);
 }
 
@@ -554,9 +554,9 @@ cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
     const char *cert_file)
 {
-	ASSERT(cl != NULL);
-	ASSERT(key_file != NULL || cert_file == NULL);
-	ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(key_file != NULL || cert_file == NULL);
+	CPDLC_ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
 
 	mutex_enter(&cl->lock);
 
@@ -579,9 +579,9 @@ cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
     const char *cert_pem_data)
 {
-	ASSERT(cl != NULL);
-	ASSERT(key_pem_data != NULL || cert_pem_data == NULL);
-	ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(key_pem_data != NULL || cert_pem_data == NULL);
+	CPDLC_ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
 
 	mutex_enter(&cl->lock);
 
@@ -605,7 +605,7 @@ reset_link_state(cpdlc_client_t *cl)
 	inmsgbuf_t *inbuf;
 	outmsgbuf_t *outbuf;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	cl->logon_status = CPDLC_LOGON_NONE;
 	free(cl->logon.nda);
 	cl->logon.nda = NULL;
@@ -627,7 +627,7 @@ reset_link_state(cpdlc_client_t *cl)
 		gnutls_deinit(cl->session);
 		cl->session = NULL;
 	} else {
-		ASSERT0(cl->handshake_completed);
+		CPDLC_ASSERT0(cl->handshake_completed);
 	}
 	if (cl->xcred != NULL) {
 		gnutls_certificate_free_credentials(cl->xcred);
@@ -648,7 +648,7 @@ reset_link_state(cpdlc_client_t *cl)
 		free(outbuf);
 	}
 	while ((outbuf = list_remove_head(&cl->outmsgbufs.sent)) != NULL) {
-		ASSERT3P(outbuf->buf, ==, NULL);
+		CPDLC_ASSERT3P(outbuf->buf, ==, NULL);
 		free(outbuf);
 	}
 
@@ -670,7 +670,7 @@ init_conn_lws(cpdlc_client_t *cl)
 	struct lws_context_creation_info info;
 	struct lws_client_connect_info ccinfo;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	info.port = CONTEXT_PORT_NO_LISTEN;
 	info.protocols = proto_list_lws;
@@ -725,9 +725,9 @@ resolve_host(cpdlc_client_t *cl)
 	int port = (cl->port != 0 ? cl->port : DEFAULT_PORT_TCP);
 	char host[PATH_MAX];
 
-	ASSERT(cl != NULL);
-	ASSERT3S(cl->sock, ==, -1);
-	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3S(cl->sock, ==, -1);
+	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
 	if (cl->ai != NULL) {
 		freeaddrinfo(cl->ai);
@@ -754,7 +754,7 @@ resolve_host(cpdlc_client_t *cl)
 		set_logon_failure(cl, "%s: %s", host, gai_strerror(result));
 		return (false);
 	}
-	ASSERT(ai != NULL);
+	CPDLC_ASSERT(ai != NULL);
 	cl->ai_cur = cl->ai = ai;
 
 	return (true);
@@ -767,10 +767,10 @@ init_conn(cpdlc_client_t *cl)
 	socktype_t sock;
 	cpdlc_logon_status_t new_status;
 
-	ASSERT(cl != NULL);
-	ASSERT3S(cl->sock, ==, -1);
-	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
-	ASSERT(cl->ai != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3S(cl->sock, ==, -1);
+	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
+	CPDLC_ASSERT(cl->ai != NULL);
 
 	/* No more addresses to try */
 	if (cl->ai_cur == NULL)
@@ -827,8 +827,8 @@ complete_conn(cpdlc_client_t *cl)
 	int res;
 	socklen_t so_error_len = sizeof (so_error);
 
-	ASSERT(cl != NULL);
-	ASSERT3S(cl->logon_status, ==, CPDLC_LOGON_CONNECTING_LINK);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3S(cl->logon_status, ==, CPDLC_LOGON_CONNECTING_LINK);
 
 #if	USE_SELECT
 	FD_ZERO(&wfds);
@@ -886,8 +886,8 @@ report_gnutls_verify_error(cpdlc_client_t *cl)
 	int status;
 	gnutls_datum_t out;
 
-	ASSERT(cl != NULL);
-	ASSERT(cl->session != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl->session != NULL);
 
 	type = gnutls_certificate_type_get(cl->session);
 	status = gnutls_session_get_verify_cert_status(cl->session);
@@ -905,13 +905,13 @@ tls_handshake(cpdlc_client_t *cl)
 {
 	int ret;
 
-	ASSERT(cl != NULL);
-	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_HANDSHAKING_LINK);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_HANDSHAKING_LINK);
 
 	if (cl->session == NULL) {
 		TLS_CHK(gnutls_certificate_allocate_credentials(&cl->xcred));
 		if (cl->key_file != NULL) {
-			ASSERT(cl->cert_file != NULL);
+			CPDLC_ASSERT(cl->cert_file != NULL);
 			TLS_CHK(gnutls_certificate_set_x509_key_file2(cl->xcred,
 			    cl->cert_file, cl->key_file, GNUTLS_X509_FMT_PEM,
 			    cl->key_pass, cl->key_enctype));
@@ -944,7 +944,7 @@ tls_handshake(cpdlc_client_t *cl)
 		TLS_CHK(gnutls_credentials_set(cl->session,
 		    GNUTLS_CRD_CERTIFICATE, cl->xcred));
 		gnutls_session_set_verify_cert(cl->session, cl->host, 0);
-		ASSERT(SOCKET_IS_VALID(cl->sock));
+		CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
 		gnutls_transport_set_int(cl->session, cl->sock);
 		gnutls_handshake_set_timeout(cl->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
@@ -981,10 +981,10 @@ send_logon(cpdlc_client_t *cl)
 {
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
-	ASSERT(cl != NULL);
-	ASSERT(cl->logon.data != NULL);
-	ASSERT(cl->logon.from != NULL);
-	ASSERT(cl->logon.to != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl->logon.data != NULL);
+	CPDLC_ASSERT(cl->logon.from != NULL);
+	CPDLC_ASSERT(cl->logon.to != NULL);
 
 	cpdlc_msg_set_logon_data(msg, cl->logon.data);
 	cpdlc_msg_set_from(msg, cl->logon.from);
@@ -1020,7 +1020,7 @@ handle_nda(cpdlc_client_t *cl, cpdlc_msg_t *msg, unsigned i)
 {
 	char nda[128], name[128];
 
-	ASSERT(cl->logon.to != NULL);
+	CPDLC_ASSERT(cl->logon.to != NULL);
 
 	free(cl->logon.nda);
 	cl->logon.nda = NULL;
@@ -1036,9 +1036,9 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
 	inmsgbuf_t *inmsgbuf;
 
-	ASSERT(cl != NULL);
-	ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_COMPLETE);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_COMPLETE);
+	CPDLC_ASSERT(msg != NULL);
 
 	if (!cl->is_atc && strcmp(cpdlc_msg_get_from(msg), cl->logon.to) != 0) {
 		cpdlc_msg_t *errmsg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
@@ -1057,7 +1057,7 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 	if (!cl->is_atc) {
 		for (unsigned i = 0; i < msg->num_segs;) {
-			ASSERT(msg->segs[i].info != NULL);
+			CPDLC_ASSERT(msg->segs[i].info != NULL);
 			if (msg->segs[i].info->msg_type ==
 			    CPDLC_UM161_END_SVC) {
 				handle_end_svc(cl);
@@ -1090,8 +1090,8 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
 	bool new_msgs = false;
 
-	ASSERT(cl != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	if (msg->pkt_type != CPDLC_PKT_CPDLC) {
 		/* Discard ping/pong messages */
@@ -1131,7 +1131,7 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		}
 		break;
 	default:
-		VERIFY_MSG(0, "Invalid client state %x", cl->logon_status);
+		CPDLC_VERIFY_MSG(0, "Invalid client state %x", cl->logon_status);
 	}
 
 	return (new_msgs);
@@ -1143,9 +1143,9 @@ process_input(cpdlc_client_t *cl)
 	bool new_msgs = false;
 	size_t consumed_total = 0;
 
-	ASSERT(cl != NULL);
-	ASSERT(cl->inbuf != NULL);
-	ASSERT(cl->inbuf_sz != 0);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl->inbuf != NULL);
+	CPDLC_ASSERT(cl->inbuf_sz != 0);
 
 	while (consumed_total < cl->inbuf_sz) {
 		int consumed;
@@ -1153,7 +1153,7 @@ process_input(cpdlc_client_t *cl)
 		char error[sizeof (cl->logon_failure)];
 
 		/* Try to decode a message from our accumulated input. */
-		ASSERT3S(consumed_total, <=, cl->inbuf_sz);
+		CPDLC_ASSERT3S(consumed_total, <=, cl->inbuf_sz);
 		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], &msg,
 		    &consumed, error, sizeof (error))) {
 			cl->logon_status = CPDLC_LOGON_NONE;
@@ -1164,14 +1164,14 @@ process_input(cpdlc_client_t *cl)
 		/* No more complete messages pending? */
 		if (msg == NULL)
 			break;
-		ASSERT(consumed != 0);
+		CPDLC_ASSERT(consumed != 0);
 		new_msgs |= process_msg(cl, msg);
 		/* Do not free the message, `process_msg' consumes it */
 		consumed_total += consumed;
-		ASSERT3S(consumed_total, <=, cl->inbuf_sz);
+		CPDLC_ASSERT3S(consumed_total, <=, cl->inbuf_sz);
 	}
 	if (consumed_total != 0) {
-		ASSERT3S(consumed_total, <=, cl->inbuf_sz);
+		CPDLC_ASSERT3S(consumed_total, <=, cl->inbuf_sz);
 		cl->inbuf_sz -= consumed_total;
 		memmove(cl->inbuf, &cl->inbuf[consumed_total],
 		    cl->inbuf_sz + 1);
@@ -1198,9 +1198,9 @@ sanitize_input(const uint8_t *buf, size_t len)
 static bool
 do_msg_input_lws(cpdlc_client_t *cl, const uint8_t *buf, size_t len)
 {
-	ASSERT(cl != NULL);
-	ASSERT(buf != NULL);
-	ASSERT(len != 0);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(len != 0);
 
 	cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz + len + 1);
 	cpdlc_strlcpy(&cl->inbuf[cl->inbuf_sz], (const char *)buf, len + 1);
@@ -1218,7 +1218,7 @@ do_msg_input(cpdlc_client_t *cl)
 {
 	bool new_msgs = false;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	for (;;) {
 		uint8_t buf[READBUF_SZ];
@@ -1267,8 +1267,8 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 	unsigned num_tokens = 0;
 	cpdlc_msg_token_t *tokens = NULL;
 
-	ASSERT(cl != NULL);
-	ASSERT(num_tokens_p != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(num_tokens_p != NULL);
 
 	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
 	    outmsgbuf != NULL; outmsgbuf = list_head(&cl->outmsgbufs.sending)) {
@@ -1290,7 +1290,7 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 		 * LWS should buffer any unsent data internally, so we check
 		 * that we absolutely super-duper have sent everything.
 		 */
-		ASSERT3S(bytes, ==, outmsgbuf->bufsz);
+		CPDLC_ASSERT3S(bytes, ==, outmsgbuf->bufsz);
 #else	/* !CPDLC_CLIENT_LWS */
 		bytes = gnutls_record_send(cl->session,
 		    &outmsgbuf->buf[outmsgbuf->bytes_sent],
@@ -1310,7 +1310,7 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 		}
 #endif	/* !CPDLC_CLIENT_LWS */
 		outmsgbuf->bytes_sent += bytes;
-		ASSERT3S(outmsgbuf->bytes_sent, <=, outmsgbuf->bufsz);
+		CPDLC_ASSERT3S(outmsgbuf->bytes_sent, <=, outmsgbuf->bufsz);
 		/* Reset the keepalive timer */
 		cl->last_data_rdwr = time(NULL);
 		/* short byte count sent, need to wait for more writing */
@@ -1341,9 +1341,9 @@ static bool
 poll_lws(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
     unsigned *num_out_tokens)
 {
-	ASSERT(cl != NULL);
-	ASSERT(out_tokens != NULL);
-	ASSERT(num_out_tokens != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(out_tokens != NULL);
+	CPDLC_ASSERT(num_out_tokens != NULL);
 
 	cl->pollinfo.out_tokens = out_tokens;
 	cl->pollinfo.num_out_tokens = num_out_tokens;
@@ -1365,21 +1365,21 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
 {
 	cpdlc_client_t *cl;
 
-	ASSERT(wsi != NULL);
+	CPDLC_ASSERT(wsi != NULL);
 
 	switch (reason) {
 	case LWS_CALLBACK_CLIENT_ESTABLISHED:
 		cl = user;
-		ASSERT(cl != NULL);
+		CPDLC_ASSERT(cl != NULL);
 		mutex_enter(&cl->lock);
 		cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
 		mutex_exit(&cl->lock);
 		break;
 	case LWS_CALLBACK_CLIENT_RECEIVE:
 		cl = user;
-		ASSERT(cl != NULL);
-		ASSERT(in != NULL);
-		ASSERT(len != 0);
+		CPDLC_ASSERT(cl != NULL);
+		CPDLC_ASSERT(in != NULL);
+		CPDLC_ASSERT(len != 0);
 
 		mutex_enter(&cl->lock);
 		if (!sanitize_input(in, len)) {
@@ -1393,8 +1393,8 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
 		break;
 	case LWS_CALLBACK_CLIENT_WRITEABLE:
 		cl = user;
-		ASSERT(cl != NULL);
-		ASSERT(cl->pollinfo.out_tokens != NULL);
+		CPDLC_ASSERT(cl != NULL);
+		CPDLC_ASSERT(cl->pollinfo.out_tokens != NULL);
 
 		mutex_enter(&cl->lock);
 		if (cl->logon_status != CPDLC_LOGON_NONE) {
@@ -1407,7 +1407,7 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
 	case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE:
 	case LWS_CALLBACK_WSI_DESTROY:
 		cl = user;
-		ASSERT(cl != NULL);
+		CPDLC_ASSERT(cl != NULL);
 
 		mutex_enter(&cl->lock);
 		cl->logon_status = CPDLC_LOGON_NONE;
@@ -1415,7 +1415,7 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
 		break;
 	case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
 		cl = user;
-		ASSERT(cl != NULL);
+		CPDLC_ASSERT(cl != NULL);
 
 		mutex_enter(&cl->lock);
 		cl->logon_status = CPDLC_LOGON_NONE;
@@ -1446,12 +1446,12 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	int ret;
 	bool new_msgs = false;
 
-	ASSERT(cl != NULL);
-	ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
-	ASSERT(cl->session != NULL);
-	ASSERT(SOCKET_IS_VALID(cl->sock));
-	ASSERT(out_tokens != NULL);
-	ASSERT(num_out_tokens != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
+	CPDLC_ASSERT(cl->session != NULL);
+	CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
+	CPDLC_ASSERT(out_tokens != NULL);
+	CPDLC_ASSERT(num_out_tokens != NULL);
 
 #if	USE_SELECT
 	FD_ZERO(&rfds);
@@ -1510,7 +1510,7 @@ cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf, size_t cap)
 {
 	size_t n = 0;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	mutex_enter(&cl->lock);
 	if (cl->logon.to != NULL) {
@@ -1529,7 +1529,7 @@ cpdlc_client_get_nda(cpdlc_client_t *cl, char *buf, size_t cap)
 {
 	size_t n = 0;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	mutex_enter(&cl->lock);
 	if (cl->logon.nda != NULL) {
@@ -1547,9 +1547,9 @@ void
 cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to)
 {
-	ASSERT(cl != NULL);
-	ASSERT(logon_data != NULL);
-	ASSERT(from != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(logon_data != NULL);
+	CPDLC_ASSERT(from != NULL);
 
 	mutex_enter(&cl->lock);
 
@@ -1569,7 +1569,7 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 
 	if (!cl->worker_started) {
 		cl->worker_started = true;
-		VERIFY(thread_create(&cl->worker, logon_worker, cl));
+		CPDLC_VERIFY(thread_create(&cl->worker, logon_worker, cl));
 	}
 
 	mutex_exit(&cl->lock);
@@ -1578,7 +1578,7 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 void
 cpdlc_client_logoff(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->logon_status = CPDLC_LOGON_NONE;
 	set_logon_failure(cl, NULL);
@@ -1590,7 +1590,7 @@ cpdlc_client_get_logon_status(cpdlc_client_t *cl, char logon_failure[128])
 {
 	cpdlc_logon_status_t st;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 
 	mutex_enter(&cl->lock);
 	if (logon_failure != NULL)
@@ -1604,7 +1604,7 @@ cpdlc_client_get_logon_status(cpdlc_client_t *cl, char logon_failure[128])
 void
 cpdlc_client_reset_logon_failure(cpdlc_client_t *cl)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	set_logon_failure(cl, NULL);
 	mutex_exit(&cl->lock);
@@ -1615,8 +1615,8 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 {
 	outmsgbuf_t *outmsgbuf;
 
-	ASSERT(cl != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	outmsgbuf = safe_calloc(1, sizeof (*outmsgbuf));
 	outmsgbuf->token = cl->outmsgbufs.next_tok++;
@@ -1636,8 +1636,8 @@ cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 {
 	cpdlc_msg_token_t tok;
 
-	ASSERT(cl != NULL);
-	ASSERT(msg != NULL);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(msg != NULL);
 
 	mutex_enter(&cl->lock);
 	if (cl->logon_status != CPDLC_LOGON_COMPLETE) {
@@ -1655,8 +1655,8 @@ cpdlc_client_get_msg_status(cpdlc_client_t *cl, cpdlc_msg_token_t token)
 {
 	cpdlc_msg_status_t status = CPDLC_MSG_STATUS_INVALID_TOKEN;
 
-	ASSERT(cl != NULL);
-	ASSERT(token != CPDLC_INVALID_MSG_TOKEN);
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(token != CPDLC_INVALID_MSG_TOKEN);
 
 	mutex_enter(&cl->lock);
 
@@ -1696,7 +1696,7 @@ cpdlc_client_recv_msg(cpdlc_client_t *cl)
 	inmsgbuf = cl->inmsgbufs.head;
 	if (inmsgbuf != NULL) {
 		list_remove(&cl->inmsgbufs, inmsgbuf);
-		ASSERT(inmsgbuf->msg != NULL);
+		CPDLC_ASSERT(inmsgbuf->msg != NULL);
 		msg = inmsgbuf->msg;
 		free(inmsgbuf);
 	}
@@ -1709,7 +1709,7 @@ cpdlc_client_recv_msg(cpdlc_client_t *cl)
 void
 cpdlc_client_set_cb_userinfo(cpdlc_client_t *cl, void *userinfo)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->cb_userinfo = userinfo;
 	mutex_exit(&cl->lock);
@@ -1720,7 +1720,7 @@ cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl)
 {
 	void *userinfo;
 
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	userinfo = cl->cb_userinfo;
 	mutex_exit(&cl->lock);
@@ -1731,7 +1731,7 @@ cpdlc_client_get_cb_userinfo(cpdlc_client_t *cl)
 void
 cpdlc_client_set_msg_sent_cb(cpdlc_client_t *cl, cpdlc_msg_sent_cb_t cb)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->msg_sent_cb = cb;
 	mutex_exit(&cl->lock);
@@ -1740,7 +1740,7 @@ cpdlc_client_set_msg_sent_cb(cpdlc_client_t *cl, cpdlc_msg_sent_cb_t cb)
 void
 cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl, cpdlc_msg_recv_cb_t cb)
 {
-	ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
 	cl->msg_recv_cb = cb;
 	mutex_exit(&cl->lock);

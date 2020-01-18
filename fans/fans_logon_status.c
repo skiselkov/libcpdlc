@@ -36,7 +36,7 @@
 static bool
 can_send_logon(const fans_t *box, cpdlc_logon_status_t st)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	return ((box->flt_id[0] != '\0' || box->flt_id_auto[0] != '\0') &&
 	    box->to[0] != '\0' &&
 	    (st == CPDLC_LOGON_NONE || st == CPDLC_LOGON_LINK_AVAIL));
@@ -47,7 +47,7 @@ send_logon(fans_t *box)
 {
 	char buf[64];
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	snprintf(buf, sizeof (buf), "%s", box->flt_id);
 	cpdlc_client_logon(box->cl, buf, box->flt_id, box->to);
@@ -125,7 +125,7 @@ draw_page2(fans_t *box)
 	    FMS_FONT_LARGE, "vCUSTOM");
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "HOSTNAME");
-	ASSERT(host != NULL);
+	CPDLC_ASSERT(host != NULL);
 	if (strcmp(host, "localhost") == 0) {
 		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "LOCALHOST");
@@ -163,7 +163,7 @@ fans_logon_status_draw_cb(fans_t *box)
 	char logon_failure[128];
 	cpdlc_logon_status_t st;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, logon_failure);
 
 	fans_set_num_subpages(box, 2);
@@ -210,7 +210,7 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 {
 	cpdlc_logon_status_t st = cpdlc_client_get_logon_status(box->cl, NULL);
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
 		fans_scratchpad_xfer_auto(box, box->flt_id, box->flt_id_auto,

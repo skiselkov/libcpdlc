@@ -35,7 +35,7 @@
 static bool
 can_verify_clx_req(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	return (box->clx_req.clx || (box->clx_req.type != CLX_REQ_NONE &&
 	    box->clx_req.proc[0] != '\0'));
@@ -52,8 +52,8 @@ verify_clx_req(fans_t *box)
 	} else {
 		char buf[16] = { 0 };
 
-		ASSERT(box->clx_req.type != CLX_REQ_NONE);
-		ASSERT(box->clx_req.proc[0] != '\0');
+		CPDLC_ASSERT(box->clx_req.type != CLX_REQ_NONE);
+		CPDLC_ASSERT(box->clx_req.proc[0] != '\0');
 
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM23_REQ_proc, 0);
 		if (box->clx_req.type == CLX_REQ_ARR ||
@@ -122,14 +122,14 @@ draw_main_page(fans_t *box)
 void
 fans_req_clx_init_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(&box->clx_req, 0, sizeof (box->clx_req));
 }
 
 void
 fans_req_clx_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -143,7 +143,7 @@ fans_req_clx_draw_cb(fans_t *box)
 
 	if (can_verify_clx_req(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
@@ -151,7 +151,7 @@ fans_req_clx_draw_cb(fans_t *box)
 bool
 fans_req_clx_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		box->clx_req.type = (box->clx_req.type + 1) % (CLX_REQ_DEP + 1);

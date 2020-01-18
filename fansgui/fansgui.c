@@ -269,9 +269,9 @@ put_fms_char(const fms_char_t *c, int scr_x, int scr_y)
 static void
 render_cb(cairo_t *cr, unsigned w, unsigned h, void *userinfo)
 {
-	UNUSED(w);
-	UNUSED(h);
-	UNUSED(userinfo);
+	CPDLC_UNUSED(w);
+	CPDLC_UNUSED(h);
+	CPDLC_UNUSED(userinfo);
 
 	cairo_set_source_surface(cr, bgimg, 0, 0);
 	cairo_paint(cr);
@@ -311,9 +311,9 @@ clickspot_mouse_check(clickspot_t *cs)
 static void
 mouse_button_cb(GLFWwindow *window, int button, int action, int mods)
 {
-	UNUSED(window);
-	UNUSED(mods);
-	UNUSED(button);
+	CPDLC_UNUSED(window);
+	CPDLC_UNUSED(mods);
+	CPDLC_UNUSED(button);
 
 	if (action != GLFW_PRESS) {
 		if (cur_clickspot != -1 &&
@@ -368,9 +368,9 @@ mouse_hover_cb(GLFWwindow *window, double x, double y)
 static void
 key_cb(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-	UNUSED(window);
-	UNUSED(scancode);
-	UNUSED(mods);
+	CPDLC_UNUSED(window);
+	CPDLC_UNUSED(scancode);
+	CPDLC_UNUSED(mods);
 
 	if (action != GLFW_PRESS) {
 		if (action == GLFW_RELEASE)
@@ -399,9 +399,9 @@ key_cb(GLFWwindow *window, int key, int scancode, int action, int mods)
 static void
 resize_cb(GLFWwindow *window, int x, int y)
 {
-	UNUSED(window);
-	UNUSED(x);
-	UNUSED(y);
+	CPDLC_UNUSED(window);
+	CPDLC_UNUSED(x);
+	CPDLC_UNUSED(y);
 	dirty = 0;
 }
 
@@ -647,8 +647,8 @@ errout:
 BOOL WINAPI
 DllMain(HINSTANCE hinst, DWORD reason, LPVOID resvd)
 {
-	UNUSED(hinst);
-	UNUSED(resvd);
+	CPDLC_UNUSED(hinst);
+	CPDLC_UNUSED(resvd);
 	lacf_glew_dllmain_hook(reason);
 	return (TRUE);
 }

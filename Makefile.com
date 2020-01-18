@@ -50,6 +50,7 @@ else
 endif
 
 SRCPREFIX=../src
+COMPREFIX=../common
 FANS=../fans
 
 CORE_SRC_OBJS=\

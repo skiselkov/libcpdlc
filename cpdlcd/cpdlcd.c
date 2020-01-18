@@ -60,6 +60,7 @@
 #include <acfutils/safe_alloc.h>
 #include <acfutils/thread.h>
 
+#include "../common/cpdlc_config_common.h"
 #include "../src/cpdlc_msg.h"
 #include "../src/cpdlc_string.h"
 
@@ -395,7 +396,7 @@ sockaddr2str(const struct sockaddr_storage *ss, char str[SOCKADDR_STRLEN])
 static void
 init_structs(void)
 {
-	CTASSERT(CONNS_BY_FROM_SHIFT > 0);
+	ASSERT(CONNS_BY_FROM_SHIFT > 0);
 	mutex_init(&conns_tcp_lock);
 	list_create(&conns_tcp, sizeof (conn_t), offsetof(conn_t, conns_node));
 	mutex_init(&conns_lws_lock);
@@ -662,28 +663,6 @@ add_listen_sock(const char *name_port, bool lws)
 }
 
 /*
- * Converts the string value of the "tls/keyfile_enctype" config key into
- * a key encryption type suitable for GnuTLS.
- */
-static gnutls_pkcs_encrypt_flags_t
-str2encflags(const char *value)
-{
-	if (strcasecmp(value, "3DES") == 0)
-		return (GNUTLS_PKCS_PBES2_3DES);
-	if (strcasecmp(value, "RC4") == 0)
-		return (GNUTLS_PKCS_PKCS12_ARCFOUR);
-	if (strcasecmp(value, "AES128") == 0)
-		return (GNUTLS_PKCS_PBES2_AES_128);
-	if (strcasecmp(value, "AES192") == 0)
-		return (GNUTLS_PKCS_PBES2_AES_192);
-	if (strcasecmp(value, "AES256") == 0)
-		return (GNUTLS_PKCS_PBES2_AES_256);
-	if (strcasecmp(value, "PCKS12/3DES") == 0)
-		return (GNUTLS_PKCS_PKCS12_3DES);
-	return (GNUTLS_PKCS_PLAIN);
-}
-
-/*
  * Parses a numerical byte-count specification with an optional multiplier
  * suffix and returns the raw number of bytes. For example, '128k' returns
  * 131072, '2g' returns 2147483648, etc.
@@ -751,7 +730,7 @@ parse_config(const char *conf_path)
 			tls_keyfile_enctype = GNUTLS_PKCS_PBES2_AES_256;
 	}
 	if (conf_get_str(conf, "tls/keyfile_enctype", &value)) {
-		tls_keyfile_enctype = str2encflags(value);
+		tls_keyfile_enctype = cpdlc_config_str2encflags(value);
 		if (tls_keyfile_enctype == GNUTLS_PKCS_PLAIN) {
 			logMsg("Unsupported value for tls_keyfile_enctype "
 			    "(%s). Must be one of: \"3DES\", \"RC4\", "
@@ -2370,7 +2349,8 @@ conn_established_lws(conn_t *conn, struct lws *wsi)
 	 */
 	fd = lws_get_socket_fd(wsi);
 	VERIFY(fd != -1);
-	VERIFY0(getpeername(fd, (struct sockaddr *)&conn->sockaddr, &sa_len));
+	VERIFY0(getpeername(fd, (struct sockaddr *)&conn->sockaddr,
+	    &sa_len));
 	sockaddr2str(&conn->sockaddr, conn->addr_str);
 
 	mutex_init(&conn->lock);
@@ -2414,10 +2394,10 @@ static int
 http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
     void *in, size_t len)
 {
-	UNUSED(wsi);
-	UNUSED(user);
-	UNUSED(in);
-	UNUSED(len);
+	CPDLC_UNUSED(wsi);
+	CPDLC_UNUSED(user);
+	CPDLC_UNUSED(in);
+	CPDLC_UNUSED(len);
 
 	switch (reason) {
 	case LWS_CALLBACK_FILTER_NETWORK_CONNECTION:
@@ -2437,9 +2417,9 @@ cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason, void *user,
 	conn_t *conn = user;
 
 	ASSERT(wsi != NULL);
-	UNUSED(reason);
-	UNUSED(in);
-	UNUSED(len);
+	CPDLC_UNUSED(reason);
+	CPDLC_UNUSED(in);
+	CPDLC_UNUSED(len);
 
 	switch (reason) {
 	case LWS_CALLBACK_ESTABLISHED:

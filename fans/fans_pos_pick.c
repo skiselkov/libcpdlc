@@ -36,11 +36,11 @@ void
 fans_pos_pick_start(fans_t *box, pos_pick_done_cb_t done_cb,
     unsigned ret_page, const fms_pos_t *old_pos)
 {
-	ASSERT(box != NULL);
-	ASSERT(done_cb != NULL);
-	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
-	ASSERT(ret_page != FMS_PAGE_POS_PICK);
-	ASSERT(old_pos != NULL);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(done_cb != NULL);
+	CPDLC_ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	CPDLC_ASSERT(ret_page != FMS_PAGE_POS_PICK);
+	CPDLC_ASSERT(old_pos != NULL);
 
 	memset(&box->pos_pick, 0, sizeof (box->pos_pick));
 
@@ -57,7 +57,7 @@ fans_pos_pick_draw_cb(fans_t *box)
 {
 	char buf[32];
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_page_title(box, "CPDLC POSITION");
 
@@ -102,7 +102,7 @@ fans_pos_pick_draw_cb(fans_t *box)
 bool
 fans_pos_pick_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L1) {
 		box->pos_pick.pos.type = (box->pos_pick.pos.type + 1) %
@@ -111,7 +111,7 @@ fans_pos_pick_key_cb(fans_t *box, fms_key_t key)
 	} else if (key == FMS_KEY_LSK_L2) {
 		fans_scratchpad_xfer_pos_impl(box, &box->pos_pick.pos);
 	} else if (key == FMS_KEY_LSK_L6) {
-		ASSERT(box->pos_pick.done_cb != NULL);
+		CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
 		if (box->pos_pick.pos.set || box->pos_pick.was_set)
 			box->pos_pick.done_cb(box, &box->pos_pick.pos);
 		fans_set_page(box, box->pos_pick.ret_page, false);

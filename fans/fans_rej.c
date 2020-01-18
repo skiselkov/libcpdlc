@@ -34,10 +34,10 @@
 void
 fans_rej(fans_t *box, bool unable_or_neg, unsigned ret_page)
 {
-	ASSERT(box != NULL);
-	ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
-	ASSERT3U(ret_page, <, FMS_NUM_PAGES);
-	ASSERT(ret_page != FMS_PAGE_REJ);
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT3U(ret_page, <, FMS_NUM_PAGES);
+	CPDLC_ASSERT(ret_page != FMS_PAGE_REJ);
 
 	memset(&box->rej, 0, sizeof (box->rej));
 	box->rej.unable_or_neg = unable_or_neg;
@@ -52,7 +52,7 @@ fans_rej_draw_cb(fans_t *box)
 	char **lines = NULL;
 	unsigned n_lines = 0;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_put_page_title(box, "CPDLC REJECT");
 
@@ -89,7 +89,7 @@ fans_rej_draw_cb(fans_t *box)
 bool
 fans_rej_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (key == FMS_KEY_LSK_L1) {
 		box->rej.due = (box->rej.due + 1) %
@@ -136,7 +136,7 @@ fans_rej_key_cb(fans_t *box, fms_key_t key)
 			cpdlc_msg_seg_set_arg(msg, seg, 0, freetext, NULL);
 		}
 
-		ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
+		CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 		cpdlc_msglist_send(box->msglist, msg, box->thr_id);
 
 		fans_set_page(box, box->rej.ret_page, false);

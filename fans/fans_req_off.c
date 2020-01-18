@@ -38,7 +38,7 @@
 static bool
 can_verify_off_req(fans_t *box)
 {
-	ASSERT(box);
+	CPDLC_ASSERT(box);
 	return (box->off_req.off.nm != 0 &&
 	    fans_step_at_can_send(&box->off_req.step_at));
 }
@@ -92,14 +92,14 @@ draw_main_page(fans_t *box)
 void
 fans_req_off_init_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	memset(&box->off_req, 0, sizeof (box->off_req));
 }
 
 void
 fans_req_off_draw_cb(fans_t *box)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	fans_set_num_subpages(box, 2);
 
@@ -113,7 +113,7 @@ fans_req_off_draw_cb(fans_t *box)
 
 	if (can_verify_off_req(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<VERIFY");
+		    "<CPDLC_VERIFY");
 	}
 
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
@@ -122,7 +122,7 @@ fans_req_off_draw_cb(fans_t *box)
 bool
 fans_req_off_key_cb(fans_t *box, fms_key_t key)
 {
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		fans_scratchpad_xfer_offset(box, &box->off_req.off, NULL);

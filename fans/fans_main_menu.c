@@ -34,7 +34,7 @@ fans_main_menu_draw_cb(fans_t *box)
 {
 	cpdlc_logon_status_t st;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	fans_put_page_title(box, "FANS  MAIN MENU");
@@ -60,7 +60,7 @@ fans_main_menu_key_cb(fans_t *box, fms_key_t key)
 {
 	cpdlc_logon_status_t st;
 
-	ASSERT(box != NULL);
+	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	if (key == FMS_KEY_LSK_L1)
