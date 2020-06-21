@@ -27,3 +27,8 @@ cpdlc_atc/build/CMakeFiles
 cpdlc_atc/build/Makefile
 cpdlc_atc/build/cmake_install.cmake
 cpdlc_atc/build/cpdlc_atc
+doc/format/format.aux
+doc/format/format.log
+doc/format/format.out
+doc/format/format.pdf
+doc/format/format.toc
