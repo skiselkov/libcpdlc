@@ -61,6 +61,7 @@
 #include <acfutils/thread.h>
 
 #include "../common/cpdlc_config_common.h"
+#include "../src/cpdlc_client.h"
 #include "../src/cpdlc_msg.h"
 #include "../src/cpdlc_string.h"
 
@@ -297,8 +298,6 @@ static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
  */
 static bool		background = true;
 static bool		do_shutdown = false;
-static int		default_port = 17622;
-static int		default_port_lws = 17623;
 static bool		req_client_cert = false;
 static FILE		*msg_log_file = NULL;
 
@@ -626,36 +625,14 @@ errout:
 static bool
 add_listen_sock(const char *name_port, bool lws)
 {
-	char hostname[64] = { 0 };
+	char hostname[CPDLC_HOSTNAME_MAX_LEN] = { 0 };
 	int port;
-	const char *colon = strrchr(name_port, ':');
-	const char *right_bracket = strrchr(name_port, ']');
 
-	/*
-	 * We try to capture the last ':' character that is NOT part of an
-	 * IPv6 address spec (i.e. the format "[AB:CD::EF]:port").
-	 */
-	if (colon != NULL && (right_bracket == NULL || colon > right_bracket)) {
-		lacf_strlcpy(hostname, name_port, (colon - name_port) + 1);
-		if (sscanf(&colon[1], "%d", &port) != 1 ||
-		    port <= 0 || port >= UINT16_MAX) {
-			logMsg("Invalid listen directive \"%s\": expected "
-			    "valid port number following last ':' character",
-			    name_port);
-			return (false);
-		}
-	} else {
-		lacf_strlcpy(hostname, name_port, sizeof (hostname));
-		port = (lws ? default_port_lws : default_port);
+	if (!cpdlc_config_str2hostname_port(name_port, hostname, &port, lws)) {
+		logMsg("Invalid listen directive \"%s\": expected valid port "
+		    "number following last ':' character", name_port);
+		return (false);
 	}
-
-	if (strlen(hostname) > 2 && hostname[0] == '[' &&
-	    hostname[strlen(hostname) - 1] == ']') {
-		/* Strip the brackets surrounding the IPv6 address */
-		memmove(hostname, &hostname[1], strlen(hostname));
-		hostname[strlen(hostname) - 1] = '\0';
-	}
-
 	if (lws)
 		return (add_listen_sock_lws(hostname, port, name_port));
 	else
@@ -2226,7 +2203,7 @@ main(int argc, char *argv[])
 	lacf_strlcpy(tls_keyfile, "cpdlcd_key.pem", sizeof (tls_keyfile));
 	lacf_strlcpy(tls_certfile, "cpdlcd_cert.pem", sizeof (tls_certfile));
 
-	while ((opt = getopt(argc, argv, "hc:dp:es")) != -1) {
+	while ((opt = getopt(argc, argv, "hc:des")) != -1) {
 		switch (opt) {
 		case 'h':
 			print_usage(argv[0], stdout);
@@ -2236,14 +2213,6 @@ main(int argc, char *argv[])
 			break;
 		case 'd':
 			background = false;
-			break;
-		case 'p':
-			default_port = atoi(optarg);
-			if (default_port <= 0 || default_port > UINT16_MAX) {
-				logMsg("Invalid port number, must be an "
-				    "integer between 0 and %d", UINT16_MAX);
-				return (1);
-			}
 			break;
 		case 'e':
 			if (!auth_encrypt_userpwd(encrypt_silent))

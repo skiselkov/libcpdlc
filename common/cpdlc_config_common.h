@@ -26,6 +26,8 @@
 #ifndef	_CPDLC_CONFIG_COMMON_H_
 #define	_CPDLC_CONFIG_COMMON_H_
 
+#include <stdbool.h>
+
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
 
@@ -33,7 +35,11 @@
 extern "C" {
 #endif
 
+#define	CPDLC_HOSTNAME_MAX_LEN	128
+
 gnutls_pkcs_encrypt_flags_t cpdlc_config_str2encflags(const char *value);
+bool cpdlc_config_str2hostname_port(const char *name_port,
+    char hostname[CPDLC_HOSTNAME_MAX_LEN], int *port, bool is_lws);
 
 #ifdef	__cplusplus
 }

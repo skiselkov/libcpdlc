@@ -69,10 +69,18 @@
 
 \begin{document}
 
-%\thispagestyle{empty}
-%\ThisCenterWallPaper{1.0}{cover.png}
-%\strut
-%\newpage
+\thispagestyle{empty}
+
+\vspace*{25em}
+\begin{center}
+\resizebox{0.5\linewidth}{!}{libcpdlc}\\
+\strut\\
+{\Large Wire Format Guide}
+\end{center}
+\vspace{21em}
+Version: 1.0
+
+\newpage
 
 \tableofcontents
 
@@ -156,6 +164,10 @@ philosophy and as such there is no unencrypted mode of operation. At a
 minimum, the \libcpdlc server's certificate must be authenticated by the
 \libcpdlc clients. There are no specific requirements on the certificate
 structures used by a particular \libcpdlc deployment.
+
+\begin{center}
+\includegraphics[width=0.85\textwidth]{base_network.png}
+\end{center}
 
 \noindent Here we will list some common ways that a \libcpdlc deployment
 might be configured:
@@ -257,6 +269,10 @@ timeout. Since the server understands the CPDLC protocol, it will
 automatically drop undelivered messages after the timeout has expired.
 The sending station should keep track of its own message response
 timeouts and also mark the message as being expired.
+
+\begin{center}
+\includegraphics[width=0.85\textwidth]{virt_net.png}
+\end{center}
 
 \subsection{CPDLC Message Format}
 
@@ -454,6 +470,10 @@ PKT=CPDLC/LOGON=SUCCESS/FROM=ATN/MIN=0/MRN=22\n
 
 \end{enumerate}
 
+\begin{center}
+\includegraphics[width=0.75\textwidth]{logon_flow.png}
+\end{center}
+
 \section{CPDLC Messages}
 
 Every subsequent CPDLC message sent after a successful LOGON conforms to
@@ -600,6 +620,108 @@ PKT=CPDLC/MIN=60/MSG=UM106 M082\n
 \end{verbatim}
 
 \end{itemize}
+
+\item[Frequency] -- encoded as 3 digits for the MHz portion of the
+frequency, followed by a period character, and followed by 2-3 digits
+denoting the kHz portion of the frequency (2 digits denoting 25 kHz
+spacing and 3 digits denoting either a 25 kHz spacing frequency, or
+an 8.33 kHz spacing frequency). Example instruction to contact an
+ATC station on voice:
+
+\begin{verbatim}
+PKT=CPDLC/MIN=60/MSG=UM117 KZLA%20LOS%20ANGELES%20CENTER 118.25\n
+\end{verbatim}
+
+\item[ICAO ATC unit name] -- encoded as a contiguous character sequence
+consisting of the 4-letter ICAO ATC unit identifier and optionally a
+space, followed by a descriptive unit name. If the descriptive name is
+not available, at least the 4-letter ICAO identifier shall be provided.
+Example instruction to contact an ATC station on voice:
+
+\begin{verbatim}
+PKT=CPDLC/MIN=60/MSG=UM117 KZLA%20LOS%20ANGELES%20CENTER 118.25\n
+\end{verbatim}
+
+\item[Flight plan] -- a flight plan or a flight plan amendment is encoded
+as a single contiguous string of characters to form a single message
+element. URL-escaped spaces are used internally in the flight plan to
+denote separate elements of the flight plan. The flight plan follows ICAO
+formatting:
+
+\begin{itemize}
+
+\item The flight plan can optionally start with a 4-letter ICAO
+identifier of the departure airport. If a departure runway is designated
+in the flight plan, it will be separated from the airport identifier by a
+slash character, immediately followed by the runway identifier.
+
+\begin{verbatim}
+KSAN
+KSAN/27
+KLAX/25R
+\end{verbatim}
+
+\item The second element of the flight plan is an optional SID
+identifier. If a transition is encoded as part of the flight plan, the
+SID identifier will be followed by a period character, which will be
+immediately followed by the SID transition name.
+
+\begin{verbatim}
+TRUKN2
+TRUKN2.ORRCA
+\end{verbatim}
+
+\item Subsequent elements of the flight plan shall consist of alternating
+sequences of along-route fixes and airways, or the letters ``DCT'' when a
+direct-to segment is to be flown between two adjacent fixes.
+
+\begin{verbatim}
+OAK J1 AVE DCT LAX
+CROWY DCT BLCKD DCT SPTFR Q4 TRTIP
+\end{verbatim}
+
+\item If the flight plan encodes a STAR, it shall be specified as the
+second-to-last element before the destination airport. If the STAR
+includes a transition portion, it will be prepended to the name of
+the STAR, using a period character as the separator.
+
+\begin{verbatim}
+PIRAT2
+ALCOA.PIRAT2
+\end{verbatim}
+
+\item If the flight plan encodes a destination airport, it shall be
+encoded as the last element of the flight plan by using the airport's
+4-letter ICAO identifier. An arrival runway can be encoded in a manner
+similar to the departure airport, by appending a slash character to the
+airport identifier and followed by the arrival runway identifier.
+
+\item If the flight plan encodes an amendment to an existing route,
+the first element of the flight plan shall consist of the sequence
+\texttt{FIX1-FIX2}. Here ``FIX1'' is the start of the amended portion
+and ``FIX2'' is the end of the amended portion. The Flight Management
+System will perform a match search in the existing flight plan for
+``FIX1'' and ``FIX2'' and replace any points in between these two fixes
+by utilizing the amendment that follows the \texttt{FIX1-FIX2} sequence.
+
+If the flight plan completely replaces all elements after ``FIX1'', the
+``FIX2'' element may be omitted.
+
+\begin{verbatim}
+CROWY-TRTIP CROWY DCT BLCKD DCT SPTFR Q4 TRTIP
+CROWY- CROWY DCT AVATR KTNP
+\end{verbatim}
+
+\end{itemize}
+
+Examples of flight plan encoding in the raw wire format, with URL-escaping
+applied:
+
+\begin{verbatim}
+KSAN%2F27%20CROWY%20DCT%20BLCKD%20DCT%20SPTFR%20Q4%20TRTIP
+KSFO%2F01R%20TRUKN2.ORRCA%20Q120MAGPY%20KEKO
+CROWY-TRTIP%20CROWY%20DCT%20BLCKD%20DCT%20SPTFR%20Q4%20TRTIP
+\end{verbatim}
 
 \end{description}
 

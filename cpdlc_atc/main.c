@@ -77,6 +77,12 @@ assfail_trip(const char *filename, int line, const char *msg, void *userinfo)
 static bool
 parse_config(const char *confpath)
 {
+	const char *tls_keyfile = NULL, *tls_keyfile_pass = NULL;
+	gnutls_pkgs_encrypt_flags_t tls_keyfile_enctype = GNUTLS_PKCS_PLAIN;
+	const char *certfile = NULL, *cafile = NULL, *crlfile = NULL;
+	const char *server_addr = "localhost";
+	int server_port = CPDLC_DEFAULT_PORT_TLS;
+
 	conf_t *conf;
 	int errline = 0;
 
@@ -87,6 +93,8 @@ parse_config(const char *confpath)
 		logMsg("Can't read config file %s:%d", confpath, errline);
 		goto errout;
 	}
+
+	
 
 	conf_free(conf);
 	return (true);
@@ -132,6 +140,8 @@ main(int argc, char **argv)
 	}
 
 	if (!parse_config(confpath)) {
+		glfwTerminate();
+		return (1);
 	}
 
 	glfwTerminate();

@@ -38,6 +38,9 @@
 extern "C" {
 #endif
 
+#define	CPDLC_DEFAULT_PORT_TLS	17622
+#define	CPDLC_DEFAULT_PORT_LWS	17623
+
 typedef enum {
 	/* Network socket not connected */
 	CPDLC_LOGON_NONE,
