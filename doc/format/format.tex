@@ -664,7 +664,8 @@ KLAX/25R
 \item The second element of the flight plan is an optional SID
 identifier. If a transition is encoded as part of the flight plan, the
 SID identifier will be followed by a period character, which will be
-immediately followed by the SID transition name.
+immediately followed by the SID transition name. The SID identifier shall
+be encoded in the ARINC 424 format.
 
 \begin{verbatim}
 TRUKN2
@@ -681,9 +682,11 @@ CROWY DCT BLCKD DCT SPTFR Q4 TRTIP
 \end{verbatim}
 
 \item If the flight plan encodes a STAR, it shall be specified as the
-second-to-last element before the destination airport. If the STAR
-includes a transition portion, it will be prepended to the name of
-the STAR, using a period character as the separator.
+second-to-last element before the destination airport (in this case, the
+flight plan MUST encode a destination airport). The STAR identifier shall
+be encoded in the ARINC 424 format. If the STAR includes a transition
+portion, it will be prepended to the name of the STAR, using a period
+character as the separator.
 
 \begin{verbatim}
 PIRAT2
