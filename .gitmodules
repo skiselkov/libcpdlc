@@ -4,12 +4,3 @@
 [submodule "libacfutils"]
 	path = libacfutils
 	url = https://github.com/skiselkov/libacfutils.git
-[submodule "cpdlc_atc/imgui"]
-	path = cpdlc_atc/imgui
-	url = https://github.com/ocornut/imgui.git
-[submodule "cpdlc_atc/glfw"]
-	path = cpdlc_atc/glfw
-	url = https://github.com/glfw/glfw.git
-[submodule "cpdlc_atc/gl3w"]
-	path = cpdlc_atc/gl3w
-	url = https://github.com/skaslev/gl3w.git
