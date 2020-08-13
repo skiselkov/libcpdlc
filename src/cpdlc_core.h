@@ -41,11 +41,13 @@ extern "C" {
 #define	CPDLC_UNUSED(x)	(void)(x)
 
 #if	__STDC_VERSION__ < 199901L
-# if	defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
-#  define	restrict        __restrict
-# else
-#  define	restrict
-# endif
+# ifndef	restrict
+#  if	defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
+#   define	restrict        __restrict
+#  else
+#   define	restrict
+#  endif
+# endif		/* !defined(restrict) */
 # if		defined(_MSC_VER)
 #  define	inline  __inline
 # else
