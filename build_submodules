@@ -104,7 +104,7 @@ if ! [ -f "${GNUTLS}/install/lib/libgnutls.a" ]; then
 	    cd "${GNUTLS}" && \
 		PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig \
 		./configure --prefix=$(pwd)/install --enable-static \
-		--disable-shared --with-included-libtasn1 \
+		--disable-shared --with-included-libtasn1 -with-pic \
 		--with-included-unistring --without-p11-kit --disable-doc \
 		--disable-tools --disable-cxx --disable-tests &&
 		make -j4 && make install
