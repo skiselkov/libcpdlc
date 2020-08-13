@@ -1272,6 +1272,20 @@ cpdlc_msg_set_logon_data(cpdlc_msg_t *msg, const char *logon_data)
 	msg->is_logon = true;
 }
 
+void
+cpdlc_msg_set_logoff(cpdlc_msg_t *msg, bool is_logoff)
+{
+	CPDLC_ASSERT(msg != NULL);
+	msg->is_logoff = is_logoff;
+}
+
+bool
+cpdlc_msg_get_logoff(const cpdlc_msg_t *msg)
+{
+	CPDLC_ASSERT(msg != NULL);
+	return (msg->is_logoff);
+}
+
 unsigned
 cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg)
 {

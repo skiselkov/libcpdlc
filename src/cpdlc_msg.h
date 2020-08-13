@@ -464,6 +464,9 @@ CPDLC_API const char *cpdlc_msg_get_logon_data(const cpdlc_msg_t *msg);
 CPDLC_API void cpdlc_msg_set_logon_data(cpdlc_msg_t *msg,
     const char *logon_data);
 
+CPDLC_API void cpdlc_msg_set_logoff(cpdlc_msg_t *msg, bool is_logoff);
+CPDLC_API bool cpdlc_msg_get_logoff(const cpdlc_msg_t *msg);
+
 CPDLC_API unsigned cpdlc_msg_get_num_segs(const cpdlc_msg_t *msg);
 CPDLC_API int cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl,
     unsigned msg_type, unsigned char msg_subtype);

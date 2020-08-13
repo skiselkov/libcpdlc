@@ -56,7 +56,7 @@ send_logon(fans_t *box)
 static void
 send_logoff(fans_t *box)
 {
-	cpdlc_client_logoff(box->cl);
+	cpdlc_client_logoff(box->cl, NULL);
 }
 
 static void

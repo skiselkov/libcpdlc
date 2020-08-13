@@ -97,7 +97,7 @@ CPDLC_API size_t cpdlc_client_get_nda(cpdlc_client_t *cl, char *buf,
 
 CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
     const char *from, const char *to);
-CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl, const char *from);
 
 CPDLC_API cpdlc_logon_status_t cpdlc_client_get_logon_status(
     cpdlc_client_t *cl, char logon_failure[128]);

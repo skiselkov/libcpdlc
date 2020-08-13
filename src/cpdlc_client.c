@@ -1576,12 +1576,26 @@ cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 }
 
 void
-cpdlc_client_logoff(cpdlc_client_t *cl)
+cpdlc_client_logoff(cpdlc_client_t *cl, const char *from)
 {
 	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
-	cl->logon_status = CPDLC_LOGON_NONE;
-	set_logon_failure(cl, NULL);
+	if (from != NULL) {
+		/*
+		 * If an identity was provided, do a soft reset, but keep
+		 * the link active.
+		 */
+		cpdlc_msg_t *logoff_msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
+
+		cpdlc_msg_set_logoff(logoff_msg, true);
+		cpdlc_msg_set_from(logoff_msg, cl->logon.from);
+		cpdlc_client_send_msg(cl, logoff_msg);
+		cpdlc_msg_free(logoff_msg);
+	} else {
+		/* If no identity was provided, tear down the whole link */
+		cl->logon_status = CPDLC_LOGON_NONE;
+		set_logon_failure(cl, NULL);
+	}
 	mutex_exit(&cl->lock);
 }
 
