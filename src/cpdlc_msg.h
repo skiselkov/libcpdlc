@@ -435,8 +435,8 @@ typedef struct {
 	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
 } cpdlc_msg_t;
 
-const cpdlc_msg_info_t *cpdlc_ul_infos;
-const cpdlc_msg_info_t *cpdlc_dl_infos;
+extern const cpdlc_msg_info_t *cpdlc_ul_infos;
+extern const cpdlc_msg_info_t *cpdlc_dl_infos;
 
 CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(cpdlc_pkt_t pkt_type);
 CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
