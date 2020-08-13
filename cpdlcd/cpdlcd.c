@@ -483,7 +483,7 @@ fini_structs(void)
 static void
 print_usage(const char *progname, FILE *fp)
 {
-	fprintf(fp, "Usage: %s [-h] [-c <conffile>]\n", progname);
+	fprintf(fp, "Usage: %s [-hd] [-c <conffile>]\n", progname);
 }
 
 static bool
