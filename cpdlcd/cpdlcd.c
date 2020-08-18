@@ -1454,6 +1454,43 @@ msg_is_not_cda(const cpdlc_msg_t *msg)
 }
 
 /*
+ * When an ATC station sends a message with a FROM=AUTO header, the
+ * server attempts to figure out which ATC station the target of the
+ * message was logged onto and rewrites the FROM header of the
+ * message to always match the current aircraft's logon target.
+ */
+static bool
+msg_auto_assign_from(cpdlc_msg_t *msg)
+{
+	conn_t *acft_conn = NULL;
+	const list_t *l;
+
+	mutex_enter(&conns_by_from_lock);
+
+	l = htbl_lookup_multi(&conns_by_from, cpdlc_msg_get_to(msg));
+	if (l != NULL && list_count(l) != 0) {
+		/*
+		 * Pick the last connection, since that's the most likely
+		 * one to be the current one. The earlier ones could be
+		 * stale connections.
+		 */
+		acft_conn = HTBL_VALUE_MULTI(list_tail(l));
+		if (acft_conn != NULL) {
+			ident_list_t *idl = list_head(&acft_conn->from_list);
+
+			ASSERT(idl != NULL);
+			cpdlc_msg_set_from(msg, idl->ident);
+			mutex_exit(&conns_by_from_lock);
+			return (true);
+		}
+	}
+
+	mutex_exit(&conns_by_from_lock);
+
+	return (false);
+}
+
+/*
  * Handles an incoming message from a connection. This performs all
  * necessary permissions checks, logon hooks and message forwarding.
  *
@@ -1539,6 +1576,10 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
 		send_error_msg(conn, msg, "MESSAGE UPLINK/DOWNLINK MISMATCH");
 		return;
+	}
+	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
+	    !msg_auto_assign_from(msg)) {
+		send_error_msg(conn, msg, "REMOTE END NOT CONNECTED");
 	}
 	if (!conn->is_atc && !msg->segs[0].info->is_dl) {
 		send_svc_unavail_msg(conn, cpdlc_msg_get_min(msg));
