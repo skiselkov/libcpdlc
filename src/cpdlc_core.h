@@ -48,12 +48,17 @@ extern "C" {
 #   define	restrict
 #  endif
 # endif		/* !defined(restrict) */
-# if		defined(_MSC_VER)
-#  define	inline  __inline
-# else
-#  define	inline
-# endif
 #endif	/* __STDC_VERSION__ < 199901L */
+
+#if	!defined(__cplusplus) && __STDC_VERSION__ < 199901L
+# ifndef	inline
+#  if		defined(_MSC_VER)
+#   define	inline  __inline
+#  else
+#   define	inline
+#  endif
+# endif
+#endif	/* !defined(__cplusplus) && __STDC_VERSION__ < 199901L */
 
 #ifndef	MIN
 #define	MIN(x, y)	((x) < (y) ? (x) : (y))
