@@ -26,6 +26,8 @@
 #ifndef	_LIBCPDLC_FANS_TEXT_PROC_H_
 #define	_LIBCPDLC_FANS_TEXT_PROC_H_
 
+#include <cpdlc_msglist.h>
+
 #ifdef	__cplusplus
 extern "C" {
 #endif

@@ -59,16 +59,6 @@
 #include "fans_rej.h"
 #include "fans_vrfy.h"
 
-#define	ADD_LINE(__lines, __n_lines, __start, __len) \
-	do { \
-		(__lines) = safe_realloc((__lines), \
-		    ((__n_lines) + 1) * sizeof (*(__lines))); \
-		(__lines)[(__n_lines)] = safe_malloc((__len) + 1); \
-		cpdlc_strlcpy((__lines)[(__n_lines)], (__start), \
-		    (__len) + 1); \
-		(__n_lines)++; \
-	} while (0)
-
 static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 	{	/* FMS_PAGE_MAIN_MENU */
 		.draw_cb = fans_main_menu_draw_cb,
@@ -891,82 +881,6 @@ handle_atc_msg_lsk(fans_t *box)
 		fans_set_thr_id(box, thr_id);
 		fans_set_page(box, FMS_PAGE_MSG_THR, true);
 	}
-}
-
-void
-fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p)
-{
-	char buf[1024];
-	const char *start, *cur, *end, *last_sp;
-
-	CPDLC_ASSERT(msg != NULL);
-	CPDLC_ASSERT(lines_p != NULL);
-	CPDLC_ASSERT(n_lines_p != NULL);
-
-	cpdlc_msg_readable(msg, buf, sizeof (buf));
-	last_sp = strchr(buf, ' ');
-	for (start = buf, cur = buf, end = buf + strlen(buf);; cur++) {
-		if (last_sp == NULL)
-			last_sp = end;
-		if (cur == end) {
-			ADD_LINE(*lines_p, *n_lines_p, start, cur - start);
-			break;
-		}
-		if (cur - start >= FMS_COLS) {
-			ADD_LINE(*lines_p, *n_lines_p, start, last_sp - start);
-			if (last_sp == end)
-				break;
-			start = last_sp + 1;
-			last_sp = strchr(start, ' ');
-		} else if (isspace(cur[0])) {
-			last_sp = cur;
-		}
-	}
-}
-
-static bool
-is_short_response(const cpdlc_msg_t *msg)
-{
-	int msg_type = msg->segs[0].info->msg_type;
-	return (msg_type >= CPDLC_DM0_WILCO && msg_type <= CPDLC_DM5_NEGATIVE);
-}
-
-void
-fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
-    char ***lines_p, unsigned *n_lines_p)
-{
-	CPDLC_ASSERT(msglist != NULL);
-	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
-	CPDLC_ASSERT(lines_p != NULL);
-	CPDLC_ASSERT(n_lines_p != NULL);
-
-	for (unsigned i = 0, n = cpdlc_msglist_get_thr_msg_count(msglist,
-	    thr_id); i < n; i++) {
-		const cpdlc_msg_t *msg;
-		bool sent;
-
-		cpdlc_msglist_get_thr_msg(msglist, thr_id, i, &msg, NULL,
-		    NULL, NULL, &sent);
-		/*
-		 * Skip the "WILCO" or "STANDBY" messages we sent. Those will
-		 * show up as message status at the bottom of the page.
-		 */
-		if (sent && is_short_response(msg))
-			continue;
-		if (i > 0) {
-			ADD_LINE(*lines_p, *n_lines_p,
-			    "------------------------", 24);
-		}
-		fans_msg2lines(msg, lines_p, n_lines_p);
-	}
-}
-
-void
-fans_free_lines(char **lines, unsigned n_lines)
-{
-	for (unsigned i = 0; i < n_lines; i++)
-		free(lines[i]);
-	free(lines);
 }
 
 void
