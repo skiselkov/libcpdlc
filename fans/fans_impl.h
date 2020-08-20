@@ -30,6 +30,7 @@
 
 #include "../src/cpdlc_msglist.h"
 #include "fans.h"
+#include "fans_text_proc.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -354,13 +355,6 @@ void fans_put_off(fans_t *box, int row, int col, bool align_right,
     const fms_off_t *useroff, const fms_off_t *autooff, bool req);
 void fans_put_wind(fans_t *box, int row, int col, bool align_right,
     const fms_wind_t *userwind, const fms_wind_t *autowind, bool req);
-
-const char *fans_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
-void fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
-    unsigned *n_lines_p);
-void fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
-    char ***lines_p, unsigned *n_lines_p);
-void fans_free_lines(char **lines, unsigned n_lines);
 
 cpdlc_msg_thr_id_t *fans_get_thr_ids(fans_t *box, unsigned *num_thr_ids,
     bool ignore_closed);
