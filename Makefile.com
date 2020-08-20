@@ -82,6 +82,7 @@ FANS_OBJS=\
 	$(FANS)/fans_req_wcw.o \
 	$(FANS)/fans_req_voice.o \
 	$(FANS)/fans_scratchpad.o \
+	$(FANS)/fans_text_proc.o \
 	$(FANS)/fans_vrfy.o
 
 LWS_CFLAGS=-I../libwebsockets-3.1.0/include
