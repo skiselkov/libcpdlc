@@ -162,7 +162,7 @@ fans_req_alt_draw_cb(fans_t *box)
 
 	if (can_verify_alt_req(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE,
-		    "<CPDLC_VERIFY");
+		    "<VERIFY");
 	}
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }

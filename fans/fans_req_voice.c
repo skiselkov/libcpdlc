@@ -104,7 +104,7 @@ fans_req_voice_draw_cb(fans_t *box)
 	else
 		fans_req_draw_freetext(box);
 
-	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<CPDLC_VERIFY");
+	fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_WHITE, "<VERIFY");
 	fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE, "<RETURN");
 }
 

@@ -95,7 +95,7 @@ fans_freetext_draw_cb(fans_t *box)
 
 	if (freetext_msg_ready(box)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_L5, FMS_COLOR_CYAN,
-		    "<CPDLC_VERIFY");
+		    "<VERIFY");
 	}
 }
 
