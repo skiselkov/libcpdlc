@@ -128,7 +128,8 @@ cpdlc_escape_percent(const char *in_buf, char *out_buf, unsigned cap)
 			out_buf[j] = '\0';
 		}
 		if (isalnum(c) || c == '.' || c == ',') {
-			out_buf[j] = in_buf[i];
+			if (j + 1 < cap)
+				out_buf[j] = in_buf[i];
 		} else {
 			if (j + 4 < cap)
 				snprintf(&out_buf[j], 4, "%%%02x", c);
@@ -1073,7 +1074,6 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 
 	CPDLC_ASSERT(in_buf != NULL);
 	CPDLC_ASSERT(msg_p != NULL);
-	CPDLC_ASSERT(consumed != NULL);
 
 	term = strchr(in_buf, '\n');
 	if (term != NULL) {
@@ -1087,7 +1087,8 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 	if (term == NULL) {
 		/* No complete message in buffer */
 		*msg_p = NULL;
-		*consumed = 0;
+		if (consumed != NULL)
+			*consumed = 0;
 		return (true);
 	}
 
@@ -1182,12 +1183,14 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 		goto errout;
 
 	*msg_p = msg;
-	*consumed = ((term - start) + 1 + (skipped_cr ? 1 : 0));
+	if (consumed != NULL)
+		*consumed = ((term - start) + 1 + (skipped_cr ? 1 : 0));
 	return (true);
 errout:
 	free(msg);
 	*msg_p = NULL;
-	*consumed = 0;
+	if (consumed != NULL)
+		*consumed = 0;
 	return (false);
 }
 
