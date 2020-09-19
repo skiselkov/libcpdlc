@@ -629,7 +629,7 @@ validate_message(const cpdlc_msg_t *msg, char *reason, unsigned reason_cap)
 	if (msg->min == CPDLC_INVALID_MSG_SEQ_NR) {
 		MALFORMED_MSG("missing or invalid MIN header");
 		return (false);
-
+	}
 	if (msg->pkt_type == CPDLC_PKT_PING ||
 	    msg->pkt_type == CPDLC_PKT_PONG) {
 		if (msg->num_segs != 0) {
@@ -645,12 +645,11 @@ validate_message(const cpdlc_msg_t *msg, char *reason, unsigned reason_cap)
 		}
 		return (true);
 	}
-
 	if (msg->num_segs == 0) {
 		MALFORMED_MSG("no message segments found");
 		return (false);
 	}
-	}
+
 	return (true);
 }
 
