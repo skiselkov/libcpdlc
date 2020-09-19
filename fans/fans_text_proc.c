@@ -25,6 +25,7 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
@@ -33,18 +34,20 @@
 #include "fans_impl.h"
 #include "fans_text_proc.h"
 
-#define	ADD_LINE(__lines, __n_lines, __start, __len) \
+#define	ADD_LINE(__lines, __n_lines, __start, __len, __line_prefix) \
 	do { \
+		unsigned l = (__len) + strlen(__line_prefix) + 1; \
 		(__lines) = safe_realloc((__lines), \
 		    ((__n_lines) + 1) * sizeof (*(__lines))); \
-		(__lines)[(__n_lines)] = safe_malloc((__len) + 1); \
-		cpdlc_strlcpy((__lines)[(__n_lines)], (__start), \
-		    (__len) + 1); \
+		(__lines)[(__n_lines)] = safe_malloc(l); \
+		snprintf((__lines)[(__n_lines)], l, "%s%s", (__line_prefix), \
+		    (__start)); \
 		(__n_lines)++; \
 	} while (0)
 
 void
-fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p)
+fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p,
+    const char *line_prefix)
 {
 	char buf[1024];
 	const char *start, *cur, *end, *last_sp;
@@ -53,17 +56,22 @@ fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p)
 	CPDLC_ASSERT(lines_p != NULL);
 	CPDLC_ASSERT(n_lines_p != NULL);
 
+	if (line_prefix == NULL)
+		line_prefix = "";
+
 	cpdlc_msg_readable(msg, buf, sizeof (buf));
 	last_sp = strchr(buf, ' ');
 	for (start = buf, cur = buf, end = buf + strlen(buf);; cur++) {
 		if (last_sp == NULL)
 			last_sp = end;
 		if (cur == end) {
-			ADD_LINE(*lines_p, *n_lines_p, start, cur - start);
+			ADD_LINE(*lines_p, *n_lines_p, start, cur - start,
+			    line_prefix);
 			break;
 		}
 		if (cur - start >= FMS_COLS) {
-			ADD_LINE(*lines_p, *n_lines_p, start, last_sp - start);
+			ADD_LINE(*lines_p, *n_lines_p, start, last_sp - start,
+			    line_prefix);
 			if (last_sp == end)
 				break;
 			start = last_sp + 1;
@@ -81,10 +89,9 @@ is_short_response(const cpdlc_msg_t *msg)
 	return (msg_type >= CPDLC_DM0_WILCO && msg_type <= CPDLC_DM5_NEGATIVE);
 }
 
-
 void
 fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
-    char ***lines_p, unsigned *n_lines_p)
+    char ***lines_p, unsigned *n_lines_p, const char *line_prefix)
 {
 	CPDLC_ASSERT(msglist != NULL);
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
@@ -106,12 +113,11 @@ fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 			continue;
 		if (i > 0) {
 			ADD_LINE(*lines_p, *n_lines_p,
-			    "------------------------", 24);
+			    "------------------------", 24, line_prefix);
 		}
-		fans_msg2lines(msg, lines_p, n_lines_p);
+		fans_msg2lines(msg, lines_p, n_lines_p, line_prefix);
 	}
 }
-
 
 void
 fans_free_lines(char **lines, unsigned n_lines)
@@ -120,4 +126,3 @@ fans_free_lines(char **lines, unsigned n_lines)
 		free(lines[i]);
 	free(lines);
 }
-

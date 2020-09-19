@@ -295,7 +295,7 @@ fans_msg_thr_draw_cb(fans_t *box)
 
 	cpdlc_msglist_thr_mark_seen(box->msglist, box->thr_id);
 
-	fans_thr2lines(box->msglist, box->thr_id, &lines, &n_lines);
+	fans_thr2lines(box->msglist, box->thr_id, &lines, &n_lines, NULL);
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
 	fans_put_page_title(box, "CPDLC MESSAGE");

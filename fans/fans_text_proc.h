@@ -34,9 +34,9 @@ extern "C" {
 
 const char *fans_thr_status2str(cpdlc_msg_thr_status_t st, bool dirty);
 void fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p,
-    unsigned *n_lines_p);
+    unsigned *n_lines_p, const char *line_prefix);
 void fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
-    char ***lines_p, unsigned *n_lines_p);
+    char ***lines_p, unsigned *n_lines_p, const char *line_prefix);
 void fans_free_lines(char **lines, unsigned n_lines);
 
 #ifdef	__cplusplus
