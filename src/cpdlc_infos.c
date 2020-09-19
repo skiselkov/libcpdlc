@@ -737,11 +737,11 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type =
 	    CPDLC_UM91_HOLD_AT_pos_MAINT_alt_INBD_deg_TURN_dir_LEG_TIME_time,
 	.text = "HOLD AT [position] MAINTAIN [altitude] INBOUND TRACK "
-	    "[degrees] [direction] TURN LEG TIME [leg type]",
+	    "[degrees] [direction] TURN LEG TIME [minutes]",
 	.num_args = 5,
 	.args = {
 	    CPDLC_ARG_POSITION, CPDLC_ARG_ALTITUDE, CPDLC_ARG_DEGREES,
-	    CPDLC_ARG_DIRECTION, CPDLC_ARG_TIME
+	    CPDLC_ARG_DIRECTION, CPDLC_ARG_TIME_DUR
 	},
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT

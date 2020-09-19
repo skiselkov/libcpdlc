@@ -243,6 +243,12 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    arg->time.hrs, arg->time.mins);
 		}
 		break;
+	case CPDLC_ARG_TIME_DUR:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+		    "%s%d%s", readable ? "" : " ",
+		    arg->time.hrs * 60 + arg->time.mins,
+		    readable ? " MINUTES" : "");
+		break;
 	case CPDLC_ARG_POSITION:
 		if (readable) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
@@ -851,6 +857,15 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				}
 			}
 			break;
+		case CPDLC_ARG_TIME_DUR:
+			arg_end = find_arg_end(start, end);
+			if (sscanf(start, "%u", &arg->time.mins) != 1) {
+				MALFORMED_MSG("invalid time");
+				return (false);
+			}
+			arg->time.hrs = arg->time.mins / 60;
+			arg->time.mins = arg->time.mins % 60;
+			break;
 		case CPDLC_ARG_POSITION:
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
@@ -1003,14 +1018,17 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			arg->deg.tru = (arg_end[-1] == 'T');
 			break;
-		case CPDLC_ARG_BARO:
-			if (start + 4 >= end) {
+		case CPDLC_ARG_BARO: {
+			double val;
+
+			if (start + 3 > end) {
 				MALFORMED_MSG("baro too short");
 				return (false);
 			}
 			switch(start[0]) {
 			case 'A':
 				arg->baro.val = atof(&start[1]);
+				arg->baro.hpa = false;
 				if (arg->baro.val < 28 || arg->baro.val > 32) {
 					MALFORMED_MSG("invalid baro value");
 					return (false);
@@ -1018,6 +1036,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				break;
 			case 'Q':
 				arg->baro.val = atoi(&start[1]);
+				arg->baro.hpa = true;
 				if (arg->baro.val < 900 ||
 				    arg->baro.val > 1100) {
 					MALFORMED_MSG("invalid baro value");
@@ -1025,11 +1044,25 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				}
 				break;
 			default:
-				MALFORMED_MSG("invalid baro type (%c)",
-				    start[0]);
-				return (false);
+				val = atof(start);
+				if (val >= 2800 && val <= 3200) {
+					arg->baro.val = val / 100;
+					arg->baro.hpa = false;
+				} else if (val >= 28 && val <= 32) {
+					arg->baro.val = val / 100;
+					arg->baro.hpa = false;
+				} else if (val >= 900 && val <= 1100) {
+					arg->baro.val = val;
+					arg->baro.hpa = true;
+				} else {
+					MALFORMED_MSG("invalid baro value (%s)",
+					    start);
+					return (false);
+				}
+				break;
 			}
 			break;
+		}
 		case CPDLC_ARG_FREETEXT:
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(end - start) + 1));
@@ -1403,6 +1436,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->spd.spd = *(int *)arg_val2;
 		break;
 	case CPDLC_ARG_TIME:
+	case CPDLC_ARG_TIME_DUR:
 		CPDLC_ASSERT(arg_val2 != NULL);
 		arg->time.hrs = *(int *)arg_val1;
 		arg->time.mins = *(int *)arg_val2;
@@ -1497,6 +1531,7 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		*(int *)arg_val2 = arg->spd.spd;
 		return (sizeof (arg->spd));
 	case CPDLC_ARG_TIME:
+	case CPDLC_ARG_TIME_DUR:
 		CPDLC_ASSERT(arg_val1 != NULL);
 		CPDLC_ASSERT(arg_val2 != NULL);
 		*(int *)arg_val1 = arg->time.hrs;
