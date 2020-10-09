@@ -1,13 +1,26 @@
 #!/bin/bash
 
+GMP=gmp-6.2.0
 NETTLE=nettle-3.5
 GNUTLS=gnutls-3.6.11.1
 LWS=libwebsockets-3.1.0
 
 UBUNTU_PACKAGES="build-essential cmake git libglu1-mesa-dev libgmp-dev \
 libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools unzip"
+NCPUS=$(fgrep processor /proc/cpuinfo  | wc -l)
 
 set -e
+
+winbuild=0
+HOST_SUFFIX=""
+while getopts "w" opt; do
+	case $opt in
+	w)
+		winbuild=1
+		HOST_SUFFIX="--host=x86_64-w64-mingw32"
+		;;
+	esac
+done
 
 echo -n "Would you like to build the GUI portions as well? [y/N] "
 read
@@ -84,30 +97,47 @@ if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
 	(
 	    cd "${LWS}" && \
 		cmake . && \
-		make -j4
+		make -j ${NCPUS}
 	) || exit 1
 fi
 
-[ -d "${NETTLE}" ] || tar xzf "${NETTLE}.tar.gz"
-if ! [ -f "${NETTLE}/install/lib/libnettle.a" ]; then
+[ -d "${GMP}" ] || tar xJf "${GMP}.tar.xz"
+if ! [ -f "${GMP}/install/lib/libgmp.a" ]; then
+	(
+	    cd "${GMP}" && \
+		./configure --enable-static --disable-shared \
+		    --prefix="$(pwd)/install" $HOST_SUFFIX && \
+		make -j ${NCPUS} && make install
+	) || exit 1
+fi
+
+[ -d "${NETTLE}" ] || tar xJf "${NETTLE}.tar.xz"
+if ! [ -f "${NETTLE}/install/bin/libnettle-7.dll" ]; then
 	(
 	    cd "${NETTLE}" && \
-		./configure --enable-mini-gmp --disable-shared \
-		--enable-static --prefix="$(pwd)/install" && \
-		make -j4 && make install
+		LDFLAGS="-static-libgcc -static-libstdc++" \
+		./configure --enable-mini-gmp \
+		--prefix="$(pwd)/install" $HOST_SUFFIX && \
+		make -j ${NCPUS} && make install
 	) || exit 1
 fi
 
 [ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
-if ! [ -f "${GNUTLS}/install/lib/libgnutls.a" ]; then
+if ! [ -f "${GNUTLS}/install/bin/libgnutls-30.dll" ]; then
 	(
 	    cd "${GNUTLS}" && \
-		PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig \
-		./configure --prefix=$(pwd)/install --enable-static \
-		--disable-shared --with-included-libtasn1 -with-pic \
+		LIBS="-static-libgcc -static-libstdc++" \
+		GMP_CFLAGS="$(PKG_CONFIG_PATH=../${GMP}/install/lib/pkgconfig pkg-config --cflags gmp)" \
+		GMP_LIBS="$(PKG_CONFIG_PATH=../${GMP}/install/lib/pkgconfig pkg-config --libs gmp)" \
+		HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --cflags hogweed)" \
+		HOGWEED_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --libs hogweed)" \
+		NETTLE_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --cflags nettle)" \
+		NETTLE_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --libs nettle)" \
+		./configure --prefix="$(pwd)/install" \
+		--with-included-libtasn1 --with-pic \
 		--with-included-unistring --without-p11-kit --disable-doc \
-		--disable-tools --disable-cxx --disable-tests &&
-		make -j4 && make install
+		--disable-tools --disable-cxx --disable-tests $HOST_SUFFIX &&
+		make -j ${NCPUS} && make install
 	) || exit 1
 fi
 

@@ -91,6 +91,7 @@
 #ifdef	_WIN32
 
 #define	SOCKET_IS_VALID(sock)	((sock) != INVALID_SOCKET)
+#define	GAI_STRERROR		gai_strerrorA
 typedef SOCKET socktype_t;
 static inline bool
 conn_in_progress(void)
@@ -102,6 +103,7 @@ conn_in_progress(void)
 #else	/* !defined(_WIN32) */
 
 #define	SOCKET_IS_VALID(sock)	((sock) != -1)
+#define	GAI_STRERROR		gai_strerror
 typedef int socktype_t;
 static inline bool
 conn_in_progress(void)
@@ -726,7 +728,7 @@ resolve_host(cpdlc_client_t *cl)
 	char host[PATH_MAX];
 
 	CPDLC_ASSERT(cl != NULL);
-	CPDLC_ASSERT3S(cl->sock, ==, -1);
+	CPDLC_ASSERT(!SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
 	if (cl->ai != NULL) {
@@ -750,8 +752,8 @@ resolve_host(cpdlc_client_t *cl)
 
 	if (result != 0) {
 		fprintf(stderr, "Can't resolve %s: %s\n", host,
-		    gai_strerror(result));
-		set_logon_failure(cl, "%s: %s", host, gai_strerror(result));
+		    GAI_STRERROR(result));
+		set_logon_failure(cl, "%s: %s", host, GAI_STRERROR(result));
 		return (false);
 	}
 	CPDLC_ASSERT(ai != NULL);
@@ -768,7 +770,7 @@ init_conn(cpdlc_client_t *cl)
 	cpdlc_logon_status_t new_status;
 
 	CPDLC_ASSERT(cl != NULL);
-	CPDLC_ASSERT3S(cl->sock, ==, -1);
+	CPDLC_ASSERT(!SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 	CPDLC_ASSERT(cl->ai != NULL);
 
