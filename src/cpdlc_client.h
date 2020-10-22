@@ -74,6 +74,8 @@ typedef void (*cpdlc_msg_sent_cb_t)(cpdlc_client_t *client,
 CPDLC_API cpdlc_client_t *cpdlc_client_alloc(bool is_atc);
 CPDLC_API void cpdlc_client_free(cpdlc_client_t *cl);
 
+CPDLC_API bool cpdlc_client_get_is_atc(const cpdlc_client_t *cl);
+
 CPDLC_API void cpdlc_client_set_host(cpdlc_client_t *cl, const char *host);
 CPDLC_API const char *cpdlc_client_get_host(cpdlc_client_t *cl);
 CPDLC_API void cpdlc_client_set_port(cpdlc_client_t *cl, unsigned port);

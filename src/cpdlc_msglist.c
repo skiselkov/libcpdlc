@@ -75,21 +75,28 @@ msg_is_dl_req(const cpdlc_msg_t *msg)
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	msg_type = msg->segs[0].info->msg_type;
-	return ((msg_type >= CPDLC_DM6_REQ_alt &&
+	return (msg->segs[0].info->is_dl &&
+	    ((msg_type >= CPDLC_DM6_REQ_alt &&
 	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE) ||
 	    (msg_type >= CPDLC_DM49_WHEN_CAN_WE_EXPCT_spd &&
 	    msg_type <= CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt) ||
 	    msg_type == CPDLC_DM70_REQ_HDG_deg ||
-	    msg_type == CPDLC_DM71_REQ_GND_TRK_deg);
+	    msg_type == CPDLC_DM71_REQ_GND_TRK_deg));
 }
 
+/*
+ * Checks whether the passed downlink message requires a response.
+ */
 static bool
-msg_dl_req_resp(const cpdlc_msg_t *msg)
+msg_req_resp(const cpdlc_msg_t *msg)
 {
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(msg->segs[0].info != NULL);
-	CPDLC_ASSERT(msg->segs[0].info->is_dl);
-	return (msg->segs[0].info->resp == CPDLC_RESP_Y);
+	for (unsigned i = 0; i < msg->num_segs; i++) {
+		if (msg->segs[i].info->resp != CPDLC_RESP_N)
+			return (true);
+	}
+	return (false);
 }
 
 static bool
@@ -221,15 +228,20 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 	msg_bucket_t *last = list_tail(&thr->buckets);
 	time_t now = time(NULL);
 	unsigned timeout;
+	bool is_atc;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr != NULL);
 
 	if (thr_status_is_final(thr->status))
 		return;
 
 	timeout = thr_get_timeout(thr);
+	is_atc = cpdlc_client_get_is_atc(msglist->cl);
 
-	if (first == last && first->sent && !msg_dl_req_resp(first->msg)) {
+	if (first == last && first->sent && !msg_req_resp(first->msg)) {
 		thr->status = CPDLC_MSG_THR_CLOSED;
-	} else if (last->sent && msg_is_dl_req(last->msg)) {
+	} else if (last->sent && !is_atc && msg_is_dl_req(last->msg)) {
 		switch (cpdlc_client_get_msg_status(msglist->cl, last->tok)) {
 		case CPDLC_MSG_STATUS_SENDING:
 			thr->status = CPDLC_MSG_THR_PENDING;

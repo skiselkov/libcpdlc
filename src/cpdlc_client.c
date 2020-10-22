@@ -497,6 +497,13 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	free(cl);
 }
 
+bool
+cpdlc_client_get_is_atc(const cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->is_atc);
+}
+
 void
 cpdlc_client_set_host(cpdlc_client_t *cl, const char *host)
 {
