@@ -47,7 +47,7 @@ CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O0 -g -DDEBUG \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
 
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs)
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
 
 ifeq ($(PLATFORM_NAME),win-64)
 	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)
@@ -57,13 +57,11 @@ else
 		CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)
 		LIBS += $(LWS_LIBS)
 	else
-		CFLAGS += $(shell pkg-config gnutls --cflags)
-		LIBS += $(shell pkg-config gnutls --libs)
+		CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
+		    pkg-config --cflags gnutls nettle hogweed)
+		LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
+		    --libs gnutls nettle hogweed) -lcrypto
 	endif
-	CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
-	    pkg-config --cflags gnutls)
-	LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-	    --static --libs gnutls)
 endif
 LIBS += $(PLATFORM_LIBS) -lpthread -lm
 
