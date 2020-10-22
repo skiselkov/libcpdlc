@@ -55,6 +55,7 @@ fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p,
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(lines_p != NULL);
 	CPDLC_ASSERT(n_lines_p != NULL);
+	CPDLC_ASSERT(line_prefix != NULL);
 
 	if (line_prefix == NULL)
 		line_prefix = "";

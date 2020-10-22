@@ -100,16 +100,6 @@ msg_req_resp(const cpdlc_msg_t *msg)
 }
 
 static bool
-msg_is_ul_req(const cpdlc_msg_t *msg)
-{
-	CPDLC_ASSERT(msg != NULL);
-	CPDLC_ASSERT(msg->segs[0].info != NULL);
-	return (msg->segs[0].info->resp == CPDLC_RESP_WU ||
-	    msg->segs[0].info->resp == CPDLC_RESP_AN ||
-	    msg->segs[0].info->resp == CPDLC_RESP_NE);
-}
-
-static bool
 msg_is_stby(const cpdlc_msg_t *msg)
 {
 	CPDLC_ASSERT(msg != NULL);
@@ -257,12 +247,7 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		thr->status = CPDLC_MSG_THR_STANDBY;
 	} else if (msg_is_accept(last->msg)) {
 		thr->status = CPDLC_MSG_THR_ACCEPTED;
-	} else if (msg_is_reject(last->msg)) {
-		thr->status = CPDLC_MSG_THR_REJECTED;
-	} else if (msg_is_rgr(last->msg) || msg_is_link_mgmt(last->msg)) {
-		thr->status = CPDLC_MSG_THR_CLOSED;
-	} else if (msg_is_ul_req(last->msg) &&
-	    thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
+	} else if (thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
 	    now - last->time > timeout) {
 		cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(last->msg));
@@ -270,6 +255,10 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		cpdlc_msg_seg_set_arg(msg, 0, 0, "TIMEDOUT", NULL);
 		msglist_send_impl(msglist, msg, thr->thr_id);
 		thr->status = CPDLC_MSG_THR_TIMEDOUT;
+	} else if (msg_is_reject(last->msg)) {
+		thr->status = CPDLC_MSG_THR_REJECTED;
+	} else if (msg_is_rgr(last->msg) || msg_is_link_mgmt(last->msg)) {
+		thr->status = CPDLC_MSG_THR_CLOSED;
 	} else if (is_disregard_msg(last->msg)) {
 		thr->status = CPDLC_MSG_THR_DISREGARD;
 	} else if (is_error_msg(last->msg)) {
@@ -279,6 +268,8 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		thr->dirty = false;
 		thr->status = CPDLC_MSG_THR_CONN_ENDED;
 	}
+	if (thr->status != CPDLC_MSG_THR_OPEN)
+		thr->dirty = false;
 }
 
 static void
