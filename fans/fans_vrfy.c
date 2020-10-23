@@ -59,7 +59,7 @@ fans_vrfy_draw_cb(fans_t *box)
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(box->verify.msg != NULL);
 
-	fans_msg2lines(box->verify.msg, &lines, &n_lines, NULL);
+	fans_msg2lines(box->verify.msg, &lines, &n_lines, "");
 	CPDLC_ASSERT(n_lines != 0);
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
