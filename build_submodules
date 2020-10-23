@@ -111,7 +111,12 @@ if [[ "$do_clean" == 0 ]]; then
 		    cd "${LWS}" && \
 			cmake . \
 			    -DLWS_OPENSSL_LIBRARIES="$(pwd)/../libacfutils/ssl/openssl-$ARCH/lib" \
-			    -DLWS_OPENSSL_INCLUDE_DIRS="$(pwd)/../libacfutils/ssl/openssl-$ARCH/include" && \
+			    -DLWS_OPENSSL_INCLUDE_DIRS="$(pwd)/../libacfutils/ssl/openssl-$ARCH/include" \
+			    -DLWS_WITHOUT_TESTAPPS=ON \
+			    -DLWS_WITHOUT_TEST_SERVER=ON \
+			    -DLWS_WITHOUT_TEST_SERVER_EXTPOLL=ON \
+			    -DLWS_WITHOUT_TEST_PING=ON \
+			    -DLWS_WITHOUT_TEST_CLIENT=ON && \
 			make -j ${NCPUS}
 		) || exit 1
 	fi
