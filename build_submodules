@@ -14,11 +14,13 @@ set -e
 winbuild=0
 do_clean=0
 HOST_SUFFIX=""
+ARCH="linux-64"
 while getopts "wc" opt; do
 	case $opt in
 	w)
 		winbuild=1
 		HOST_SUFFIX="--host=x86_64-w64-mingw32"
+		ARCH="win-64"
 		;;
 	c)
 		do_clean=1
@@ -107,7 +109,9 @@ if [[ "$do_clean" == 0 ]]; then
 	if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
 		(
 		    cd "${LWS}" && \
-			cmake . && \
+			cmake . \
+			    -DLWS_OPENSSL_LIBRARIES="$(pwd)/../libacfutils/ssl/openssl-$ARCH/lib" \
+			    -DLWS_OPENSSL_INCLUDE_DIRS="$(pwd)/../libacfutils/ssl/openssl-$ARCH/include" && \
 			make -j ${NCPUS}
 		) || exit 1
 	fi
@@ -118,7 +122,7 @@ fi
 
 if [[ "$do_clean" = 0 ]]; then
 	[ -d "${GMP}" ] || tar xJf "${GMP}.tar.xz"
-	if ! [ -f "${GMP}/install/lib/libgmp.a" ]; then
+	if ! [ -f "${GMP}/install/lib/pkgconfig/gmp.pc" ]; then
 		(
 		    cd "${GMP}" && \
 			./configure --enable-static --disable-shared \
@@ -133,7 +137,7 @@ fi
 
 if [[ "$do_clean" = 0 ]]; then
 	[ -d "${NETTLE}" ] || tar xJf "${NETTLE}.tar.xz"
-	if ! [ -f "${NETTLE}/install/bin/libnettle-7.dll" ]; then
+	if ! [ -f "${NETTLE}/install/lib/pkgconfig/nettle.pc" ]; then
 		(
 		    cd "${NETTLE}" && \
 			LDFLAGS="-static-libgcc -static-libstdc++" \
@@ -149,7 +153,7 @@ fi
 
 if [[ "$do_clean" == 0 ]]; then
 	[ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
-	if ! [ -f "${GNUTLS}/install/bin/libgnutls-30.dll" ]; then
+	if ! [ -f "${GNUTLS}/install/lib/pkgconfig/gnutls.pc" ]; then
 		(
 		    cd "${GNUTLS}" && \
 			LIBS="-static-libgcc -static-libstdc++" \
