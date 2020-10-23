@@ -936,7 +936,14 @@ conn_reset_logon(conn_t *conn)
 	ASSERT(conn != NULL);
 
 	mutex_enter(&conn->lock);
-
+	/*
+	 * If the logon has completed, we MUST have had this connection
+	 * inserted in the conns_by_from hashtable.
+	 */
+	while ((idl = list_remove_head(&conn->from_list)) != NULL) {
+		conns_by_from_remove(conn, idl->ident);
+		free(idl);
+	}
 	/*
 	 * If a background auth session has been started, kill it.
 	 */
@@ -946,14 +953,6 @@ conn_reset_logon(conn_t *conn)
 	}
 	if (conn->logon_status != LOGON_COMPLETE)
 		goto out;
-	/*
-	 * If the logon has completed, we MUST have had this connection
-	 * inserted in the conns_by_from hashtable.
-	 */
-	while ((idl = list_remove_head(&conn->from_list)) != NULL) {
-		conns_by_from_remove(conn, idl->ident);
-		free(idl);
-	}
 	conn->is_atc = false;
 	memset(conn->to, 0, sizeof (conn->to));
 	memset(conn->logon_from, 0, sizeof (conn->logon_from));
@@ -1110,17 +1109,21 @@ complete_logons(void)
 }
 
 static void
-conn_remove_ident(conn_t *conn, const char *ident)
+conn_remove_ident(conn_t *conn, const char *ident, bool missing_ok)
 {
+	ASSERT(conn != NULL);
+	ASSERT(ident != NULL);
 	for (ident_list_t *idl = list_head(&conn->from_list);
 	    idl != NULL; idl = list_next(&conn->from_list, idl)) {
 		if (strcmp(idl->ident, ident) == 0) {
 			conns_by_from_remove(conn, idl->ident);
 			list_remove(&conn->from_list, idl);
 			free(idl);
-			break;
+			return;
 		}
 	}
+	if (!missing_ok)
+		VERIFY_FAIL();
 }
 
 /*
@@ -1156,7 +1159,7 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 		 * For ATC connections, just remove the identity we're trying
 		 * to remove.
 		 */
-		conn_remove_ident(conn, cpdlc_msg_get_from(msg));
+		conn_remove_ident(conn, cpdlc_msg_get_from(msg), true);
 	}
 	if (list_count(&conn->from_list) == 0) {
 		conn->logoff_time = time(NULL);
@@ -1476,10 +1479,7 @@ msg_auto_assign_from(cpdlc_msg_t *msg)
 		 */
 		acft_conn = HTBL_VALUE_MULTI(list_tail(l));
 		if (acft_conn != NULL) {
-			ident_list_t *idl = list_head(&acft_conn->from_list);
-
-			ASSERT(idl != NULL);
-			cpdlc_msg_set_from(msg, idl->ident);
+			cpdlc_msg_set_from(msg, acft_conn->to);
 			mutex_exit(&conns_by_from_lock);
 			return (true);
 		}
