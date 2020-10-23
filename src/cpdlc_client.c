@@ -359,6 +359,8 @@ logon_worker(void *userinfo)
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_LINK_AVAIL:
+		case CPDLC_LOGON_IN_PROG:
+		case CPDLC_LOGON_COMPLETE:
 			if (cl->logon.do_logon) {
 				send_logon(cl);
 			} else {
@@ -370,15 +372,6 @@ logon_worker(void *userinfo)
 				    &num_out_tokens);
 #endif	/* !CPDLC_CLIENT_LWS */
 			}
-			break;
-		case CPDLC_LOGON_IN_PROG:
-		case CPDLC_LOGON_COMPLETE:
-#ifdef	CPDLC_CLIENT_LWS
-			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
-#else	/* !CPDLC_CLIENT_LWS */
-			new_msgs = poll_for_msgs(cl, &out_tokens,
-			    &num_out_tokens);
-#endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		default:
 			CPDLC_VERIFY_MSG(0, "client reached impossible "
@@ -1007,6 +1000,7 @@ send_logon(cpdlc_client_t *cl)
 	cpdlc_msg_free(msg);
 
 	cl->logon_status = CPDLC_LOGON_IN_PROG;
+	cl->logon.do_logon = false;
 }
 
 static void
