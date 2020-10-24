@@ -255,6 +255,7 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		cpdlc_msg_seg_set_arg(msg, 0, 0, "TIMEDOUT", NULL);
 		msglist_send_impl(msglist, msg, thr->thr_id);
 		thr->status = CPDLC_MSG_THR_TIMEDOUT;
+		thr->dirty = false;
 	} else if (msg_is_reject(last->msg)) {
 		thr->status = CPDLC_MSG_THR_REJECTED;
 	} else if (msg_is_rgr(last->msg) || msg_is_link_mgmt(last->msg)) {
@@ -263,13 +264,12 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 		thr->status = CPDLC_MSG_THR_DISREGARD;
 	} else if (is_error_msg(last->msg)) {
 		thr->status = CPDLC_MSG_THR_ERROR;
+		thr->dirty = false;
 	} else if (cpdlc_client_get_logon_status(msglist->cl, NULL) !=
 	    CPDLC_LOGON_COMPLETE) {
 		thr->dirty = false;
 		thr->status = CPDLC_MSG_THR_CONN_ENDED;
 	}
-	if (thr->status != CPDLC_MSG_THR_OPEN)
-		thr->dirty = false;
 }
 
 static void
