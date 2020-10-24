@@ -863,12 +863,10 @@ static void
 draw_atc_msg_lsk(fans_t *box)
 {
 	cpdlc_msg_thr_id_t thr_id;
-	cpdlc_logon_status_t logon;
 
 	CPDLC_ASSERT(box != NULL);
-	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
-	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
+	if (thr_id != CPDLC_NO_MSG_THR_ID) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_R6, FMS_COLOR_CYAN,
 		    "ATC MSG*");
 	}
@@ -878,12 +876,10 @@ static void
 handle_atc_msg_lsk(fans_t *box)
 {
 	cpdlc_msg_thr_id_t thr_id;
-	cpdlc_logon_status_t logon;
 
 	CPDLC_ASSERT(box != NULL);
-	logon = cpdlc_client_get_logon_status(box->cl, NULL);
 	thr_id = get_new_thr_id(box);
-	if (logon == CPDLC_LOGON_COMPLETE && thr_id != CPDLC_NO_MSG_THR_ID) {
+	if (thr_id != CPDLC_NO_MSG_THR_ID) {
 		fans_set_thr_id(box, thr_id);
 		fans_set_page(box, FMS_PAGE_MSG_THR, true);
 	}
