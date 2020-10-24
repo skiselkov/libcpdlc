@@ -36,12 +36,14 @@
 
 #define	ADD_LINE(__lines, __n_lines, __start, __len, __line_prefix) \
 	do { \
-		unsigned l = (__len) + strlen(__line_prefix) + 1; \
+		unsigned prefix_l = strlen(__line_prefix); \
+		unsigned l = (__len) + prefix_l + 1; \
 		(__lines) = safe_realloc((__lines), \
 		    ((__n_lines) + 1) * sizeof (*(__lines))); \
-		(__lines)[(__n_lines)] = safe_malloc(l); \
-		snprintf((__lines)[(__n_lines)], l, "%s%s", (__line_prefix), \
-		    (__start)); \
+		(__lines)[(__n_lines)] = safe_calloc(1, l); \
+		cpdlc_strlcpy((__lines)[(__n_lines)], (__line_prefix), l); \
+		cpdlc_strlcpy(&(__lines)[(__n_lines)][prefix_l], (__start), \
+		    l - prefix_l); \
 		(__n_lines)++; \
 	} while (0)
 
