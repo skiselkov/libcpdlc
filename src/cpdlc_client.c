@@ -986,11 +986,11 @@ send_logon(cpdlc_client_t *cl)
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(cl->logon.data != NULL);
 	CPDLC_ASSERT(cl->logon.from != NULL);
-	CPDLC_ASSERT(cl->logon.to != NULL);
 
 	cpdlc_msg_set_logon_data(msg, cl->logon.data);
 	cpdlc_msg_set_from(msg, cl->logon.from);
 	if (cl->logon.nda != NULL) {
+		free(cl->logon.to);
 		cl->logon.to = cl->logon.nda;
 		cl->logon.nda = NULL;
 	}
