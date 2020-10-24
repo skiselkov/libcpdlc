@@ -766,15 +766,21 @@ fans_put_atc_status(fans_t *box)
 static void
 put_cur_time(fans_t *box)
 {
-	time_t now;
-	const struct tm *tm;
+	int t;
 
 	CPDLC_ASSERT(box != NULL);
 
-	now = time(NULL);
-	tm = localtime(&now);
-	fans_put_str(box, LSK6_ROW, 8, false, FMS_COLOR_GREEN, FMS_FONT_SMALL,
-	    "%02d%02dZ", tm->tm_hour, tm->tm_min);
+	if (box->funcs.get_time != NULL) {
+		unsigned hours, mins;
+		box->funcs.get_time(box->userinfo, &hours, &mins);
+		t = hours * 100 + mins;
+	} else {
+		time_t now = time(NULL);
+		const struct tm *tm = gmtime(&now);
+		t = tm->tm_hour * 100 + tm->tm_min;
+	}
+	fans_put_str(box, LSK6_ROW, 8, false, FMS_COLOR_GREEN,
+	    FMS_FONT_SMALL, "%04dZ", t);
 }
 
 cpdlc_msg_thr_id_t *
