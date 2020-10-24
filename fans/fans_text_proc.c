@@ -49,7 +49,7 @@
 
 void
 fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p,
-    const char *line_prefix)
+    const char *line_prefix, unsigned max_line_len)
 {
 	char buf[1024];
 	const char *start, *cur, *end, *last_sp;
@@ -58,6 +58,7 @@ fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p,
 	CPDLC_ASSERT(lines_p != NULL);
 	CPDLC_ASSERT(n_lines_p != NULL);
 	CPDLC_ASSERT(line_prefix != NULL);
+	CPDLC_ASSERT(max_line_len != 0);
 
 	if (line_prefix == NULL)
 		line_prefix = "";
@@ -72,7 +73,7 @@ fans_msg2lines(const cpdlc_msg_t *msg, char ***lines_p, unsigned *n_lines_p,
 			    line_prefix);
 			break;
 		}
-		if (cur - start >= FMS_COLS) {
+		if (cur - start >= max_line_len) {
 			ADD_LINE(*lines_p, *n_lines_p, start, last_sp - start,
 			    line_prefix);
 			if (last_sp == end)
@@ -118,7 +119,7 @@ fans_thr2lines(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 			ADD_LINE(*lines_p, *n_lines_p,
 			    "------------------------", 24, line_prefix);
 		}
-		fans_msg2lines(msg, lines_p, n_lines_p, line_prefix);
+		fans_msg2lines(msg, lines_p, n_lines_p, line_prefix, FMS_COLS);
 	}
 }
 
