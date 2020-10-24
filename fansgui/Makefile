@@ -98,6 +98,6 @@ ifeq ($(PLATFORM_NAME),win-64)
 endif
 
 clean :
-	rm -f fansgui $(OBJS)
+	rm -f fansgui fansgui.exe $(OBJS)
 
 include ../Makefile.rules
