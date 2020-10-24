@@ -229,7 +229,7 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 	timeout = thr_get_timeout(thr);
 	is_atc = cpdlc_client_get_is_atc(msglist->cl);
 
-	if (first == last && first->sent && !msg_req_resp(first->msg)) {
+	if (first == last && !msg_req_resp(first->msg)) {
 		thr->status = CPDLC_MSG_THR_CLOSED;
 	} else if (last->sent && !is_atc && msg_is_dl_req(last->msg)) {
 		switch (cpdlc_client_get_msg_status(msglist->cl, last->tok)) {
