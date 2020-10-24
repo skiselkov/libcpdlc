@@ -35,6 +35,8 @@ extern "C" {
 void fans_update_scratchpad(fans_t *box);
 
 bool fans_scratchpad_is_delete(fans_t *box);
+bool fans_scratchpad_is_empty(fans_t *box);
+const char *fans_scratchpad_get(fans_t *box);
 void fans_scratchpad_clear(fans_t *box);
 void fans_scratchpad_pm(fans_t *box);
 void fans_scratchpad_xfer(fans_t *box, char *dest, size_t cap, bool allow_mod);

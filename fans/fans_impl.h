@@ -179,6 +179,7 @@ struct fans_s {
 
 	char			flt_id_auto[8];
 	char			flt_id[8];
+	char			secret[24];
 	char			to[5];
 
 	cpdlc_msg_thr_id_t	thr_id;
@@ -288,8 +289,11 @@ struct fans_s {
 		emer_reason_t		reason;
 	} emer;
 
+	fans_network_t	net;
 	cpdlc_client_t	*cl;
 	cpdlc_msglist_t	*msglist;
+	char		hostname[128];
+	int		port;
 };
 
 enum {

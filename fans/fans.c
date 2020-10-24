@@ -584,7 +584,7 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	box->userinfo = userinfo;
 	box->cl = cpdlc_client_alloc(false);
 	CPDLC_ASSERT(box->cl != NULL);
-	cpdlc_client_set_host(box->cl, "localhost");
+	cpdlc_strlcpy(box->hostname, "localhost", sizeof (box->hostname));
 	box->msglist = cpdlc_msglist_alloc(box->cl);
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
@@ -613,6 +613,21 @@ fans_get_client(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	return (box->cl);
+}
+
+fans_network_t
+fans_get_network(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->net);
+}
+
+void
+fans_set_network(fans_t *box, fans_network_t net)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(net <= FANS_NETWORK_PILOTEDGE);
+	box->net = net;
 }
 
 const fms_char_t *
@@ -1123,4 +1138,35 @@ fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd)
 		spd->spd.mach = info->spd_mach;
 		spd->spd.spd = info->spd;
 	}
+}
+
+void
+fans_set_host(fans_t *box, const char *hostname)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(hostname != NULL);
+	cpdlc_strlcpy(box->hostname, hostname, sizeof (box->hostname));
+}
+
+const char *
+fans_get_host(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->hostname);
+}
+
+void
+fans_set_port(fans_t *box, int port)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(port >= 0);
+	CPDLC_ASSERT(port <= UINT16_MAX);
+	box->port = port;
+}
+
+int
+fans_get_port(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->port);
 }

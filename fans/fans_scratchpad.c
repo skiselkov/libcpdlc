@@ -59,6 +59,20 @@ fans_scratchpad_is_delete(fans_t *box)
 	return (strcmp(box->scratchpad, "DELETE") == 0);
 }
 
+bool
+fans_scratchpad_is_empty(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (strcmp(box->scratchpad, "") == 0);
+}
+
+const char *
+fans_scratchpad_get(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->scratchpad);
+}
+
 void
 fans_scratchpad_clear(fans_t *box)
 {

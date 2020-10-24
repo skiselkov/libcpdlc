@@ -33,6 +33,14 @@
 #include "fans_impl.h"
 #include "fans_scratchpad.h"
 
+static void
+fans_strtoupper(char *buf)
+{
+	CPDLC_ASSERT(buf != NULL);
+	for (int i = 0, n = strlen(buf); i < n; i++)
+		buf[i] = toupper(buf[i]);
+}
+
 static bool
 can_send_logon(const fans_t *box, cpdlc_logon_status_t st)
 {
@@ -45,12 +53,32 @@ can_send_logon(const fans_t *box, cpdlc_logon_status_t st)
 static void
 send_logon(fans_t *box)
 {
-	char buf[64];
+	char flt_id[32], secret[32];
 
 	CPDLC_ASSERT(box != NULL);
 
-	snprintf(buf, sizeof (buf), "%s", box->flt_id);
-	cpdlc_client_logon(box->cl, buf, box->flt_id, box->to);
+	if (strlen(box->flt_id) != 0)
+		cpdlc_strlcpy(flt_id, box->flt_id, sizeof (flt_id));
+	else
+		cpdlc_strlcpy(flt_id, box->flt_id_auto, sizeof (flt_id));
+
+	switch (box->net) {
+	case FANS_NETWORK_CUSTOM:
+		cpdlc_client_set_host(box->cl, box->hostname);
+		cpdlc_client_set_port(box->cl, box->port);
+		if (strcmp(box->secret, "") == 0)
+			cpdlc_strlcpy(secret, flt_id, sizeof (secret));
+		else
+			cpdlc_strlcpy(secret, box->secret, sizeof (secret));
+		break;
+	case FANS_NETWORK_PILOTEDGE:
+		cpdlc_client_set_host(box->cl, "vspro.pilotedge.net");
+		cpdlc_client_set_port(box->cl, 0);
+		cpdlc_strlcpy(secret, flt_id, sizeof (secret));
+		break;
+	}
+	cpdlc_client_logon(box->cl, secret, flt_id, box->to);
+	memset(secret, 0, sizeof (secret));
 }
 
 static void
@@ -116,35 +144,46 @@ draw_page1(fans_t *box, cpdlc_logon_status_t st)
 static void
 draw_page2(fans_t *box)
 {
-	cpdlc_client_t *cl = box->cl;
-	const char *host = cpdlc_client_get_host(cl);
-	unsigned port = cpdlc_client_get_port(cl);
-
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "NETWORK");
-	fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
-	    FMS_FONT_LARGE, "vCUSTOM");
+	switch (box->net) {
+	case FANS_NETWORK_CUSTOM:
+		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "vCUSTOM");
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "HOSTNAME");
-	CPDLC_ASSERT(host != NULL);
-	if (strcmp(host, "localhost") == 0) {
-		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "LOCALHOST");
-	} else {
-		char buf[32];
-		cpdlc_strlcpy(buf, host, sizeof (buf));
-		for (int i = 0, n = strlen(buf); i < n; i++)
-			buf[i] = toupper(buf[i]);
-		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%s", buf);
-	}
+		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "HOSTNAME");
+		if (strcmp(box->hostname, "localhost") == 0) {
+			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "LOCALHOST");
+		} else {
+			char buf[32];
+			cpdlc_strlcpy(buf, box->hostname, sizeof (buf));
+			fans_strtoupper(buf);
+			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%s", buf);
+		}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "PORT");
-	if (port != 0) {
-		fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "%d", port);
-	} else {
-		fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "DEFAULT");
+		fans_put_lsk_title(box, FMS_KEY_LSK_L3, "PORT");
+		if (box->port != 0) {
+			fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "%d", box->port);
+		} else {
+			fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "DEFAULT");
+		}
+
+		fans_put_lsk_title(box, FMS_KEY_LSK_L4, "SECRET");
+		if (strlen(box->secret) != 0) {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "********");
+		} else {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+			    FMS_FONT_LARGE, "--------");
+		}
+		break;
+	case FANS_NETWORK_PILOTEDGE:
+		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
+		    FMS_FONT_LARGE, "vPILOTEDGE");
+		break;
 	}
 }
 
@@ -218,7 +257,12 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		fans_scratchpad_xfer(box, box->to, sizeof (box->to),
 		    st <= CPDLC_LOGON_LINK_AVAIL);
-	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2) {
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1) {
+		box->net++;
+		if (box->net > FANS_NETWORK_PILOTEDGE)
+			box->net = FANS_NETWORK_CUSTOM;
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2 &&
+	    box->net == FANS_NETWORK_CUSTOM) {
 		const char *host = cpdlc_client_get_host(box->cl);
 		char buf[32];
 
@@ -229,18 +273,30 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		if (strlen(buf) != 0) {
 			for (int i = 0, n = strlen(buf); i < n; i++)
 				buf[i] = tolower(buf[i]);
-			cpdlc_client_set_host(box->cl, buf);
+			cpdlc_strlcpy(box->hostname, buf,
+			    sizeof (box->hostname));
 		} else {
-			cpdlc_client_set_host(box->cl, "localhost");
+			cpdlc_strlcpy(box->hostname, "localhost",
+			    sizeof (box->hostname));
 		}
-	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3) {
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3 &&
+	    box->net == FANS_NETWORK_CUSTOM) {
 		bool set = true;
 		unsigned port = cpdlc_client_get_port(box->cl);
 		fans_scratchpad_xfer_uint(box, &port, &set, 0, UINT16_MAX);
 		if (set)
-			cpdlc_client_set_port(box->cl, port);
+			box->port = port;
 		else
-			cpdlc_client_set_port(box->cl, 0);
+			box->port = 0;
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L4 &&
+	    box->net == FANS_NETWORK_CUSTOM) {
+		if (fans_scratchpad_is_delete(box)) {
+			memset(box->secret, 0, sizeof (box->secret));
+		} else if (!fans_scratchpad_is_empty(box)) {
+			cpdlc_strlcpy(box->secret, fans_scratchpad_get(box),
+			    sizeof (box->secret));
+		}
+		fans_scratchpad_clear(box);
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (can_send_logon(box, st)) {
 			send_logon(box);

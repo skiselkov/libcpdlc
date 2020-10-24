@@ -89,6 +89,7 @@ ifeq ($(PLATFORM_NAME),win-64)
 	rm -rf fansgui-app
 	mkdir fansgui-app
 	cp $(OUTBIN) \
+	    sample-client.conf \
 	    $(wildcard ../gnutls-win64/bin/*.dll) \
 	    $(wildcard *.png) \
 	    $(wildcard ../ca_cert.pem) \

@@ -34,6 +34,7 @@
 #include <windows.h>
 #endif
 
+#include <acfutils/conf.h>
 #include <acfutils/glew.h>
 #include <acfutils/log.h>
 #include <acfutils/png.h>
@@ -42,6 +43,9 @@
 #include <GLFW/glfw3.h>
 
 #include <cglm/cglm.h>
+
+#include <cpdlc_assert.h>
+#include <cpdlc_string.h>
 
 #include "../fans/fans.h"
 #include "mtcr_mini.h"
@@ -158,6 +162,26 @@ static clickspot_t	clickspots[] = {
 };
 #undef	_
 static int		cur_clickspot = -1;
+static char		auto_flt_id[8] = {};
+
+static bool get_auto_flt_id(void *userinfo, char flt_id[8]);
+
+static const fans_funcs_t funcs = {
+    .get_flt_id = get_auto_flt_id
+};
+
+static bool
+get_auto_flt_id(void *userinfo, char flt_id[8])
+{
+	CPDLC_UNUSED(userinfo);
+	CPDLC_ASSERT(flt_id);
+	if (strlen(auto_flt_id) != 0) {
+		cpdlc_strlcpy(flt_id, auto_flt_id, 8);
+		return (true);
+	} else {
+		return (false);
+	}
+}
 
 static void
 do_log_msg(const char *msg)
@@ -485,16 +509,54 @@ window_init(void)
 }
 
 static void
+parse_conf(const conf_t *conf)
+{
+	const char *str;
+
+	CPDLC_ASSERT(conf != NULL);
+	CPDLC_ASSERT(box != NULL);
+
+	if (conf_get_str(conf, "network", &str)) {
+		if (strcmp(str, "custom") == 0) {
+			fans_set_network(box, FANS_NETWORK_CUSTOM);
+		} else if (strcmp(str, "pilotedge") == 0) {
+			fans_set_network(box, FANS_NETWORK_PILOTEDGE);
+		} else {
+			logMsg("Unknown \"network\" stanza in config file.");
+		}
+	}
+	if (fans_get_network(box) == FANS_NETWORK_CUSTOM) {
+		int port;
+
+		if (conf_get_str(conf, "hostname", &str))
+			fans_set_host(box, str);
+		if (conf_get_i(conf, "port", &port))
+			fans_set_port(box, port);
+	}
+	if (conf_get_str(conf, "autofltid", &str))
+		cpdlc_strlcpy(auto_flt_id, str, sizeof (auto_flt_id));
+}
+
+static void
 fms_init(void)
 {
 	cpdlc_client_t *cl;
 
-	box = fans_alloc(NULL, NULL);
+	box = fans_alloc(&funcs, NULL);
 	VERIFY(box != NULL);
 
 	cl = fans_get_client(box);
 	ASSERT(cl != NULL);
 	cpdlc_client_set_ca_file(cl, "ca_cert.pem");
+
+	if (file_exists("client.conf", NULL)) {
+		conf_t *conf = conf_read_file("client.conf", NULL);
+
+		if (conf != NULL) {
+			parse_conf(conf);
+			conf_free(conf);
+		}
+	}
 }
 
 static void

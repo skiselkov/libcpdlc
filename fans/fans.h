@@ -128,10 +128,30 @@ typedef struct {
 	fans_get_wind_t		get_wind;
 } fans_funcs_t;
 
+/*
+ * The box can be set up for either a completely custom connection,
+ * or for a specific network preset. This simplifies the user settings
+ * that have to be done on subpage 2 of the LOGON/STATUS page.
+ */
+typedef enum {
+	FANS_NETWORK_CUSTOM,
+	FANS_NETWORK_PILOTEDGE
+} fans_network_t;
+
 fans_t *fans_alloc(const fans_funcs_t *funcs, void *userinfo);
 void fans_free(fans_t *box);
 
-cpdlc_client_t *fans_get_client(const fans_t *fans);
+cpdlc_client_t *fans_get_client(const fans_t *box);
+
+fans_network_t fans_get_network(const fans_t *box);
+void fans_set_network(fans_t *box, fans_network_t net);
+/*
+ * Only used by FANS_NETWORK_CUSTOM
+ */
+void fans_set_host(fans_t *box, const char *hostname);
+const char *fans_get_host(const fans_t *box);
+void fans_set_port(fans_t *box, int port);
+int fans_get_port(const fans_t *box);
 
 const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);
 
