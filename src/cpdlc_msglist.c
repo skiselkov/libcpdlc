@@ -276,7 +276,7 @@ static void
 dfl_get_time_func(void *unused, unsigned *hours, unsigned *mins)
 {
 	time_t now = time(NULL);
-	const struct tm *tm = localtime(&now);
+	const struct tm *tm = gmtime(&now);
 	CPDLC_UNUSED(unused);
 	CPDLC_ASSERT(hours != NULL);
 	CPDLC_ASSERT(mins != NULL);
