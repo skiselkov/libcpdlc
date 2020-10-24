@@ -1049,7 +1049,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 					arg->baro.val = val / 100;
 					arg->baro.hpa = false;
 				} else if (val >= 28 && val <= 32) {
-					arg->baro.val = val / 100;
+					arg->baro.val = val;
 					arg->baro.hpa = false;
 				} else if (val >= 900 && val <= 1100) {
 					arg->baro.val = val;
