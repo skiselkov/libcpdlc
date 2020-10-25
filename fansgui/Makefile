@@ -41,13 +41,14 @@ endif
 BOGUS_WARNINGS=\
     -Wno-unused-result \
     -Wno-missing-field-initializers
+PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib
 
 CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O0 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --cflags) \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) $(PKG_CONFIG_DEPS_FLAGS) --cflags) \
 
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --glfw --libs) \
+	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) $(PKG_CONFIG_DEPS_FLAGS) --libs) \
 
 ifeq ($(PLATFORM_NAME),win-64)
 	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)
