@@ -289,13 +289,13 @@ struct fans_s {
 		emer_reason_t		reason;
 	} emer;
 
-	fans_network_t	net;
-	cpdlc_client_t	*cl;
-	cpdlc_msglist_t	*msglist;
-	char		hostname[128];
-	int		port;
-	bool		show_volume;
-	double		volume;
+	fans_network_t		net;
+	cpdlc_client_t		*cl;
+	cpdlc_msglist_t		*msglist;
+	char			hostname[128];
+	int			port;
+	bool			show_volume;
+	double			volume;
 };
 
 enum {

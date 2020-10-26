@@ -169,9 +169,12 @@ static int		cur_clickspot = -1;
 static char		auto_flt_id[8] = {};
 
 static bool get_auto_flt_id(void *userinfo, char flt_id[8]);
+static void msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids,
+    unsigned n);
 
 static const fans_funcs_t funcs = {
-    .get_flt_id = get_auto_flt_id
+    .get_flt_id = get_auto_flt_id,
+    .msgs_updated = msgs_updated_cb
 };
 
 static void
@@ -185,9 +188,14 @@ play_alert(void)
 }
 
 static void
-update_cb(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t *thr_ids, unsigned n)
+msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids, unsigned n)
 {
-	CPDLC_ASSERT(msglist != NULL);
+	cpdlc_msglist_t *msglist;
+
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_UNUSED(userinfo);
+	CPDLC_ASSERT(thr_ids != NULL || n == 0);
+	msglist = fans_get_msglist(box);
 
 	for (unsigned i = 0; i < n; i++) {
 		bool dirty;
@@ -625,7 +633,6 @@ static void
 fms_init(void)
 {
 	cpdlc_client_t *cl;
-	cpdlc_msglist_t *msglist;
 
 	box = fans_alloc(&funcs, NULL);
 	VERIFY(box != NULL);
@@ -633,9 +640,6 @@ fms_init(void)
 	cl = fans_get_client(box);
 	ASSERT(cl != NULL);
 	cpdlc_client_set_ca_file(cl, "ca_cert.pem");
-
-	msglist = fans_get_msglist(box);
-	cpdlc_msglist_set_update_cb(msglist, update_cb);
 
 	fans_set_shows_volume(box, true);
 

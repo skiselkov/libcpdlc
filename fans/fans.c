@@ -160,13 +160,28 @@ static void draw_atc_msg_lsk(fans_t *box);
 static void handle_atc_msg_lsk(fans_t *box);
 static void put_cur_time(fans_t *box);
 
+static void
+msglist_update_cb(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads)
+{
+	fans_t *box;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(updated_threads != NULL || num_updated_threads == 0);
+
+	box = cpdlc_msglist_get_userinfo(msglist);
+	if (box->funcs.msgs_updated != NULL) {
+		box->funcs.msgs_updated(box->userinfo, updated_threads,
+		    num_updated_threads);
+	}
+}
+
 void
 fans_set_thr_id(fans_t *box, cpdlc_msg_thr_id_t thr_id)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 	box->thr_id = thr_id;
-	cpdlc_msglist_thr_mark_seen(box->msglist, thr_id);
 }
 
 void
@@ -589,6 +604,9 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
 	box->volume = 1;
+
+	cpdlc_msglist_set_update_cb(box->msglist, msglist_update_cb);
+	cpdlc_msglist_set_userinfo(box->msglist, box);
 
 	fans_update(box);
 

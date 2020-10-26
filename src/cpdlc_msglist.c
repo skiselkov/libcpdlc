@@ -47,6 +47,7 @@ typedef struct msg_thr_s {
 	list_t			buckets;
 	list_node_t		node;
 	bool			dirty;
+	bool			reviewed;
 } msg_thr_t;
 
 struct cpdlc_msglist_s {
@@ -399,6 +400,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 		    &bucket->mins);
 		bucket->time = time(NULL);
 		thr->dirty = true;
+		thr->reviewed = false;
 
 		list_insert_tail(&thr->buckets, bucket);
 		thr_status_upd(msglist, thr);
@@ -589,6 +591,39 @@ cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id);
 	thr->dirty = false;
+	mutex_exit(&msglist->lock);
+}
+
+bool
+cpdlc_msglist_thr_is_reviewed(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	const msg_thr_t *thr;
+	bool reviewed;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	thr = find_msg_thr(msglist, thr_id);
+	reviewed = thr->reviewed;
+	mutex_exit(&msglist->lock);
+
+	return (reviewed);
+}
+
+void
+cpdlc_msglist_thr_mark_reviewed(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	msg_thr_t *thr;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	thr = find_msg_thr(msglist, thr_id);
+	thr->reviewed = true;
 	mutex_exit(&msglist->lock);
 }
 

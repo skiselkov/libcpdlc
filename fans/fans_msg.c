@@ -24,6 +24,7 @@
  */
 
 #include <math.h>
+#include <stdio.h>
 
 #include "../src/cpdlc_assert.h"
 
@@ -250,31 +251,49 @@ send_standby(fans_t *box)
 static void
 draw_response_section(fans_t *box)
 {
+	cpdlc_msg_thr_status_t st;
+	bool reviewed;
+
 	CPDLC_ASSERT(box != NULL);
 
 	fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
-	    FMS_COLOR_CYAN, FMS_FONT_SMALL, "--------RESPONSE--------");
+	    FMS_COLOR_CYAN, FMS_FONT_SMALL, "------------------------");
 
-	switch (cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL)) {
+	st = cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL);
+	reviewed = cpdlc_msglist_thr_is_reviewed(box->msglist, box->thr_id);
+	switch (st) {
 	case CPDLC_MSG_THR_OPEN:
 	case CPDLC_MSG_THR_STANDBY:
-		if (msg_can_roger(box) || msg_can_wilco(box) ||
-		    msg_can_affirm(box)) {
-			fans_put_lsk_action(box, FMS_KEY_LSK_L4,
-			    FMS_COLOR_CYAN, "*ACPT");
-			fans_put_lsk_action(box, FMS_KEY_LSK_R5,
-			    FMS_COLOR_WHITE, "REJ>");
-		}
-		if (msg_can_standby(box)) {
-			fans_put_lsk_action(box, FMS_KEY_LSK_L5,
-			    FMS_COLOR_CYAN, "*STBY");
+		/*
+		 * Only show the action buttons when the message becomes
+		 * un-dirties, or when it is already in a STBY state.
+		 */
+		if (st == CPDLC_MSG_THR_STANDBY || reviewed) {
+			fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
+			    FMS_COLOR_CYAN, FMS_FONT_SMALL,
+			    "--------RESPONSE--------");
+			if (msg_can_roger(box) || msg_can_wilco(box) ||
+			    msg_can_affirm(box)) {
+				fans_put_lsk_action(box, FMS_KEY_LSK_L4,
+				    FMS_COLOR_CYAN, "*ACPT");
+				fans_put_lsk_action(box, FMS_KEY_LSK_R5,
+				    FMS_COLOR_WHITE, "REJ>");
+			}
+			if (msg_can_standby(box)) {
+				fans_put_lsk_action(box, FMS_KEY_LSK_L5,
+				    FMS_COLOR_CYAN, "*STBY");
+			}
 		}
 		break;
 	case CPDLC_MSG_THR_ACCEPTED:
+		fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
+		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "--------RESPONSE--------");
 		fans_put_lsk_action(box, FMS_KEY_LSK_L4,
 		    FMS_COLOR_WHITE, "ACPT");
 		break;
 	case CPDLC_MSG_THR_REJECTED:
+		fans_put_str(box, LSK_HEADER_ROW(LSK4_ROW), 0, false,
+		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "--------RESPONSE--------");
 		fans_put_lsk_action(box, FMS_KEY_LSK_L4,
 		    FMS_COLOR_WHITE, "REJ");
 		break;
@@ -294,6 +313,12 @@ fans_msg_thr_draw_cb(fans_t *box)
 	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 
 	cpdlc_msglist_thr_mark_seen(box->msglist, box->thr_id);
+	/*
+	 * Only mark the message thread as reviewed once we've seen
+	 * the last page.
+	 */
+	if (box->subpage + 1 == box->num_subpages)
+		cpdlc_msglist_thr_mark_reviewed(box->msglist, box->thr_id);
 
 	fans_thr2lines(box->msglist, box->thr_id, &lines, &n_lines, "");
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));

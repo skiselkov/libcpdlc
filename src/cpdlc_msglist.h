@@ -80,6 +80,10 @@ CPDLC_API cpdlc_msg_thr_status_t cpdlc_msglist_get_thr_status(
     cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id, bool *dirty);
 CPDLC_API void cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
+CPDLC_API bool cpdlc_msglist_thr_is_reviewed(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_thr_mark_reviewed(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 CPDLC_API unsigned cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
