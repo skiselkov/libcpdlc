@@ -142,9 +142,15 @@ fans_t *fans_alloc(const fans_funcs_t *funcs, void *userinfo);
 void fans_free(fans_t *box);
 
 cpdlc_client_t *fans_get_client(const fans_t *box);
+cpdlc_msglist_t *fans_get_msglist(const fans_t *box);
 
 fans_network_t fans_get_network(const fans_t *box);
 void fans_set_network(fans_t *box, fans_network_t net);
+
+void fans_set_shows_volume(fans_t *box, bool flag);
+bool fans_get_shows_volume(const fans_t *box);
+void fans_set_volume(fans_t *box, double volume);
+double fans_get_volume(const fans_t *box);
 /*
  * Only used by FANS_NETWORK_CUSTOM
  */

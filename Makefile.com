@@ -27,6 +27,7 @@ ifeq ($(CROSSCOMPILE),win)
 	PLATFORM_NAME=win-64
 	PLATFORM_LIBNAME=win64
 	HOSTCC=x86_64-w64-mingw32-gcc
+	HOSTCXX=x86_64-w64-mingw32-g++
 else
 	UNAME=$(shell uname)
 	ifeq ($(UNAME),Linux)
@@ -34,18 +35,21 @@ else
 		PLATFORM_NAME=linux-64
 		PLATFORM_LIBNAME=lin64
 		HOSTCC=$(CC)
+		HOSTCXX=$(CXX)
 	endif
 	ifeq ($(UNAME),Darwin)
 		PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=1 -DSUN=0
 		PLATFORM_NAME=mac-64
 		PLATFORM_LIBNAME=mac64
 		HOSTCC=$(CC)
+		HOSTCXX=$(CXX)
 	endif
 	ifeq ($(UNAME),SunOS)
 		PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=0 -DSUN=1
 		PLATFORM_NAME=mac-64
 		PLATFORM_LIBNAME=mac64
 		HOSTCC=$(CC)
+		HOSTCXX=$(CXX)
 	endif
 endif
 

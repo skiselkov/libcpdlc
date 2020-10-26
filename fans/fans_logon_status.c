@@ -185,6 +185,11 @@ draw_page2(fans_t *box)
 		    FMS_FONT_LARGE, "vPILOTEDGE");
 		break;
 	}
+	if (box->show_volume) {
+		fans_put_lsk_title(box, FMS_KEY_LSK_R1, "ALERT VOLUME");
+		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "%d%%", (int)(box->volume * 100));
+	}
 }
 
 void
@@ -297,6 +302,14 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 			    sizeof (box->secret));
 		}
 		fans_scratchpad_clear(box);
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R1 &&
+	    box->show_volume) {
+		unsigned vol = box->volume * 100;
+		bool set;
+
+		fans_scratchpad_xfer_uint(box, &vol, &set, 0, 100);
+		if (set)
+			box->volume = vol / 100.0;
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (can_send_logon(box, st)) {
 			send_logon(box);

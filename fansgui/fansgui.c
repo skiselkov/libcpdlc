@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -39,6 +39,7 @@
 #include <acfutils/log.h>
 #include <acfutils/png.h>
 #include <acfutils/time.h>
+#include <acfutils/wav.h>
 
 #include <GLFW/glfw3.h>
 
@@ -66,6 +67,9 @@ static mtcr_t			*mtcr = NULL;
 static fans_t			*box = NULL;
 static double			mouse_x, mouse_y;
 static uint64_t			clr_press_microtime = 0;
+
+static alc_t			*alc = NULL;
+static wav_t			*fans_alert = NULL;
 
 static cairo_surface_t		*bgimg = NULL;
 static unsigned			bgimg_w, bgimg_h;
@@ -170,6 +174,32 @@ static const fans_funcs_t funcs = {
     .get_flt_id = get_auto_flt_id
 };
 
+static void
+play_alert(void)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(fans_alert != NULL);
+
+	wav_set_gain(fans_alert, fans_get_volume(box));
+	wav_play(fans_alert);
+}
+
+static void
+update_cb(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t *thr_ids, unsigned n)
+{
+	CPDLC_ASSERT(msglist != NULL);
+
+	for (unsigned i = 0; i < n; i++) {
+		bool dirty;
+
+		cpdlc_msglist_get_thr_status(msglist, thr_ids[i], &dirty);
+		if (dirty) {
+			play_alert();
+			break;
+		}
+	}
+}
+
 static bool
 get_auto_flt_id(void *userinfo, char flt_id[8])
 {
@@ -261,6 +291,35 @@ char2fontcell(char c, int *font_x, int *font_y)
 			break;
 		}
 #undef	FONT_MAP
+	}
+}
+
+static bool
+snd_sys_init(void)
+{
+	alc = openal_init(NULL, true);
+	if (alc == NULL) {
+		logMsg("OpenAL init failed");
+		return (false);
+	}
+	fans_alert = wav_load("fans_alert.wav", "fans_alert.wav", alc);
+	if (fans_alert == NULL) {
+		logMsg("Couldn't read fans_alert.wav");
+		return (false);
+	}
+	return (true);
+}
+
+static void
+snd_sys_fini(void)
+{
+	if (fans_alert != NULL) {
+		wav_free(fans_alert);
+		fans_alert = NULL;
+	}
+	if (alc != NULL) {
+		openal_fini(alc);
+		alc = NULL;
 	}
 }
 
@@ -538,9 +597,35 @@ parse_conf(const conf_t *conf)
 }
 
 static void
+parse_user(const conf_t *conf)
+{
+	double vol;
+
+	CPDLC_ASSERT(conf != NULL);
+	CPDLC_ASSERT(box != NULL);
+
+	if (conf_get_d(conf, "volume", &vol))
+		fans_set_volume(box, vol);
+}
+
+static void
+save_user(void)
+{
+	conf_t *conf = conf_create_empty();
+
+	CPDLC_ASSERT(box != NULL);
+
+	conf_set_f(conf, "volume", fans_get_volume(box));
+	conf_write_file(conf, "user.conf");
+
+	conf_free(conf);
+}
+
+static void
 fms_init(void)
 {
 	cpdlc_client_t *cl;
+	cpdlc_msglist_t *msglist;
 
 	box = fans_alloc(&funcs, NULL);
 	VERIFY(box != NULL);
@@ -548,6 +633,11 @@ fms_init(void)
 	cl = fans_get_client(box);
 	ASSERT(cl != NULL);
 	cpdlc_client_set_ca_file(cl, "ca_cert.pem");
+
+	msglist = fans_get_msglist(box);
+	cpdlc_msglist_set_update_cb(msglist, update_cb);
+
+	fans_set_shows_volume(box, true);
 
 	if (file_exists("client.conf", NULL)) {
 		conf_t *conf = conf_read_file("client.conf", NULL);
@@ -557,11 +647,21 @@ fms_init(void)
 			conf_free(conf);
 		}
 	}
+	if (file_exists("user.conf", NULL)) {
+		conf_t *conf = conf_read_file("user.conf", NULL);
+
+		if (conf != NULL) {
+			parse_user(conf);
+			conf_free(conf);
+		}
+	}
 }
 
 static void
 cleanup(void)
 {
+	if (box != NULL)
+		save_user();
 	if (mtcr != NULL) {
 		mtcr_fini(mtcr);
 		mtcr = NULL;
@@ -592,6 +692,7 @@ cleanup(void)
 	}
 	glfwTerminate();
 	lacf_glew_fini();
+	snd_sys_fini();
 
 #ifdef	_WIN32
 	WSACleanup();
@@ -663,6 +764,8 @@ main(void)
 		goto errout;
 #endif	/* defined(_WIN32) */
 
+	if (!snd_sys_init())
+		goto errout;
 	if (!load_imgs())
 		goto errout;
 	if (!window_init())

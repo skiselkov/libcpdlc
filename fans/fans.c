@@ -588,6 +588,7 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	box->msglist = cpdlc_msglist_alloc(box->cl);
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
+	box->volume = 1;
 
 	fans_update(box);
 
@@ -613,6 +614,13 @@ fans_get_client(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	return (box->cl);
+}
+
+cpdlc_msglist_t *
+fans_get_msglist(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->msglist);
 }
 
 fans_network_t
@@ -1169,4 +1177,32 @@ fans_get_port(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	return (box->port);
+}
+
+void
+fans_set_shows_volume(fans_t *box, bool flag)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->show_volume = flag;
+}
+
+bool
+fans_get_shows_volume(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->show_volume);
+}
+
+void
+fans_set_volume(fans_t *box, double volume)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->volume = MIN(MAX(volume, 0.0), 1.0);
+}
+
+double
+fans_get_volume(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->volume);
 }

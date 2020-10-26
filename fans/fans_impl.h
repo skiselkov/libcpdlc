@@ -294,6 +294,8 @@ struct fans_s {
 	cpdlc_msglist_t	*msglist;
 	char		hostname[128];
 	int		port;
+	bool		show_volume;
+	double		volume;
 };
 
 enum {

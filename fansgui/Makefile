@@ -38,12 +38,10 @@ else
 	endif
 endif
 
-BOGUS_WARNINGS=\
-    -Wno-unused-result \
-    -Wno-missing-field-initializers
-PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib
+BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
+PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib --static-openal
 
-CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O0 -g -DDEBUG \
+CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
 	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) $(PKG_CONFIG_DEPS_FLAGS) --cflags) \
 
@@ -85,12 +83,13 @@ endif
 all : $(OUTBIN)
 
 $(OUTBIN) : $(OBJS)
-	$(HOSTCC) $(LDFLAGS) -o $@ $^ $(LIBS)
+	$(HOSTCXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 ifeq ($(PLATFORM_NAME),win-64)
 	rm -rf fansgui-app
 	mkdir fansgui-app
 	cp $(OUTBIN) \
 	    sample-client.conf \
+	    fans_alert.wav \
 	    $(wildcard ../gnutls-win64/bin/*.dll) \
 	    $(wildcard *.png) \
 	    $(wildcard ../ca_cert.pem) \
