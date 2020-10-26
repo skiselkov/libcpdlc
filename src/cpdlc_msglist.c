@@ -526,9 +526,10 @@ cpdlc_msglist_send(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 
 void
 cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
-    cpdlc_msg_thr_id_t *thr_ids, unsigned *cap)
+    time_t timeout, cpdlc_msg_thr_id_t *thr_ids, unsigned *cap)
 {
 	unsigned thr_i = 0;
+	time_t now = time(NULL);
 
 	CPDLC_ASSERT(msglist != NULL);
 	CPDLC_ASSERT(cap != NULL);
@@ -536,9 +537,13 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 	mutex_enter(&msglist->lock);
 	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
 	    thr = list_next(&msglist->thr, thr)) {
-		if (ignore_closed && !thr->dirty &&
-		    thr_status_is_final(thr->status))
+		const msg_bucket_t *buck = list_tail(&thr->buckets);
+
+		if ((ignore_closed || (timeout != 0 &&
+		    now - timeout > buck->time)) && !thr->dirty &&
+		    thr_status_is_final(thr->status)) {
 			continue;
+		}
 		if (thr_i < *cap) {
 			CPDLC_ASSERT(thr_ids != NULL);
 			thr_ids[thr_i] = thr->thr_id;

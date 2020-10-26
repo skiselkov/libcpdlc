@@ -815,10 +815,10 @@ fans_get_thr_ids(fans_t *box, unsigned *num_thr_ids, bool ignore_closed)
 	CPDLC_ASSERT(num_thr_ids != NULL);
 
 	*num_thr_ids = 0;
-	cpdlc_msglist_get_thr_ids(box->msglist, ignore_closed, NULL,
+	cpdlc_msglist_get_thr_ids(box->msglist, ignore_closed, 0, NULL,
 	    num_thr_ids);
 	thr_ids = safe_calloc(*num_thr_ids, sizeof (*thr_ids));
-	cpdlc_msglist_get_thr_ids(box->msglist, ignore_closed, thr_ids,
+	cpdlc_msglist_get_thr_ids(box->msglist, ignore_closed, 0, thr_ids,
 	    num_thr_ids);
 
 	return (thr_ids);

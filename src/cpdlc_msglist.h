@@ -67,7 +67,8 @@ CPDLC_API void cpdlc_msglist_update(cpdlc_msglist_t *msglist);
 CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
     cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
-    bool ignore_closed, cpdlc_msg_thr_id_t *thr_ids, unsigned *cap);
+    bool ignore_closed, time_t timeout, cpdlc_msg_thr_id_t *thr_ids,
+    unsigned *cap);
 CPDLC_API bool cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist,
