@@ -27,7 +27,7 @@
 #include "minilist.h"
 
 #define	P2N(list, ptr) \
-	((list_node_t *)((ptr) + (list->offset)))
+	((list_node_t *)((ptr) + ((list)->offset)))
 
 void
 list_create(list_t *list, size_t size, size_t offset)
@@ -115,7 +115,7 @@ list_insert_tail(list_t *list, void *elem)
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
 	if (list->tail != NULL) {
-		/* List already populated, prepend */
+		/* List already populated, append */
 		P2N(list, list->tail)->next = elem;
 		P2N(list, elem)->prev = list->tail;
 		P2N(list, elem)->next = NULL;
@@ -132,20 +132,24 @@ list_insert_tail(list_t *list, void *elem)
 void
 list_remove(list_t *list, void *elem)
 {
+	void *next_elem, *prev_elem;
+
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
 	CPDLC_ASSERT(list->count != 0);
 
+	next_elem = P2N(list, elem)->next;
+	prev_elem = P2N(list, elem)->prev;
 	if (list->head == elem)
-		list->head = P2N(list, elem)->next;
+		list->head = next_elem;
 	if (list->tail == elem)
-		list->tail = P2N(list, elem)->prev;
-	if (P2N(list, elem)->next != NULL) {
-		P2N(list, P2N(list, elem)->next)->prev = P2N(list, elem)->prev;
+		list->tail = prev_elem;
+	if (next_elem != NULL) {
+		P2N(list, next_elem)->prev = prev_elem;
 		P2N(list, elem)->next = NULL;
 	}
-	if (P2N(list, elem)->prev != NULL) {
-		P2N(list, P2N(list, elem)->prev)->next = P2N(list, elem)->next;
+	if (prev_elem != NULL) {
+		P2N(list, prev_elem)->next = next_elem;
 		P2N(list, elem)->prev = NULL;
 	}
 	list->count--;
