@@ -2190,8 +2190,9 @@ write_logon_list(void)
 	FILE *fp;
 	char *tmp_filename;
 
-	if (logon_list_file[0] == '\0')
+	if (logon_list_file[0] == '\0' || !conns_by_from_changed)
 		return;
+	conns_by_from_changed = false;
 
 	tmp_filename = sprintf_alloc("%s.tmp", logon_list_file);
 	fp = fopen(tmp_filename, "wb");
@@ -2199,6 +2200,7 @@ write_logon_list(void)
 		logMsg("Can't write LOGON list file %s: %s", tmp_filename,
 		    strerror(errno));
 		free(tmp_filename);
+		return;
 	}
 	htbl_foreach(&conns_by_from, write_logon_list_cb, fp);
 	fclose(fp);
