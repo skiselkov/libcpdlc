@@ -302,6 +302,8 @@ static bool		do_shutdown = false;
 static bool		req_client_cert = false;
 static FILE		*msg_log_file = NULL;
 static char		logon_list_file[PATH_MAX] = {};
+static char		*logon_cmd = NULL;
+static char		*logoff_cmd = NULL;
 
 static void lws_worker(void *userinfo);
 static int http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
@@ -332,6 +334,76 @@ static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
 static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
 static void conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg);
+
+static char *
+str_subst(char *str, const char *pattern, const char *replace)
+{
+	char *result = NULL;
+	size_t sz = 0;
+	char *srch, *hit;
+
+	ASSERT(str != NULL);
+	ASSERT(pattern != NULL);
+	ASSERT(replace != NULL);
+
+	for (srch = str, hit = strstr(srch, pattern);
+	    srch < str + strlen(str) && hit != NULL;
+	    srch = hit + strlen(pattern), hit = strstr(srch, pattern)) {
+		char buf[hit - srch + 1];
+
+		strlcpy(buf, srch, hit - srch + 1);
+		append_format(&result, &sz, "%s%s", buf, replace);
+	}
+	append_format(&result, &sz, "%s", srch);
+	free(str);
+
+	return (result);
+}
+
+static void
+exec_cmd_common(const char *cmd_in, const char *from, const conn_t *conn)
+{
+	const char *to;
+	char *cmd;
+
+	ASSERT(cmd_in != NULL);
+	ASSERT(from != NULL);
+	ASSERT(conn != NULL);
+	cmd = strdup(cmd_in);
+	to = (conn->to[0] != '\0' ? conn->to : "-");
+
+	cmd = str_subst(cmd, "${FROM}", from);
+	cmd = str_subst(cmd, "${TO}", to);
+	cmd = str_subst(cmd, "${ADDR}", conn->addr_str);
+	cmd = str_subst(cmd, "${CONNTYPE}",
+	    conn->is_atc ? "ATC" : "ACFT");
+	switch (fork()) {
+	case -1:
+		logMsg("fork() failed: %s", strerror(errno));
+		break;
+	case 0:
+		execl("/bin/sh", "sh", "-c", cmd, NULL);
+		logMsg("execl(\"/bin/sh\") failed: %s", strerror(errno));
+		exit(EXIT_FAILURE);
+	default:
+		break;
+	}
+	free(cmd);
+}
+
+static void
+exec_logon_cmd(const char *from, const conn_t *conn)
+{
+	if (logon_cmd != NULL)
+		exec_cmd_common(logon_cmd, from, conn);
+}
+
+static void
+exec_logoff_cmd(const char *from, const conn_t *conn)
+{
+	if (logoff_cmd != NULL)
+		exec_cmd_common(logoff_cmd, from, conn);
+}
 
 /*
  * Writes a single byte into the main thread wakeup pipe. This forces
@@ -749,6 +821,10 @@ parse_config(const char *conf_path)
 	}
 	if (conf_get_str(conf, "logon_list_file", &value))
 		strlcpy(logon_list_file, value, sizeof (logon_list_file));
+	if (conf_get_str(conf, "logon_cmd", &value))
+		logon_cmd = strdup(value);
+	if (conf_get_str(conf, "logoff_cmd", &value))
+		logoff_cmd = strdup(value);
 
 	/*
 	 * Must go after all TLS parameters have been parsed, because
@@ -919,6 +995,7 @@ conns_by_from_remove(conn_t *conn, const char ident[CALLSIGN_LEN])
 		conn_t *c = HTBL_VALUE_MULTI(mv);
 
 		if (conn == c) {
+			exec_logoff_cmd(ident, c);
 			htbl_remove_multi(&conns_by_from, ident, mv);
 			conns_by_from_changed = true;
 			break;
@@ -1071,6 +1148,7 @@ complete_logon(conn_t *conn)
 
 		mutex_enter(&conns_by_from_lock);
 		htbl_set(&conns_by_from, idl->ident, conn);
+		exec_logon_cmd(idl->ident, conn);
 		conns_by_from_changed = true;
 		mutex_exit(&conns_by_from_lock);
 
@@ -2352,6 +2430,8 @@ main(int argc, char *argv[])
 	tls_fini();
 	fini_structs();
 	curl_global_cleanup();
+	free(logon_cmd);
+	free(logoff_cmd);
 
 	if (msg_log_file != NULL) {
 		fclose(msg_log_file);
