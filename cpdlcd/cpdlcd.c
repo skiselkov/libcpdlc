@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -243,6 +243,7 @@ static bool		conns_tcp_dirty = false;
  */
 static mutex_t		conns_by_from_lock;
 static htbl_t		conns_by_from;
+static bool		conns_by_from_changed = true;
 /*
  * Bitshift defining the size of the `conns_by_from' hash table.
  * The default value of `12' defines a hash table with 4096 entries in it.
@@ -300,6 +301,7 @@ static bool		background = true;
 static bool		do_shutdown = false;
 static bool		req_client_cert = false;
 static FILE		*msg_log_file = NULL;
+static char		logon_list_file[PATH_MAX] = {};
 
 static void lws_worker(void *userinfo);
 static int http_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
@@ -745,6 +747,8 @@ parse_config(const char *conf_path)
 			goto errout;
 		}
 	}
+	if (conf_get_str(conf, "logon_list_file", &value))
+		strlcpy(logon_list_file, value, sizeof (logon_list_file));
 
 	/*
 	 * Must go after all TLS parameters have been parsed, because
@@ -916,6 +920,7 @@ conns_by_from_remove(conn_t *conn, const char ident[CALLSIGN_LEN])
 
 		if (conn == c) {
 			htbl_remove_multi(&conns_by_from, ident, mv);
+			conns_by_from_changed = true;
 			break;
 		}
 	}
@@ -1066,6 +1071,7 @@ complete_logon(conn_t *conn)
 
 		mutex_enter(&conns_by_from_lock);
 		htbl_set(&conns_by_from, idl->ident, conn);
+		conns_by_from_changed = true;
 		mutex_exit(&conns_by_from_lock);
 
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
@@ -2155,6 +2161,55 @@ close_timedout_conns(void)
 	mutex_exit(&conns_lws_lock);
 }
 
+static void
+write_logon_list_cb(const void *key, void *value, void *userinfo)
+{
+	const char *from;
+	const conn_t *conn;
+	FILE *fp;
+
+	ASSERT(key != NULL);
+	from = key;
+	ASSERT(value != NULL);
+	conn = value;
+	ASSERT(userinfo != NULL);
+	fp = userinfo;
+
+	fprintf(fp, "%s\t%s\t%s\t%s\t%s\n", from,
+	    conn->to[0] != '\0' ? conn->to : "-",
+	    conn->is_atc ? "ATC" : "ACFT",
+	    conn->addr_str, conn->is_lws ? "WS" : "TLS");
+}
+
+/*
+ * Writes the logon list file if it has changed.
+ */
+static void
+write_logon_list(void)
+{
+	FILE *fp;
+	char *tmp_filename;
+
+	if (logon_list_file[0] == '\0')
+		return;
+
+	tmp_filename = sprintf_alloc("%s.tmp", logon_list_file);
+	fp = fopen(tmp_filename, "wb");
+	if (fp == NULL) {
+		logMsg("Can't write LOGON list file %s: %s", tmp_filename,
+		    strerror(errno));
+		free(tmp_filename);
+	}
+	htbl_foreach(&conns_by_from, write_logon_list_cb, fp);
+	fclose(fp);
+
+	if (rename(tmp_filename, logon_list_file) != 0) {
+		logMsg("Can't rename LOGON list file %s to %s: %s",
+		    tmp_filename, logon_list_file, strerror(errno));
+	}
+	free(tmp_filename);
+}
+
 /*
  * Initializes our global TLS parameters.
  */
@@ -2287,6 +2342,7 @@ main(int argc, char *argv[])
 		if (blocklist_refresh())
 			close_blocked_conns();
 		close_timedout_conns();
+		write_logon_list();
 	}
 
 	msgquota_fini();
