@@ -50,6 +50,7 @@
 
 #include "../fans/fans.h"
 #include "mtcr_mini.h"
+#include "xpintf.h"
 
 #define	EVENT_POLL_TIMEOUT	0.1	/* seconds */
 
@@ -172,10 +173,89 @@ static bool get_auto_flt_id(void *userinfo, char flt_id[8]);
 static void msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids,
     unsigned n);
 
+static void get_time(void *userinfo, unsigned *hours, unsigned *mins);
+static bool get_cur_spd(void *userinfo, bool *mach, unsigned *spd);
+static bool get_cur_alt(void *userinfo, int *alt_ft);
+static bool get_sel_alt(void *userinfo, int *alt_ft);
+static bool get_sat(void *userinfo, int *temp);
+static bool get_wind(void *userinfo, unsigned *deg_true, unsigned *knots);
+
 static const fans_funcs_t funcs = {
     .get_flt_id = get_auto_flt_id,
-    .msgs_updated = msgs_updated_cb
+    .msgs_updated = msgs_updated_cb,
+    .get_time = get_time,
+    .get_cur_spd = get_cur_spd,
+    .get_cur_alt = get_cur_alt,
+    .get_sel_alt = get_sel_alt,
+    .get_sat = get_sat,
+    .get_wind = get_wind
 };
+
+static void
+get_time(void *userinfo, unsigned *hours, unsigned *mins)
+{
+	const struct tm *tm;
+	time_t now;
+
+	UNUSED(userinfo);
+	ASSERT(hours != NULL);
+	ASSERT(mins != NULL);
+
+	if (xpintf_get_time(hours, mins))
+		return;
+	now = time(NULL);
+	tm = gmtime(&now);
+	*hours = tm->tm_hour;
+	*mins = tm->tm_min;
+}
+
+static bool
+get_cur_spd(void *userinfo, bool *mach, unsigned *spd)
+{
+	UNUSED(userinfo);
+	ASSERT(mach != NULL);
+	ASSERT(spd != NULL);
+
+	if (xpintf_get_cur_spd(mach, spd))
+		return (true);
+	return (false);
+}
+
+static bool
+get_cur_alt(void *userinfo, int *alt_ft)
+{
+	UNUSED(userinfo);
+	if (xpintf_get_cur_alt(alt_ft))
+		return (true);
+	return (false);
+}
+
+static bool
+get_sel_alt(void *userinfo, int *alt_ft)
+{
+	UNUSED(userinfo);
+	if (xpintf_get_sel_alt(alt_ft))
+		return (true);
+	return (false);
+}
+
+static bool
+get_sat(void *userinfo, int *temp_C)
+{
+	UNUSED(userinfo);
+	if (xpintf_get_sat(temp_C))
+		return (true);
+	return (false);
+}
+
+static bool
+get_wind(void *userinfo, unsigned *deg_true, unsigned *knots)
+{
+	UNUSED(userinfo);
+	if (xpintf_get_wind(deg_true, knots))
+		return (true);
+	return (false);
+}
 
 static void
 play_alert(void)
@@ -686,6 +766,7 @@ cleanup(void)
 		cairo_surface_destroy(screen);
 		screen = NULL;
 	}
+	xpintf_fini();
 	if (box != NULL) {
 		fans_free(box);
 		box = NULL;
@@ -775,6 +856,8 @@ main(void)
 	if (!window_init())
 		goto errout;
 	fms_init();
+	if (!xpintf_init(NULL, 0))
+		goto errout;
 
 	glewExperimental = GL_TRUE;
 	err = glewInit();
@@ -802,6 +885,7 @@ main(void)
 			dirty = now;
 		}
 		fans_update(box);
+		xpintf_update();
 		glfwWaitEventsTimeout(EVENT_POLL_TIMEOUT);
 	}
 

@@ -1003,24 +1003,28 @@ fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 	}
 }
 
-int
+float
 fans_get_cur_alt(const fans_t *box)
 {
-	int alt = 0;
+	int alt_ft = 0;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_cur_alt != NULL)
-		alt = box->funcs.get_cur_alt(box->userinfo);
-	return (MIN(MAX(alt, 0), MAX_ALT));
+	if (box->funcs.get_cur_alt != NULL &&
+	    box->funcs.get_cur_alt(box->userinfo, &alt_ft)) {
+		return (alt_ft);
+	}
+	return (NAN);
 }
 
-int
+float
 fans_get_sel_alt(const fans_t *box)
 {
-	int alt = 0;
+	int alt_ft = 0;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_sel_alt != NULL)
-		alt = box->funcs.get_sel_alt(box->userinfo);
-	return (MIN(MAX(alt, 0), MAX_ALT));
+	if (box->funcs.get_sel_alt != NULL &&
+	    box->funcs.get_sel_alt(box->userinfo, &alt_ft)) {
+		return (alt_ft);
+	}
+	return (NAN);
 }
 
 bool
@@ -1069,12 +1073,15 @@ fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info)
 	return (get_wpt_common(box, box->funcs.get_dest_wpt, info));
 }
 
-int
+float
 fans_get_offset(const fans_t *box)
 {
+	float offset_NM;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_offset != NULL)
-		return (box->funcs.get_offset(box->userinfo));
+	if (box->funcs.get_offset != NULL &&
+	    box->funcs.get_offset(box->userinfo, &offset_NM)) {
+		return (offset_NM * 1852.0);
+	}
 	return (0);
 }
 
@@ -1112,6 +1119,16 @@ fans_get_wind(const fans_t *box, fms_wind_t *wind)
 		wind->deg %= 360;
 		wind->spd = MIN(wind->spd, MAX_WIND);
 	}
+}
+
+bool
+fans_get_souls(const fans_t *box, unsigned *souls)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(souls != NULL);
+	if (box->funcs.get_souls != NULL)
+		return (box->funcs.get_souls(box->userinfo, souls));
+	return (false);
 }
 
 void

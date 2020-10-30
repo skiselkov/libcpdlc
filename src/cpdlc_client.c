@@ -53,6 +53,7 @@
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
 #include "cpdlc_client.h"
+#include "cpdlc_net_util.h"
 #include "cpdlc_string.h"
 #include "cpdlc_thread.h"
 #include "minilist.h"
@@ -87,31 +88,6 @@
 #ifndef	PATH_MAX
 #define	PATH_MAX		256	/* chars */
 #endif
-
-#ifdef	_WIN32
-
-#define	SOCKET_IS_VALID(sock)	((sock) != INVALID_SOCKET)
-#define	GAI_STRERROR		gai_strerrorA
-typedef SOCKET socktype_t;
-static inline bool
-conn_in_progress(void)
-{
-	int err = WSAGetLastError();
-	return (err == WSAEINPROGRESS || err == WSAEWOULDBLOCK);
-}
-
-#else	/* !defined(_WIN32) */
-
-#define	SOCKET_IS_VALID(sock)	((sock) != -1)
-#define	GAI_STRERROR		gai_strerror
-typedef int socktype_t;
-static inline bool
-conn_in_progress(void)
-{
-	return (errno == EINPROGRESS);
-}
-
-#endif	/* !defined(_WIN32) */
 
 typedef struct outmsgbuf_s {
 	cpdlc_msg_token_t	token;
@@ -176,7 +152,7 @@ struct cpdlc_client_s {
 		bool			new_msgs;
 	} pollinfo;
 #else	/* !CPDLC_CLIENT_LWS */
-	socktype_t			sock;
+	cpdlc_socktype_t			sock;
 	time_t				conn_begin_time;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;
@@ -254,18 +230,6 @@ static struct lws_protocols proto_list_lws[] = {
 
 #endif	/* CPDLC_CLIENT_LWS */
 
-static const char *
-get_last_socket_error(void)
-{
-#ifdef	_WIN32
-	static char buf[128];
-	snprintf(buf, sizeof (buf), "WSA error %d", WSAGetLastError());
-	return (buf);
-#else	/* !defined(_WIN32) */
-	return (strerror(errno));
-#endif	/* !defined(_WIN32) */
-}
-
 static void
 set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 {
@@ -295,31 +259,6 @@ check_keepalive(cpdlc_client_t *cl)
 	cl->last_data_rdwr = time(NULL);
 }
 
-#ifndef	CPDLC_CLIENT_LWS
-
-#ifdef	_WIN32
-
-static bool
-set_fd_nonblock(int fd)
-{
-	u_long mode = 1;
-	return (ioctlsocket(fd, FIONBIO, &mode) == NO_ERROR);
-}
-
-#else	/* !defined(_WIN32) */
-
-static bool
-set_fd_nonblock(int fd)
-{
-	int flags;
-	return ((flags = fcntl(fd, F_GETFL)) >= 0 &&
-	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0);
-}
-
-#endif	/* !defined(_WIN32) */
-
-#endif	/* !CPDLC_CLIENT_LWS */
-
 static void
 logon_worker(void *userinfo)
 {
@@ -348,13 +287,13 @@ logon_worker(void *userinfo)
 			CPDLC_ASSERT(cl->lws_sock != NULL);
 			new_msgs = poll_lws(cl, &out_tokens, &num_out_tokens);
 #else	/* !CPDLC_CLIENT_LWS */
-			CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
+			CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 			complete_conn(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
 		case CPDLC_LOGON_HANDSHAKING_LINK:
 #ifndef	CPDLC_CLIENT_LWS
-			CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
+			CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 			tls_handshake(cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 			break;
@@ -635,7 +574,7 @@ reset_link_state(cpdlc_client_t *cl)
 		gnutls_certificate_free_credentials(cl->xcred);
 		cl->xcred = NULL;
 	}
-	if (SOCKET_IS_VALID(cl->sock)) {
+	if (CPDLC_SOCKET_IS_VALID(cl->sock)) {
 #ifdef	_WIN32
 		shutdown(cl->sock, SD_BOTH);
 #else
@@ -728,7 +667,7 @@ resolve_host(cpdlc_client_t *cl)
 	char host[PATH_MAX];
 
 	CPDLC_ASSERT(cl != NULL);
-	CPDLC_ASSERT(!SOCKET_IS_VALID(cl->sock));
+	CPDLC_ASSERT(!CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 
 	if (cl->ai != NULL) {
@@ -751,9 +690,9 @@ resolve_host(cpdlc_client_t *cl)
 	mutex_enter(&cl->lock);
 
 	if (result != 0) {
-		fprintf(stderr, "Can't resolve %s: %s\n", host,
-		    GAI_STRERROR(result));
-		set_logon_failure(cl, "%s: %s", host, GAI_STRERROR(result));
+		const char *error = CPDLC_GAI_STRERROR(result);
+		fprintf(stderr, "Can't resolve %s: %s\n", host, error);
+		set_logon_failure(cl, "%s: %s", host, error);
 		return (false);
 	}
 	CPDLC_ASSERT(ai != NULL);
@@ -766,11 +705,11 @@ static void
 init_conn(cpdlc_client_t *cl)
 {
 	struct addrinfo *ai;
-	socktype_t sock;
+	cpdlc_socktype_t sock;
 	cpdlc_logon_status_t new_status;
 
 	CPDLC_ASSERT(cl != NULL);
-	CPDLC_ASSERT(!SOCKET_IS_VALID(cl->sock));
+	CPDLC_ASSERT(!CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_NONE);
 	CPDLC_ASSERT(cl->ai != NULL);
 
@@ -782,15 +721,15 @@ init_conn(cpdlc_client_t *cl)
 	cl->ai_cur = cl->ai_cur->ai_next;
 
 	sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-	if (!SOCKET_IS_VALID(sock)) {
-		set_logon_failure(cl, "%s", get_last_socket_error());
+	if (!CPDLC_SOCKET_IS_VALID(sock)) {
+		set_logon_failure(cl, "%s", cpdlc_get_last_socket_error());
 		/* Try the next address in line, if one is available */
 		init_conn(cl);
 		return;
 	}
-	if (!set_fd_nonblock(sock)) {
+	if (!cpdlc_set_fd_nonblock(sock)) {
 		close(sock);
-		set_logon_failure(cl, "%s", get_last_socket_error());
+		set_logon_failure(cl, "%s", cpdlc_get_last_socket_error());
 		init_conn(cl);
 		return;
 	}
@@ -799,9 +738,10 @@ init_conn(cpdlc_client_t *cl)
 	 * attempt will continue async.
 	 */
 	if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
-		if (!conn_in_progress()) {
+		if (!cpdlc_conn_in_prog()) {
 			close(sock);
-			set_logon_failure(cl, "%s", get_last_socket_error());
+			set_logon_failure(cl, "%s",
+			    cpdlc_get_last_socket_error());
 			init_conn(cl);
 			return;
 		}
@@ -859,11 +799,13 @@ complete_conn(cpdlc_client_t *cl)
 		/* Connection attempt completed. Let's see about the result. */
 		if (getsockopt(cl->sock, SOL_SOCKET, SO_ERROR,
 		    (char *)&so_error, &so_error_len) < 0) {
-			set_logon_failure(cl, "%s", get_last_socket_error());
+			set_logon_failure(cl, "%s",
+			    cpdlc_get_last_socket_error());
 			goto errout;
 		}
 		if (so_error != 0) {
-			set_logon_failure(cl, "%s", get_last_socket_error());
+			set_logon_failure(cl, "%s",
+			    cpdlc_get_last_socket_error());
 			goto errout;
 		}
 		/* Success! */
@@ -946,7 +888,7 @@ tls_handshake(cpdlc_client_t *cl)
 		TLS_CHK(gnutls_credentials_set(cl->session,
 		    GNUTLS_CRD_CERTIFICATE, cl->xcred));
 		gnutls_session_set_verify_cert(cl->session, cl->host, 0);
-		CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
+		CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 		gnutls_transport_set_int(cl->session, cl->sock);
 		gnutls_handshake_set_timeout(cl->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
@@ -1447,7 +1389,7 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
 	CPDLC_ASSERT(cl->session != NULL);
-	CPDLC_ASSERT(SOCKET_IS_VALID(cl->sock));
+	CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT(out_tokens != NULL);
 	CPDLC_ASSERT(num_out_tokens != NULL);
 

@@ -203,6 +203,7 @@ fans_emer_init_cb(fans_t *box)
 	    &box->emer.fuel_auto.mins);
 	if (cur_alt >= sel_alt + LVL_ALT_THRESH)
 		box->emer.des_auto.alt.alt = sel_alt;
+	box->emer.souls_set = fans_get_souls(box, &box->emer.souls);
 }
 
 void

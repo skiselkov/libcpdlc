@@ -371,16 +371,17 @@ bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
 int fans_get_time(const fans_t *box);
 void fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
-int fans_get_cur_alt(const fans_t *box);
-int fans_get_sel_alt(const fans_t *box);
+float fans_get_cur_alt(const fans_t *box);
+float fans_get_sel_alt(const fans_t *box);
 bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info);
-int fans_get_offset(const fans_t *box);
+float fans_get_offset(const fans_t *box);
 bool fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins);
 void fans_get_sat(const fans_t *box, fms_temp_t *temp);
 void fans_get_wind(const fans_t *box, fms_wind_t *wind);
+bool fans_get_souls(const fans_t *box, unsigned *souls);
 
 void fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos);
 void fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim);

@@ -72,6 +72,7 @@ endif
 OBJS = \
 	mtcr_mini.o \
 	fansgui.o \
+	xpintf.o \
 	$(CORE_SRC_OBJS) \
 	$(FANS_OBJS)
 ifeq ($(PLATFORM_NAME),win-64)

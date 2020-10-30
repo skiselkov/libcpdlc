@@ -103,16 +103,17 @@ typedef struct {
 } fms_wpt_info_t;
 
 typedef bool (*fans_get_flt_id_t)(void *userinfo, char flt_id[8]);
-typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd);
-typedef int (*fans_get_alt_t)(void *userinfo);
+typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd_KIAS);
+typedef bool (*fans_get_alt_t)(void *userinfo, int *alt_ft);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
-typedef int (*fans_get_offset_t)(void *userinfo);
+typedef bool (*fans_get_offset_t)(void *userinfo, float *offset_NM);
 typedef bool (*fans_get_fuel_t)(void *userinfo, unsigned *hrs, unsigned *mins);
-typedef bool (*fans_get_temp_t)(void *userinfo, int *temp);
+typedef bool (*fans_get_temp_t)(void *userinfo, int *temp_C);
 typedef bool (*fans_get_wind_t)(void *userinfo, unsigned *deg_true,
     unsigned *knots);
 typedef void (*fans_msgs_updated_cb_t)(void *userinfo,
     cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads);
+typedef bool (*fans_get_souls_t)(void *userinfo, unsigned *souls);
 
 typedef struct {
 	fans_get_flt_id_t	get_flt_id;
@@ -128,6 +129,7 @@ typedef struct {
 	fans_get_fuel_t		get_fuel;
 	fans_get_temp_t		get_sat;
 	fans_get_wind_t		get_wind;
+	fans_get_souls_t	get_souls;
 	fans_msgs_updated_cb_t	msgs_updated;
 } fans_funcs_t;
 
