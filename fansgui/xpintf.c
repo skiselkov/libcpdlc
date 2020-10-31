@@ -25,12 +25,12 @@
 
 #include <time.h>
 
+#include <cpdlc_net_util.h>
+#include <cpdlc_string.h>
+
 #include <acfutils/helpers.h>
 #include <acfutils/log.h>
 #include <acfutils/thread.h>
-
-#include <cpdlc_net_util.h>
-#include <cpdlc_string.h>
 
 #include "xpintf.h"
 
@@ -168,8 +168,12 @@ send_data_cmd(const void *extra_buf, size_t extra_sz, ...)
 	if (extra_sz != 0)
 		memcpy(outbuf_ptr, extra_buf, extra_sz);
 
+#if	LIN
 	sendto(sock, outbuf_start, l, MSG_NOSIGNAL,
 	    ai->ai_addr, ai->ai_addrlen);
+#else	/* !LIN */
+	sendto(sock, outbuf_start, l, 0, ai->ai_addr, ai->ai_addrlen);
+#endif	/* !LIN */
 
 	free(outbuf_start);
 }
@@ -307,7 +311,7 @@ drain_input(void)
 	ssize_t sz;
 
 	ASSERT(CPDLC_SOCKET_IS_VALID(sock));
-	sz = recv(sock, buf, sizeof (buf), 0);
+	sz = recv(sock, (void *)buf, sizeof (buf), 0);
 	if (sz == -1) {
 		logMsg("recv() error: %s", cpdlc_get_last_socket_error());
 	} else if (sz == sizeof (rpos_data_t) && CHECK_FOURCC(buf, "RPOS")) {

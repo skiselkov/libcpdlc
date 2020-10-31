@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifdef	_WIN32

@@ -780,11 +780,11 @@ cleanup(void)
 		cairo_surface_destroy(screen);
 		screen = NULL;
 	}
-	xpintf_fini();
 	if (box != NULL) {
 		fans_free(box);
 		box = NULL;
 	}
+	xpintf_fini();
 	if (hand_cursor != NULL) {
 		glfwDestroyCursor(hand_cursor);
 		hand_cursor = NULL;
@@ -869,9 +869,13 @@ main(void)
 		goto errout;
 	if (!window_init())
 		goto errout;
-	fms_init();
+	/*
+	 * Must go ahead of fms_init, since fms_init can immediately
+	 * call the get_time function.
+	 */
 	if (!xpintf_init(NULL, 0))
 		goto errout;
+	fms_init();
 
 	glewExperimental = GL_TRUE;
 	err = glewInit();
