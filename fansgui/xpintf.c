@@ -28,6 +28,7 @@
 #include <cpdlc_net_util.h>
 #include <cpdlc_string.h>
 
+#include <acfutils/delay_line.h>
 #include <acfutils/helpers.h>
 #include <acfutils/log.h>
 #include <acfutils/thread.h>
@@ -36,7 +37,7 @@
 
 #define	DEFAULT_XP_PORT		49000
 #define	RREF_FREQ		2
-#define	DATA_REQ_INTVAL		500000	/* usec */
+#define	DATA_REQ_INTVAL		1000000	/* usec */
 #define	RREF_DATA_TIMEOUT	3000000	/* usec */
 #define	CHECK_FOURCC(buf, str) \
 	(((buf)[0] == (str)[0]) && ((buf)[1] == (str)[1]) && \
@@ -90,10 +91,16 @@ enum {
     RREF_ALT_SEL,
     RREF_GPS_HDEF_DOT,
     RREF_GPS_NM_PER_DOT,
+    RREF_FUEL_TOT_INIT,
+    RREF_FUEL_TOT_USED,
+    RREF_WIND_DEG_MAG,
+    RREF_WIND_SPD_KT,
+    RREF_MAGVAR,
+    RREF_ON_GROUND,
     NUM_RREFS
 };
 static const char *rref_names[NUM_RREFS] = {
-    [RREF_SAT] = "sim/cockpit2/temperature/outside_air_LE_temp_degc",
+    [RREF_SAT] = "sim/cockpit2/temperature/outside_air_temp_degc",
     [RREF_IAS] = "sim/cockpit2/gauges/indicators/airspeed_kts_pilot",
     [RREF_MACH] = "sim/cockpit2/gauges/indicators/mach_pilot",
     [RREF_IS_MACH] = "sim/cockpit2/autopilot/airspeed_is_mach",
@@ -101,10 +108,28 @@ static const char *rref_names[NUM_RREFS] = {
     [RREF_VVI] = "sim/cockpit2/gauges/indicators/vvi_fpm_pilot",
     [RREF_ALT_SEL] = "sim/cockpit2/autopilot/altitude_dial_ft",
     [RREF_GPS_HDEF_DOT] = "sim/cockpit/radios/gps_hdef_dot",
-    [RREF_GPS_NM_PER_DOT] = "sim/cockpit/radios/gps_hdef_nm_per_dot"
+    [RREF_GPS_NM_PER_DOT] = "sim/cockpit/radios/gps_hdef_nm_per_dot",
+    [RREF_FUEL_TOT_INIT] = "sim/cockpit2/fuel/fuel_totalizer_init_kg",
+    [RREF_FUEL_TOT_USED] = "sim/cockpit2/fuel/fuel_totalizer_sum_kg",
+    [RREF_WIND_DEG_MAG] = "sim/cockpit2/gauges/indicators/wind_heading_deg_mag",
+    [RREF_WIND_SPD_KT] = "sim/cockpit2/gauges/indicators/wind_speed_kts",
+    [RREF_MAGVAR] = "sim/flightmodel/position/magnetic_variation",
+    [RREF_ON_GROUND] = "sim/flightmodel2/gear/on_ground[0]"
 };
 static uint64_t rref_data_recv_t = 0;
 static uint8_t rref_data[4 * NUM_RREFS] = {};
+
+static struct {
+	float	init;	/* kg */
+	float	used;	/* kg */
+	float	ff;	/* kg/s */
+	float	time;	/* secs */
+} fuel_sys = {
+    .init = NAN,
+    .used = NAN
+};
+
+static delay_line_t off_ground_delay;
 
 static void send_data_cmd(const void *extra_buf, size_t extra_sz, ...)
     SENTINEL_ATTR;
@@ -222,6 +247,7 @@ xpintf_init(const char *host, int port)
 	ASSERT(!inited);
 	inited = true;
 	mutex_init(&lock);
+	delay_line_init(&off_ground_delay, SEC2USEC(5));
 
 	if (host != NULL)
 		cpdlc_strlcpy(hostbuf, host, sizeof (hostbuf));
@@ -321,17 +347,64 @@ drain_input(void)
 	}
 }
 
+static void
+update_ground_data(void)
+{
+	int32_t on_ground;
+
+	if (rref_read_int32(RREF_ON_GROUND, &on_ground)) {
+		if (on_ground)
+			delay_line_push_imm_u64(&off_ground_delay, false);
+		else
+			delay_line_push_u64(&off_ground_delay, true);
+	}
+}
+
+static void
+update_fuel_data(double d_t)
+{
+	float fuel_init, fuel_used;
+
+	ASSERT3F(d_t, >, 0);
+
+	if (rref_read_fp32(RREF_FUEL_TOT_INIT, &fuel_init) &&
+	    rref_read_fp32(RREF_FUEL_TOT_USED, &fuel_used)) {
+		if (!isnan(fuel_sys.init) && !isnan(fuel_sys.used) &&
+		    fuel_init == fuel_sys.init && fuel_used >= fuel_sys.used) {
+			float fuel1 = fuel_sys.init - fuel_sys.used;
+			float fuel2 = fuel_init - fuel_used;
+			float ff_tgt = (fuel1 - fuel2) / d_t;
+			FILTER_IN_NAN(fuel_sys.ff, ff_tgt, d_t, 30);
+			fuel_sys.time = fuel2 / fuel_sys.ff;
+		} else {
+			fuel_sys.ff = NAN;
+			fuel_sys.time = NAN;
+		}
+		fuel_sys.init = fuel_init;
+		fuel_sys.used = fuel_used;
+	} else {
+		fuel_sys.init = NAN;
+		fuel_sys.used = NAN;
+		fuel_sys.ff = NAN;
+		fuel_sys.time = NAN;
+	}
+}
+
 void
 xpintf_update(void)
 {
 	int res;
+	uint64_t now_prev;
+	double d_t;
 
 	if (!inited)
 		return;
 
 	ASSERT(CPDLC_SOCKET_IS_VALID(sock));
 
+	now_prev = now;
 	now = microclock();
+	d_t = USEC2SEC(now - now_prev);
 	if (now > last_req_t + DATA_REQ_INTVAL) {
 		enable_data();
 		last_req_t = now;
@@ -350,6 +423,9 @@ xpintf_update(void)
 			    cpdlc_get_last_socket_error());
 		}
 	} while (res == 1);
+
+	update_ground_data();
+	update_fuel_data(d_t);
 }
 
 bool
@@ -439,7 +515,35 @@ xpintf_get_offset(void)
 bool
 xpintf_get_wind(unsigned *deg_true, unsigned *knots)
 {
+	float deg_mag, magvar, spd_kt;
+
 	ASSERT(deg_true != NULL);
 	ASSERT(knots != NULL);
+
+	if (delay_line_peek_u64(&off_ground_delay) &&
+	    rref_read_fp32(RREF_WIND_DEG_MAG, &deg_mag) &&
+	    rref_read_fp32(RREF_WIND_SPD_KT, &spd_kt) &&
+	    rref_read_fp32(RREF_MAGVAR, &magvar)) {
+		*deg_true = round(deg_mag - magvar);
+		*knots = round(spd_kt);
+		return (true);
+	}
+
 	return (false);
+}
+
+bool
+xpintf_get_fuel(unsigned *hours, unsigned *mins)
+{
+	float secs = fuel_sys.time;
+
+	ASSERT(hours != NULL);
+	ASSERT(mins != NULL);
+
+	if (isnan(secs))
+		return (false);
+	*hours = secs / 3600.0;
+	*mins = (secs - (*hours) * 3600) / 60.0;
+
+	return (true);
 }

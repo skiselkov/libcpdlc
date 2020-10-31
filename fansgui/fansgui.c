@@ -181,6 +181,7 @@ static float get_sel_alt(void *userinfo);
 static bool get_sat(void *userinfo, int *temp);
 static bool get_wind(void *userinfo, unsigned *deg_true, unsigned *knots);
 static float get_offset(void *userinfo);
+static bool get_fuel(void *userinfo, unsigned *hours, unsigned *mins);
 
 static const fans_funcs_t funcs = {
     .get_flt_id = get_auto_flt_id,
@@ -192,7 +193,8 @@ static const fans_funcs_t funcs = {
     .get_sel_alt = get_sel_alt,
     .get_sat = get_sat,
     .get_wind = get_wind,
-    .get_offset = get_offset
+    .get_offset = get_offset,
+    .get_fuel = get_fuel
 };
 
 static void
@@ -269,6 +271,13 @@ get_offset(void *userinfo)
 {
 	UNUSED(userinfo);
 	return (xpintf_get_offset());
+}
+
+static bool
+get_fuel(void *userinfo, unsigned *hours, unsigned *mins)
+{
+	UNUSED(userinfo);
+	return (xpintf_get_fuel(hours, mins));
 }
 
 static void

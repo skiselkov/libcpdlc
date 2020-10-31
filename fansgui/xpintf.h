@@ -44,6 +44,7 @@ float xpintf_get_cur_vvi(void);
 float xpintf_get_sel_alt(void);
 float xpintf_get_offset(void);
 bool xpintf_get_wind(unsigned *deg_true, unsigned *knots);
+bool xpintf_get_fuel(unsigned *hours, unsigned *mins);
 
 #ifdef	__cplusplus
 }
