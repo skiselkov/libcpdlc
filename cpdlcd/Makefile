@@ -25,7 +25,7 @@
 include ../Makefile.com
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
-	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE -D_POSIX_SOURCE \
+	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE \
 	-I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)
