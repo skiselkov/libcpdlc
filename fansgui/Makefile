@@ -32,7 +32,10 @@ else
 		    -framework OpenGL \
 		    -framework IOKit \
 		    -framework CoreVideo \
-		    -framework Cocoa
+		    -framework Cocoa \
+		    -framework AudioToolbox \
+		    -framework CoreAudio \
+		    -framework AudioUnit
 	else
 		PLATFORM_LIBS += -lopengl32 -mwindows
 	endif

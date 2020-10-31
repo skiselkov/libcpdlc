@@ -36,6 +36,7 @@ else
 		PLATFORM_LIBNAME=lin64
 		HOSTCC=$(CC)
 		HOSTCXX=$(CXX)
+		LIBCRYPTO=-lcrypt
 	endif
 	ifeq ($(UNAME),Darwin)
 		PLATFORM_DEFS=-DLIN=0 -DIBM=0 -DAPL=1 -DSUN=0

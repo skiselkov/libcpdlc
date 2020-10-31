@@ -32,7 +32,7 @@ CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
 LIBS += -fPIC -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-	--static --libs gnutls) -lcrypto -lcrypt -lpthread -lm
+	--static --libs gnutls) -lcrypto $(LIBCRYPT) -lpthread -lm
 
 DAEMON_OBJS=\
 	auth.o \

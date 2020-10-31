@@ -7,14 +7,27 @@ LWS=libwebsockets-3.1.0
 
 UBUNTU_PACKAGES="build-essential cmake git libglu1-mesa-dev libgmp-dev \
 libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools unzip"
-NCPUS=$(fgrep processor /proc/cpuinfo  | wc -l)
+case $(uname) in
+Linux)
+	NCPUS=$(fgrep processor /proc/cpuinfo | wc -l)
+	STATIC_LIB_OPTS="-static-libgcc -static-libstdc++"
+	;;
+Darwin)
+	NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
+	STATIC_LIB_OPTS=""
+	;;
+esac
 
 set -e
 
 winbuild=0
 do_clean=0
 HOST_SUFFIX=""
-ARCH="linux-64"
+if [[ "$(uname)" = Linux ]]; then
+	ARCH="linux-64"
+else
+	ARCH="mac-64"
+fi
 while getopts "wc" opt; do
 	case $opt in
 	w)
@@ -33,7 +46,11 @@ if [[ "$do_clean" == 0 ]]; then
 	read
 	if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
 		BUILDGLFW=1
-		BUILDWIN=1
+		if [[ "$(uname)" = "Linux" ]]; then
+			BUILDWIN=1
+		else
+			BUILDWIN=0
+		fi
 	else
 		BUILDGLFW=0
 		BUILDWIN=0
@@ -45,13 +62,15 @@ libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev zip \
 mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
 	fi
 
-	echo "---------------------------------------------------------------
+	if [[ "$(uname)" = "Linux" ]]; then
+		echo "---------------------------------------------------------------
 The following packages are required to build cpdlcd and fansgui:
   $UBUNTU_PACKAGES"
-	echo -n "Would you like me to apt-get these for you now? [y/N] "
-	read
-	if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
-		sudo apt-get install $UBUNTU_PACKAGES
+		echo -n "Would you like me to apt-get these for you now? [y/N] "
+		read
+		if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
+			sudo apt-get install $UBUNTU_PACKAGES
+		fi
 	fi
 fi
 
@@ -81,24 +100,37 @@ if ! [ -f libacfutils/build_deps ]; then
 fi
 
 if [[ "$do_clean" == 0 ]]; then
-	if [[ "$BUILDWIN" == 0 ]]; then
-		if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ]; then
-			(
-			    cd libacfutils && ./build_deps -m && cd qmake && \
-			    ./build-win-lin -ilE
-			) || exit 1
+	if [[ "$(uname)" = "Linux" ]]; then
+		ACFUTILS_BUILD_SCRIPT="./build-win-lin"
+		NATIVE_FILE="libacfutils/qmake/lin64/libacfutils.a"
+		CROSS_FILE="libacfutils/qmake/lin64/libacfutils.a"
+		if [[ "$BUILDWIN" == 0 ]]; then
+			MINIMAL=""
+		else
+			MINIMAL="-m"
 		fi
 	else
-		if ! [ -f "libacfutils/qmake/lin64/libacfutils.a" ] ||
-		    ! [ -f "libacfutils/qmake/win64/libacfutils.a" ]; then
-			(
-			    cd libacfutils && ./build_deps && cd qmake && \
-			    ./build-win-lin -E
-			) || exit 1
+		ACFUTILS_BUILD_SCRIPT="./build-mac"
+		NATIVE_FILE="libacfutils/qmake/mac64/libacfutils.a"
+	fi
+	if [[ "$BUILDWIN" == 0 ]]; then
+		if ! [ -f "$NATIVE_FILE" ]; then
+		    (
+			cd libacfutils && ./build_deps $MINIMAL && \
+			    cd qmake && "${ACFUTILS_BUILD_SCRIPT}" -ilE
+		    ) || exit 1
+		fi
+	else
+		if ! [ -f "$NATIVE_FILE" ] || ! [ -f "$CROSS_FILE" ]; then
+		    (
+			cd libacfutils && ./build_deps && cd qmake && \
+			    "${ACFUTILS_BUILD_SCRIPT}" -E
+		    ) || exit 1
 		fi
 	fi
 else
-	( cd libacfutils && ./build_deps -c && rm -rf qmake/win64 qmake/lin64 )
+	( cd libacfutils && ./build_deps -c && \
+	    rm -rf qmake/win64 qmake/lin64 qmake/mac64 )
 fi
 if [[ "$BUILDGLFW" == 1 ]]; then
 	( cd libacfutils/glfw && ./build_glfw_deps ) || exit 1
@@ -107,18 +139,19 @@ fi
 if [[ "$do_clean" == 0 ]]; then
 	[ -d "${LWS}" ] || tar xJf "${LWS}.tar.xz"
 	if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
-		(
-		    cd "${LWS}" && \
-			cmake . \
-			    -DLWS_OPENSSL_LIBRARIES="$(pwd)/../libacfutils/ssl/openssl-$ARCH/lib" \
-			    -DLWS_OPENSSL_INCLUDE_DIRS="$(pwd)/../libacfutils/ssl/openssl-$ARCH/include" \
-			    -DLWS_WITHOUT_TESTAPPS=ON \
-			    -DLWS_WITHOUT_TEST_SERVER=ON \
-			    -DLWS_WITHOUT_TEST_SERVER_EXTPOLL=ON \
-			    -DLWS_WITHOUT_TEST_PING=ON \
-			    -DLWS_WITHOUT_TEST_CLIENT=ON && \
-			make -j ${NCPUS}
-		) || exit 1
+	    (
+		cd "${LWS}" && \
+		cmake . \
+		    -DLWS_OPENSSL_LIBRARIES="$(pwd)/../libacfutils/ssl/openssl-$ARCH/lib" \
+		    -DLWS_OPENSSL_INCLUDE_DIRS="$(pwd)/../libacfutils/ssl/openssl-$ARCH/include" \
+		    -DLWS_WITH_SHARED=OFF \
+		    -DLWS_WITHOUT_TESTAPPS=ON \
+		    -DLWS_WITHOUT_TEST_SERVER=ON \
+		    -DLWS_WITHOUT_TEST_SERVER_EXTPOLL=ON \
+		    -DLWS_WITHOUT_TEST_PING=ON \
+		    -DLWS_WITHOUT_TEST_CLIENT=ON && \
+		make -j ${NCPUS}
+	    ) || exit 1
 	fi
 else
 	echo rm -rf "${LWS}"
@@ -127,13 +160,13 @@ fi
 
 if [[ "$do_clean" = 0 ]]; then
 	[ -d "${GMP}" ] || tar xJf "${GMP}.tar.xz"
-	if ! [ -f "${GMP}/install/lib/pkgconfig/gmp.pc" ]; then
-		(
-		    cd "${GMP}" && \
-			./configure --enable-static --disable-shared \
-			    --prefix="$(pwd)/install" $HOST_SUFFIX && \
-			make -j ${NCPUS} && make install
-		) || exit 1
+	if ! [ -f "${GMP}/install_tgt/lib/pkgconfig/gmp.pc" ]; then
+	    (
+		cd "${GMP}" && \
+		./configure --enable-static --disable-shared \
+		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
+		make -j ${NCPUS} && make install
+	    ) || exit 1
 	fi
 else
 	echo rm -rf "${GMP}"
@@ -142,14 +175,14 @@ fi
 
 if [[ "$do_clean" = 0 ]]; then
 	[ -d "${NETTLE}" ] || tar xJf "${NETTLE}.tar.xz"
-	if ! [ -f "${NETTLE}/install/lib/pkgconfig/nettle.pc" ]; then
-		(
-		    cd "${NETTLE}" && \
-			LDFLAGS="-static-libgcc -static-libstdc++" \
-			./configure --enable-mini-gmp \
-			--prefix="$(pwd)/install" $HOST_SUFFIX && \
-			make -j ${NCPUS} && make install
-		) || exit 1
+	if ! [ -f "${NETTLE}/install_tgt/lib/pkgconfig/nettle.pc" ]; then
+	    (
+		cd "${NETTLE}" && \
+		LDFLAGS="$STATIC_LIB_OPTS" \
+		./configure --enable-mini-gmp \
+		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
+		make -j ${NCPUS} && make install
+	    ) || exit 1
 	fi
 else
 	echo rm -rf "${NETTLE}"
@@ -158,22 +191,22 @@ fi
 
 if [[ "$do_clean" == 0 ]]; then
 	[ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
-	if ! [ -f "${GNUTLS}/install/lib/pkgconfig/gnutls.pc" ]; then
-		(
-		    cd "${GNUTLS}" && \
-			LIBS="-static-libgcc -static-libstdc++" \
-			GMP_CFLAGS="$(PKG_CONFIG_PATH=../${GMP}/install/lib/pkgconfig pkg-config --cflags gmp)" \
-			GMP_LIBS="$(PKG_CONFIG_PATH=../${GMP}/install/lib/pkgconfig pkg-config --libs gmp)" \
-			HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --cflags hogweed)" \
-			HOGWEED_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --libs hogweed)" \
-			NETTLE_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --cflags nettle)" \
-			NETTLE_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install/lib/pkgconfig pkg-config --libs nettle)" \
-			./configure --prefix="$(pwd)/install" \
-			--with-included-libtasn1 --with-pic \
-			--with-included-unistring --without-p11-kit --disable-doc \
-			--disable-tools --disable-cxx --disable-tests $HOST_SUFFIX &&
-			make -j ${NCPUS} && make install
-		) || exit 1
+	if ! [ -f "${GNUTLS}/install_tgt/lib/pkgconfig/gnutls.pc" ]; then
+	    (
+		cd "${GNUTLS}" && \
+		LIBS="$STATC_LIB_OPTS" \
+		GMP_CFLAGS="$(PKG_CONFIG_PATH=../${GMP}/install_tgt/lib/pkgconfig pkg-config --cflags gmp)" \
+		GMP_LIBS="$(PKG_CONFIG_PATH=../${GMP}/install_tgt/lib/pkgconfig pkg-config --libs gmp)" \
+		HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --cflags hogweed)" \
+		HOGWEED_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --libs hogweed)" \
+		NETTLE_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --cflags nettle)" \
+		NETTLE_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --libs nettle)" \
+		./configure --prefix="$(pwd)/install_tgt" \
+		    --with-included-libtasn1 --with-pic \
+		    --with-included-unistring --without-p11-kit --disable-doc \
+		    --disable-tools --disable-cxx --disable-tests $HOST_SUFFIX && \
+		make -j ${NCPUS} && make install
+	    ) || exit 1
 	fi
 else
 	echo rm -rf "${GNUTLS}"
