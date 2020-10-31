@@ -35,7 +35,9 @@
 #include "xpintf.h"
 
 #define	DEFAULT_XP_PORT		49000
-#define	RREF_DATA_TIMEOUT	5	/* sec */
+#define	RREF_FREQ		2
+#define	DATA_REQ_INTVAL		500000	/* usec */
+#define	RREF_DATA_TIMEOUT	3000000	/* usec */
 #define	CHECK_FOURCC(buf, str) \
 	(((buf)[0] == (str)[0]) && ((buf)[1] == (str)[1]) && \
 	((buf)[2] == (str)[2]) && ((buf)[3] == (str)[3]))
@@ -65,11 +67,11 @@ typedef struct {
 } __attribute__((packed)) dref_req_t;
 
 static bool inited = false;
-static time_t now = 0;
+static uint64_t now = 0;
 static mutex_t lock;
 static cpdlc_socktype_t sock = CPDLC_INVALID_SOCKET;
 static struct addrinfo *ai = NULL;
-static time_t last_req_t = 0;
+static uint64_t last_req_t = 0;
 /*
  * RPOS data
  */
@@ -79,13 +81,16 @@ static rpos_data_t rpos_data = {};
  * RREF data
  */
 enum {
-	RREF_SAT,
-	RREF_IAS,
-	RREF_MACH,
-	RREF_IS_MACH,
-	RREF_ALT,
-	RREF_ALT_SEL,
-	NUM_RREFS
+    RREF_SAT,
+    RREF_IAS,
+    RREF_MACH,
+    RREF_IS_MACH,
+    RREF_ALT,
+    RREF_VVI,
+    RREF_ALT_SEL,
+    RREF_GPS_HDEF_DOT,
+    RREF_GPS_NM_PER_DOT,
+    NUM_RREFS
 };
 static const char *rref_names[NUM_RREFS] = {
     [RREF_SAT] = "sim/cockpit2/temperature/outside_air_LE_temp_degc",
@@ -93,9 +98,12 @@ static const char *rref_names[NUM_RREFS] = {
     [RREF_MACH] = "sim/cockpit2/gauges/indicators/mach_pilot",
     [RREF_IS_MACH] = "sim/cockpit2/autopilot/airspeed_is_mach",
     [RREF_ALT] = "sim/cockpit2/gauges/indicators/altitude_ft_pilot",
-    [RREF_ALT_SEL] = "sim/cockpit2/autopilot/altitude_dial_ft"
+    [RREF_VVI] = "sim/cockpit2/gauges/indicators/vvi_fpm_pilot",
+    [RREF_ALT_SEL] = "sim/cockpit2/autopilot/altitude_dial_ft",
+    [RREF_GPS_HDEF_DOT] = "sim/cockpit/radios/gps_hdef_dot",
+    [RREF_GPS_NM_PER_DOT] = "sim/cockpit/radios/gps_hdef_nm_per_dot"
 };
-static time_t rref_data_recv_t = 0;
+static uint64_t rref_data_recv_t = 0;
 static uint8_t rref_data[4 * NUM_RREFS] = {};
 
 static void send_data_cmd(const void *extra_buf, size_t extra_sz, ...)
@@ -179,10 +187,10 @@ send_dref_req(const char *name, int idx, int freq)
 static void
 enable_data(void)
 {
-	send_data_cmd(NULL, 0, "RPOS", "1", NULL);
+	send_data_cmd(NULL, 0, "RPOS", "2", NULL);
 	for (int i = 0; i < NUM_RREFS; i++) {
 		ASSERT(rref_names[i] != NULL);
-		send_dref_req(rref_names[i], i, 1);
+		send_dref_req(rref_names[i], i, RREF_FREQ);
 	}
 }
 
@@ -319,8 +327,8 @@ xpintf_update(void)
 
 	ASSERT(CPDLC_SOCKET_IS_VALID(sock));
 
-	now = time(NULL);
-	if (now > last_req_t) {
+	now = microclock();
+	if (now > last_req_t + DATA_REQ_INTVAL) {
 		enable_data();
 		last_req_t = now;
 	}
@@ -385,30 +393,43 @@ xpintf_get_cur_spd(bool *mach, unsigned *spd)
 	return (false);
 }
 
-bool
-xpintf_get_cur_alt(int *alt_ft)
+float
+xpintf_get_cur_alt(void)
 {
-	float alt_f32;
+	float alt_ft;
 
-	ASSERT(alt_ft != NULL);
-	if (rref_read_fp32(RREF_ALT, &alt_f32)) {
-		*alt_ft = round(alt_f32 / 100.0) * 100.0;
-		return (true);
-	}
-	return (false);
+	if (rref_read_fp32(RREF_ALT, &alt_ft))
+		return (round(alt_ft / 10.0) * 10.0);
+	return (NAN);
 }
 
-bool
-xpintf_get_sel_alt(int *alt_ft)
+float
+xpintf_get_cur_vvi(void)
 {
-	float alt_f32;
+	float vvi_fpm;
+	if (rref_read_fp32(RREF_VVI, &vvi_fpm))
+		return (round(vvi_fpm / 50.0) * 50.0);
+	return (NAN);
+}
 
-	ASSERT(alt_ft != NULL);
-	if (rref_read_fp32(RREF_ALT_SEL, &alt_f32)) {
-		*alt_ft = round(alt_f32 / 100.0) * 100.0;
-		return (true);
+float
+xpintf_get_sel_alt(void)
+{
+	float alt_ft;
+	if (rref_read_fp32(RREF_ALT_SEL, &alt_ft))
+		return (round(alt_ft / 100.0) * 100.0);
+	return (NAN);
+}
+
+float
+xpintf_get_offset(void)
+{
+	float hdef_dots, nm_per_dot;
+	if (rref_read_fp32(RREF_GPS_HDEF_DOT, &hdef_dots) &&
+	    rref_read_fp32(RREF_GPS_NM_PER_DOT, &nm_per_dot)) {
+		return (-hdef_dots * nm_per_dot);
 	}
-	return (false);
+	return (NAN);
 }
 
 bool

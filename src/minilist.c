@@ -67,7 +67,7 @@ list_tail(const list_t *list)
 }
 
 void *
-list_next(const list_t *list, void *elem)
+list_next(const list_t *list, const void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
@@ -75,11 +75,25 @@ list_next(const list_t *list, void *elem)
 }
 
 void *
-list_prev(const list_t *list, void *elem)
+list_prev(const list_t *list, const void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
 	return (P2N(list, elem)->prev);
+}
+
+void *
+list_get_i(const list_t *list, unsigned idx)
+{
+	void *p;
+
+	CPDLC_ASSERT(list != NULL);
+	CPDLC_ASSERT(idx < list->count);
+	p = list_head(list);
+	for (; idx != 0; idx--)
+		p = list_next(list, p);
+
+	return (p);
 }
 
 size_t

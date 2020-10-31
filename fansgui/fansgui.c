@@ -175,10 +175,12 @@ static void msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids,
 
 static void get_time(void *userinfo, unsigned *hours, unsigned *mins);
 static bool get_cur_spd(void *userinfo, bool *mach, unsigned *spd);
-static bool get_cur_alt(void *userinfo, int *alt_ft);
-static bool get_sel_alt(void *userinfo, int *alt_ft);
+static float get_cur_alt(void *userinfo);
+static float get_cur_vvi(void *userinfo);
+static float get_sel_alt(void *userinfo);
 static bool get_sat(void *userinfo, int *temp);
 static bool get_wind(void *userinfo, unsigned *deg_true, unsigned *knots);
+static float get_offset(void *userinfo);
 
 static const fans_funcs_t funcs = {
     .get_flt_id = get_auto_flt_id,
@@ -186,9 +188,11 @@ static const fans_funcs_t funcs = {
     .get_time = get_time,
     .get_cur_spd = get_cur_spd,
     .get_cur_alt = get_cur_alt,
+    .get_cur_vvi = get_cur_vvi,
     .get_sel_alt = get_sel_alt,
     .get_sat = get_sat,
-    .get_wind = get_wind
+    .get_wind = get_wind,
+    .get_offset = get_offset
 };
 
 static void
@@ -221,22 +225,25 @@ get_cur_spd(void *userinfo, bool *mach, unsigned *spd)
 	return (false);
 }
 
-static bool
-get_cur_alt(void *userinfo, int *alt_ft)
+static float
+get_cur_alt(void *userinfo)
 {
 	UNUSED(userinfo);
-	if (xpintf_get_cur_alt(alt_ft))
-		return (true);
-	return (false);
+	return (xpintf_get_cur_alt());
 }
 
-static bool
-get_sel_alt(void *userinfo, int *alt_ft)
+static float
+get_cur_vvi(void *userinfo)
 {
 	UNUSED(userinfo);
-	if (xpintf_get_sel_alt(alt_ft))
-		return (true);
-	return (false);
+	return (xpintf_get_cur_vvi());
+}
+
+static float
+get_sel_alt(void *userinfo)
+{
+	UNUSED(userinfo);
+	return (xpintf_get_sel_alt());
 }
 
 static bool
@@ -255,6 +262,13 @@ get_wind(void *userinfo, unsigned *deg_true, unsigned *knots)
 	if (xpintf_get_wind(deg_true, knots))
 		return (true);
 	return (false);
+}
+
+static float
+get_offset(void *userinfo)
+{
+	UNUSED(userinfo);
+	return (xpintf_get_offset());
 }
 
 static void
@@ -880,7 +894,7 @@ main(void)
 			dirty = 0;
 		}
 
-		if (now - dirty > SEC2USEC(1)) {
+		if (now - dirty > SEC2USEC(0.5)) {
 			window_draw();
 			dirty = now;
 		}

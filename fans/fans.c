@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -40,12 +40,14 @@
 #include "fans_emer.h"
 #include "fans_freetext.h"
 #include "fans_impl.h"
+#include "fans_fms_data.h"
 #include "fans_logon_status.h"
 #include "fans_main_menu.h"
 #include "fans_msg.h"
 #include "fans_parsing.h"
 #include "fans_pos_pick.h"
 #include "fans_pos_rep.h"
+#include "fans_reports.h"
 #include "fans_req.h"
 #include "fans_req_alt.h"
 #include "fans_req_clx.h"
@@ -60,98 +62,113 @@
 #include "fans_vrfy.h"
 
 static fms_page_t fms_pages[FMS_NUM_PAGES] = {
-	{	/* FMS_PAGE_MAIN_MENU */
+	[FMS_PAGE_MAIN_MENU] = {
 		.draw_cb = fans_main_menu_draw_cb,
 		.key_cb = fans_main_menu_key_cb
 	},
-	{	/* FMS_PAGE_LOGON_STATUS */
+	[FMS_PAGE_LOGON_STATUS] = {
 		.init_cb = fans_logon_status_init_cb,
 		.draw_cb = fans_logon_status_draw_cb,
 		.key_cb = fans_logon_status_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_MSG_LOG */
+	[FMS_PAGE_MSG_LOG] = {
 		.draw_cb = fans_msg_log_draw_cb,
 		.key_cb = fans_msg_log_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_MSG_THR */
+	[FMS_PAGE_MSG_THR] = {
 		.draw_cb = fans_msg_thr_draw_cb,
 		.key_cb = fans_msg_thr_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_FREETEXT */
+	[FMS_PAGE_FREETEXT] = {
 		.init_cb = fans_freetext_init_cb,
 		.draw_cb = fans_freetext_draw_cb,
 		.key_cb = fans_freetext_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_REQUESTS */
+	[FMS_PAGE_REQUESTS] = {
 		.draw_cb = fans_requests_draw_cb,
 		.key_cb = fans_requests_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_REQ_ALT */
+	[FMS_PAGE_REQ_ALT] = {
 		.init_cb = fans_req_alt_init_cb,
 		.draw_cb = fans_req_alt_draw_cb,
 		.key_cb = fans_req_alt_key_cb
 	},
-	{	/* FMS_PAGE_REQ_OFF */
+	[FMS_PAGE_REQ_OFF] = {
 		.init_cb = fans_req_off_init_cb,
 		.draw_cb = fans_req_off_draw_cb,
 		.key_cb = fans_req_off_key_cb
 	},
-	{	/* FMS_PAGE_REQ_SPD */
+	[FMS_PAGE_REQ_SPD] = {
 		.init_cb = fans_req_spd_init_cb,
 		.draw_cb = fans_req_spd_draw_cb,
 		.key_cb = fans_req_spd_key_cb
 	},
-	{	/* FMS_PAGE_REQ_RTE */
+	[FMS_PAGE_REQ_RTE] = {
 		.init_cb = fans_req_rte_init_cb,
 		.draw_cb = fans_req_rte_draw_cb,
 		.key_cb = fans_req_rte_key_cb
 	},
-	{	/* FMS_PAGE_REQ_CLX */
+	[FMS_PAGE_REQ_CLX] = {
 		.init_cb = fans_req_clx_init_cb,
 		.draw_cb = fans_req_clx_draw_cb,
 		.key_cb = fans_req_clx_key_cb
 	},
-	{	/* FMS_PAGE_REQ_VMC */
+	[FMS_PAGE_REQ_VMC] = {
 		.draw_cb = fans_req_vmc_draw_cb,
 		.key_cb = fans_req_vmc_key_cb
 	},
-	{	/* FMS_PAGE_REQ_WCW */
+	[FMS_PAGE_REQ_WCW] = {
 		.init_cb = fans_req_wcw_init_cb,
 		.draw_cb = fans_req_wcw_draw_cb,
 		.key_cb = fans_req_wcw_key_cb
 	},
-	{	/* FMS_PAGE_REQ_VOICE */
+	[FMS_PAGE_REQ_VOICE] = {
 		.init_cb = fans_req_voice_init_cb,
 		.draw_cb = fans_req_voice_draw_cb,
 		.key_cb = fans_req_voice_key_cb
 	},
-	{	/* FMS_PAGE_REJ */
+	[FMS_PAGE_REJ] = {
 		.draw_cb = fans_rej_draw_cb,
 		.key_cb = fans_rej_key_cb
 	},
-	{	/* FMS_PAGE_VRFY */
+	[FMS_PAGE_VRFY] = {
 		.draw_cb = fans_vrfy_draw_cb,
 		.key_cb = fans_vrfy_key_cb
 	},
-	{	/* FMS_PAGE_EMER */
+	[FMS_PAGE_EMER] = {
 		.init_cb = fans_emer_init_cb,
 		.draw_cb = fans_emer_draw_cb,
 		.key_cb = fans_emer_key_cb,
 		.has_return = true
 	},
-	{	/* FMS_PAGE_POS_PICK */
+	[FMS_PAGE_POS_PICK] = {
 		.draw_cb = fans_pos_pick_draw_cb,
 		.key_cb = fans_pos_pick_key_cb
 	},
-	{	/* FMS_PAGE_POS_REP */
+	[FMS_PAGE_POS_REP] = {
 		.init_cb = fans_pos_rep_init_cb,
 		.draw_cb = fans_pos_rep_draw_cb,
 		.key_cb = fans_pos_rep_key_cb,
+		.has_return = true
+	},
+	[FMS_PAGE_REPORTS_DUE] = {
+		.draw_cb = fans_reports_due_draw_cb,
+		.key_cb = fans_reports_due_key_cb,
+		.has_return = true
+	},
+	[FMS_PAGE_REPORT] = {
+		.draw_cb = fans_report_draw_cb,
+		.key_cb = fans_report_key_cb,
+		.has_return = true
+	},
+	[FMS_PAGE_FMS_DATA] = {
+		.draw_cb = fans_fms_data_draw_cb,
+		.key_cb = fans_fms_data_key_cb,
 		.has_return = true
 	}
 };
@@ -209,6 +226,13 @@ fans_set_num_subpages(fans_t *box, unsigned num)
 	CPDLC_ASSERT(box != NULL);
 	box->num_subpages = num;
 	box->subpage %= num;
+}
+
+unsigned
+fans_get_subpage(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->subpage);
 }
 
 void
@@ -605,6 +629,9 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
 	box->volume = 1;
 
+	list_create(&box->reports_due, sizeof (fans_report_t),
+	    offsetof(fans_report_t, node));
+
 	cpdlc_msglist_set_update_cb(box->msglist, msglist_update_cb);
 	cpdlc_msglist_set_userinfo(box->msglist, box);
 
@@ -616,9 +643,15 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 void
 fans_free(fans_t *box)
 {
+	fans_report_t *report;
+
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(box->msglist != NULL);
 	CPDLC_ASSERT(box->cl != NULL);
+
+	while ((report = list_remove_head(&box->reports_due)) != NULL)
+		free(report);
+	list_destroy(&box->reports_due);
 
 	if (box->verify.msg != NULL)
 		cpdlc_msg_free(box->verify.msg);
@@ -780,13 +813,16 @@ fans_update(fans_t *box)
 	fans_update_scratchpad(box);
 	update_error_msg(box);
 	update_cda(box);
+	fans_reports_update(box);
+
+	box->prev_alt = fans_get_cur_alt(box);
 }
 
 void
 fans_put_page_ind(fans_t *box, fms_color_t color)
 {
 	CPDLC_ASSERT(box->num_subpages != 0);
-	fans_put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%d/%d",
+	fans_put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%2d/%-2d",
 	    box->subpage + 1, box->num_subpages);
 }
 
@@ -991,7 +1027,7 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
 }
 
-void
+bool
 fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 {
 	CPDLC_ASSERT(box != NULL);
@@ -1000,30 +1036,35 @@ fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 	if (box->funcs.get_cur_spd != NULL && box->funcs.get_cur_spd(
 	    box->userinfo, &spd->spd.mach, &spd->spd.spd)) {
 		spd->spd.spd = MIN(spd->spd.spd, 999);
+		return (true);
 	}
+	return (false);
 }
 
 float
 fans_get_cur_alt(const fans_t *box)
 {
-	int alt_ft = 0;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_cur_alt != NULL &&
-	    box->funcs.get_cur_alt(box->userinfo, &alt_ft)) {
-		return (alt_ft);
-	}
+	if (box->funcs.get_cur_alt != NULL)
+		return (box->funcs.get_cur_alt(box->userinfo));
+	return (NAN);
+}
+
+float
+fans_get_cur_vvi(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (box->funcs.get_cur_vvi != NULL)
+		return (box->funcs.get_cur_vvi(box->userinfo));
 	return (NAN);
 }
 
 float
 fans_get_sel_alt(const fans_t *box)
 {
-	int alt_ft = 0;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_sel_alt != NULL &&
-	    box->funcs.get_sel_alt(box->userinfo, &alt_ft)) {
-		return (alt_ft);
-	}
+	if (box->funcs.get_sel_alt != NULL)
+		return (box->funcs.get_sel_alt(box->userinfo));
 	return (NAN);
 }
 
@@ -1076,13 +1117,10 @@ fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info)
 float
 fans_get_offset(const fans_t *box)
 {
-	float offset_NM;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_offset != NULL &&
-	    box->funcs.get_offset(box->userinfo, &offset_NM)) {
-		return (offset_NM * 1852.0);
-	}
-	return (0);
+	if (box->funcs.get_offset != NULL)
+		return (box->funcs.get_offset(box->userinfo));
+	return (NAN);
 }
 
 bool

@@ -104,9 +104,10 @@ typedef struct {
 
 typedef bool (*fans_get_flt_id_t)(void *userinfo, char flt_id[8]);
 typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd_KIAS);
-typedef bool (*fans_get_alt_t)(void *userinfo, int *alt_ft);
+typedef float (*fans_get_alt_t)(void *userinfo);
+typedef float (*fans_get_vvi_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
-typedef bool (*fans_get_offset_t)(void *userinfo, float *offset_NM);
+typedef float (*fans_get_offset_t)(void *userinfo);
 typedef bool (*fans_get_fuel_t)(void *userinfo, unsigned *hrs, unsigned *mins);
 typedef bool (*fans_get_temp_t)(void *userinfo, int *temp_C);
 typedef bool (*fans_get_wind_t)(void *userinfo, unsigned *deg_true,
@@ -120,6 +121,7 @@ typedef struct {
 	cpdlc_get_time_func_t	get_time;
 	fans_get_spd_t		get_cur_spd;
 	fans_get_alt_t		get_cur_alt;
+	fans_get_vvi_t		get_cur_vvi;
 	fans_get_alt_t		get_sel_alt;
 	fans_get_wpt_info_t	get_prev_wpt;
 	fans_get_wpt_info_t	get_next_wpt;

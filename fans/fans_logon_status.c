@@ -310,6 +310,8 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		fans_scratchpad_xfer_uint(box, &vol, &set, 0, 100);
 		if (set)
 			box->volume = vol / 100.0;
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R3) {
+		fans_set_page(box, FMS_PAGE_FMS_DATA, true);
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (can_send_logon(box, st)) {
 			send_logon(box);

@@ -68,6 +68,7 @@ CORE_SRC_OBJS=\
 FANS_OBJS=\
 	$(FANS)/fans.o \
 	$(FANS)/fans_emer.o \
+	$(FANS)/fans_fms_data.o \
 	$(FANS)/fans_freetext.o \
 	$(FANS)/fans_main_menu.o \
 	$(FANS)/fans_msg.o \
@@ -76,6 +77,7 @@ FANS_OBJS=\
 	$(FANS)/fans_pos_pick.o \
 	$(FANS)/fans_pos_rep.o \
 	$(FANS)/fans_rej.o \
+	$(FANS)/fans_reports.o \
 	$(FANS)/fans_req.o \
 	$(FANS)/fans_req_alt.o \
 	$(FANS)/fans_req_clx.o \

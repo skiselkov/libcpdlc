@@ -29,6 +29,7 @@
 #include <stdbool.h>
 
 #include "../src/cpdlc_msglist.h"
+#include "../src/minilist.h"
 #include "fans.h"
 #include "fans_text_proc.h"
 
@@ -165,6 +166,24 @@ typedef enum {
 	EMER_REASON_LOW_FUEL
 } emer_reason_t;
 
+typedef enum {
+	LVL_FROM_BLW,
+	LVL_AT,
+	LVL_FROM_ABV
+} lvl_type_t;
+
+typedef struct {
+	bool			armed;
+	union {
+		bool		off_route;
+		lvl_type_t	lvl_type;
+	};
+	const cpdlc_msg_t	*msg;
+	const cpdlc_msg_seg_t	*seg;
+	char			remarks[3][FMS_COLS];
+	list_node_t		node;
+} fans_report_t;
+
 typedef void (*pos_pick_done_cb_t)(fans_t *box, const fms_pos_t *pos);
 
 struct fans_s {
@@ -184,6 +203,8 @@ struct fans_s {
 
 	cpdlc_msg_thr_id_t	thr_id;
 	bool			msg_log_open;
+
+	float			prev_alt;
 
 	union {
 		char		freetext[MAX_FREETEXT_LINES][FMS_COLS + 1];
@@ -288,6 +309,8 @@ struct fans_s {
 		fms_pos_t		divert;
 		emer_reason_t		reason;
 	} emer;
+	fans_report_t		*report;
+	list_t			reports_due;
 
 	fans_network_t		net;
 	cpdlc_client_t		*cl;
@@ -318,12 +341,16 @@ enum {
 	FMS_PAGE_EMER,
 	FMS_PAGE_POS_PICK,
 	FMS_PAGE_POS_REP,
+	FMS_PAGE_REPORTS_DUE,
+	FMS_PAGE_REPORT,
+	FMS_PAGE_FMS_DATA,
 	FMS_NUM_PAGES
 };
 
 void fans_set_thr_id(fans_t *box, cpdlc_msg_thr_id_t thr_id);
 void fans_set_page(fans_t *box, unsigned page_nr, bool init);
 void fans_set_num_subpages(fans_t *box, unsigned num);
+unsigned fans_get_subpage(const fans_t *box);
 void fans_set_error(fans_t *box, const char *error);
 
 void fans_put_page_ind(fans_t *box, fms_color_t color);
@@ -369,9 +396,9 @@ void fans_put_step_at(fans_t *box, const fms_step_at_t *step_at);
 void fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
-int fans_get_time(const fans_t *box);
-void fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
+bool fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
 float fans_get_cur_alt(const fans_t *box);
+float fans_get_cur_vvi(const fans_t *box);
 float fans_get_sel_alt(const fans_t *box);
 bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);

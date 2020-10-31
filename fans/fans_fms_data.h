@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,48 +23,20 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_LIBCPDLC_MINILIST_H_
-#define	_LIBCPDLC_MINILIST_H_
+#ifndef	_LIBCPDLC_FANS_FMS_DATA_H_
+#define	_LIBCPDLC_FANS_FMS_DATA_H_
 
-#include <stdlib.h>
+#include "fans_impl.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-typedef struct {
-	void	*next;
-	void	*prev;
-} list_node_t;
-
-typedef struct {
-	void	*head;
-	void	*tail;
-	size_t	size;
-	size_t	offset;
-	size_t	count;
-} list_t;
-
-void list_create(list_t *list, size_t size, size_t offset);
-void list_destroy(list_t *list);
-void *list_head(const list_t *list);
-void *list_tail(const list_t *list);
-void *list_next(const list_t *list, const void *elem);
-void *list_prev(const list_t *list, const void *elem);
-void *list_get_i(const list_t *list, unsigned idx);
-size_t list_count(const list_t *list);
-
-void list_insert_head(list_t *list, void *elem);
-void list_insert_tail(list_t *list, void *elem);
-void list_remove(list_t *list, void *elem);
-void list_insert_before(list_t *list, void *new_elem, void *old_elem);
-void list_insert_after(list_t *list, void *new_elem, void *old_elem);
-
-void *list_remove_head(list_t *list);
-void *list_remove_tail(list_t *list);
+void fans_fms_data_draw_cb(fans_t *box);
+bool fans_fms_data_key_cb(fans_t *box, fms_key_t key);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _LIBCPDLC_MINILIST_H_ */
+#endif	/* _LIBCPDLC_FANS_FMS_DATA_H_ */

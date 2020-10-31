@@ -73,6 +73,8 @@ fans_main_menu_key_cb(fans_t *box, fms_key_t key)
 		fans_set_page(box, FMS_PAGE_MSG_LOG, true);
 	else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE)
 		fans_set_page(box, FMS_PAGE_EMER, true);
+	else if (key == FMS_KEY_LSK_R3 && st == CPDLC_LOGON_COMPLETE)
+		fans_set_page(box, FMS_PAGE_REPORTS_DUE, true);
 	else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE)
 		fans_set_page(box, FMS_PAGE_FREETEXT, true);
 	else

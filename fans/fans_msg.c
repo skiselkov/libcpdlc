@@ -30,6 +30,7 @@
 
 #include "fans_impl.h"
 #include "fans_rej.h"
+#include "fans_reports.h"
 
 static void
 draw_thr_hdr(fans_t *box, unsigned row, cpdlc_msg_thr_id_t thr_id)
@@ -346,12 +347,16 @@ fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 	if (key == FMS_KEY_LSK_L6) {
 		fans_set_page(box, FMS_PAGE_MSG_LOG, false);
 	} else if (key == FMS_KEY_LSK_L4) {
-		if (msg_can_roger(box))
+		if (msg_can_roger(box)) {
+			fans_reports_generate(box, box->thr_id);
 			send_roger(box);
-		else if (msg_can_wilco(box))
+		} else if (msg_can_wilco(box)) {
+			fans_reports_generate(box, box->thr_id);
 			send_wilco(box);
-		else if (msg_can_affirm(box))
+		} else if (msg_can_affirm(box)) {
+			fans_reports_generate(box, box->thr_id);
 			send_affirm(box);
+		}
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (msg_can_standby(box))
 			send_standby(box);

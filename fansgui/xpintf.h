@@ -39,8 +39,10 @@ void xpintf_update(void);
 bool xpintf_get_time(unsigned *hours, unsigned *mins);
 bool xpintf_get_sat(int *temp_C);
 bool xpintf_get_cur_spd(bool *mach, unsigned *spd);
-bool xpintf_get_cur_alt(int *alt_ft);
-bool xpintf_get_sel_alt(int *alt_ft);
+float xpintf_get_cur_alt(void);
+float xpintf_get_cur_vvi(void);
+float xpintf_get_sel_alt(void);
+float xpintf_get_offset(void);
 bool xpintf_get_wind(unsigned *deg_true, unsigned *knots);
 
 #ifdef	__cplusplus
