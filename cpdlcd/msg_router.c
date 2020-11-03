@@ -46,7 +46,8 @@ typedef struct {
 	bool		is_lws;
 	cpdlc_msg_t	*msg;
 	char		to[CALLSIGN_LEN];
-	msg_router_cb_t	cb;
+	msg_router_cb_t	fwd_cb;
+	msg_router_cb_t	discard_cb;
 	void		*userinfo;
 } msg_routing_info_t;
 
@@ -102,22 +103,35 @@ router_proc(void *userinfo, void *thr_info, void *task)
 	rpc_result_t result;
 	router_t *rt;
 	msg_routing_info_t *mri;
+	char msgtype[8], min[8], mrn[8];
 
 	UNUSED(userinfo);
 	ASSERT(thr_info != NULL);
 	rt = thr_info;
 	ASSERT(task != NULL);
 	mri = task;
+	ASSERT(mri->fwd_cb != NULL);
+	ASSERT(mri->discard_cb != NULL);
 
+	snprintf(msgtype, sizeof (msgtype), "%s%d",
+	    mri->msg->segs[0].info->is_dl ? "DM" : "UM",
+	    mri->msg->segs[0].info->msg_type);
+	snprintf(min, sizeof (min), "%d", cpdlc_msg_get_min(mri->msg));
+	snprintf(mrn, sizeof (mrn), "%d", cpdlc_msg_get_mrn(mri->msg));
 	if (rpc_perform(&rpc.spec, &result, rt->curl,
 	    "FROM", cpdlc_msg_get_from(mri->msg),
 	    "TO", mri->to,
 	    "STATYPE", mri->is_atc ? "ATC" : "ACFT",
 	    "CONNTYPE", mri->is_lws ? "WS" : "TLS",
-	    "ADDR", mri->addr, NULL)) {
-		cpdlc_strlcpy(mri->to, result.values[0], sizeof (mri->to));
-		ASSERT(mri->cb != NULL);
-		mri->cb(mri->msg, mri->to, mri->userinfo);
+	    "ADDR", mri->addr,
+	    "MSGTYPE", msgtype,
+	    "MIN", min,
+	    "MRN", mrn,
+	    NULL)) {
+		cpdlc_msg_set_to(mri->msg, result.values[0]);
+		mri->fwd_cb(mri->msg, mri->addr, mri->userinfo);
+	} else {
+		mri->discard_cb(mri->msg, mri->addr, mri->userinfo);
 	}
 	cpdlc_msg_free(mri->msg);
 	free(mri);
@@ -186,16 +200,20 @@ msg_router_fini(void)
 
 void
 msg_router(const char *conn_addr, bool is_atc, bool is_lws,
-    cpdlc_msg_t *msg, const char *to, msg_router_cb_t cb, void *userinfo)
+    cpdlc_msg_t *msg, const char *to, msg_router_cb_t fwd_cb,
+    msg_router_cb_t discard_cb, void *userinfo)
 {
 	ASSERT(conn_addr != NULL);
 	ASSERT(msg != NULL);
 	ASSERT(to != NULL);
-	ASSERT(cb != NULL);
+	ASSERT(fwd_cb != NULL);
+	ASSERT(discard_cb != NULL);
 
 	if (rpc.tq == NULL) {
 		/* RPC router not initialized, just pass the message through */
-		cb(msg, to, userinfo);
+		cpdlc_msg_set_to(msg, to);
+		fwd_cb(msg, conn_addr, userinfo);
+		cpdlc_msg_free(msg);
 	} else {
 		msg_routing_info_t *mri = safe_calloc(1, sizeof (*mri));
 
@@ -204,7 +222,8 @@ msg_router(const char *conn_addr, bool is_atc, bool is_lws,
 		mri->is_lws = is_lws;
 		mri->msg = msg;
 		cpdlc_strlcpy(mri->to, to, sizeof (mri->to));
-		mri->cb = cb;
+		mri->fwd_cb = fwd_cb;
+		mri->discard_cb = discard_cb;
 		mri->userinfo = userinfo;
 
 		taskq_submit(rpc.tq, mri);

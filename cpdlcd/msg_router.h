@@ -37,14 +37,15 @@
 extern "C" {
 #endif
 
-typedef void (*msg_router_cb_t)(const cpdlc_msg_t *msg, const char *to,
+typedef void (*msg_router_cb_t)(const cpdlc_msg_t *msg, const char *addr_str,
     void *userinfo);
 
 bool msg_router_init(const conf_t *conf);
 void msg_router_fini(void);
 
 void msg_router(const char *conn_addr, bool is_atc, bool is_lws,
-    cpdlc_msg_t *msg, const char *to, msg_router_cb_t cb, void *userinfo);
+    cpdlc_msg_t *msg, const char *to, msg_router_cb_t fwd_cb,
+    msg_router_cb_t discard_cb, void *userinfo);
 
 #ifdef	__cplusplus
 }

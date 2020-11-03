@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -299,6 +300,8 @@ static uint64_t		queued_msg_max_bytes = 128 << 20;	/* 128 MiB */
 static bool		background = true;
 static bool		do_shutdown = false;
 static bool		req_client_cert = false;
+static mutex_t		msg_log_lock;
+static char		msg_log_filename[PATH_MAX] = {};
 static FILE		*msg_log_file = NULL;
 static char		logon_list_file[PATH_MAX] = {};
 static char		*logon_cmd = NULL;
@@ -474,6 +477,7 @@ init_structs(void)
 {
 	ASSERT(CONNS_BY_FROM_SHIFT > 0);
 	mutex_init(&conns_tcp_lock);
+	mutex_init(&msg_log_lock);
 	list_create(&conns_tcp, sizeof (conn_t), offsetof(conn_t, conns_node));
 	mutex_init(&conns_lws_lock);
 	list_create(&conns_lws, sizeof (conn_t), offsetof(conn_t, conns_node));
@@ -742,6 +746,33 @@ parse_bytes(const char *str)
 	return (value);
 }
 
+static bool
+msglog_reopen(void)
+{
+	if (msg_log_filename[0] != '\0') {
+		FILE *fp = fopen(msg_log_filename, "a");
+
+		if (fp == NULL) {
+			logMsg("Can't open msglog %s: %s", msg_log_filename,
+			    strerror(errno));
+			return (false);;
+		}
+		mutex_enter(&msg_log_lock);
+		if (msg_log_file != NULL)
+			fclose(msg_log_file);
+		msg_log_file = fp;
+		mutex_exit(&msg_log_lock);
+	} else {
+		mutex_enter(&msg_log_lock);
+		if (msg_log_file != NULL) {
+			fclose(msg_log_file);
+			msg_log_file = NULL;
+		}
+		mutex_exit(&msg_log_lock);
+	}
+	return (true);
+}
+
 /*
  * Parses the server's configuration file. The config file is arranged
  * as a sequence of "key = value" pairs, using the config file syntax
@@ -762,11 +793,6 @@ parse_config(const char *conf_path)
 	void *cookie;
 	const char *auth_url = NULL, *cainfo = NULL;
 	const char *auth_username = NULL, *auth_password = NULL;
-
-	if (msg_log_file != NULL) {
-		fclose(msg_log_file);
-		msg_log_file = NULL;
-	}
 
 	if (conf == NULL) {
 		if (errline == -1)
@@ -815,12 +841,12 @@ parse_config(const char *conf_path)
 	if (conf_get_str(conf, "msgqueue/max", &value))
 		queued_msg_max_bytes = parse_bytes(value);
 	if (conf_get_str(conf, "msglog", &value)) {
-		msg_log_file = fopen(value, "a");
-		if (msg_log_file == NULL) {
-			logMsg("Can't open msglog %s: %s", value,
-			    strerror(errno));
+		cpdlc_strlcpy(msg_log_filename, value,
+		    sizeof (msg_log_filename));
+		if (!msglog_reopen())
 			goto errout;
-		}
+	} else {
+		msglog_reopen();
 	}
 	if (conf_get_str(conf, "logon_list_file", &value))
 		strlcpy(logon_list_file, value, sizeof (logon_list_file));
@@ -1283,46 +1309,41 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 }
 
 static void
-conn_log_buf(conn_t *conn, const char *buf, bool inout)
+conn_log_buf(const char *addr_str, const char *buf, bool inout)
 {
 	time_t now;
 	struct tm tm;
 	char datebuf[64];
 
-	ASSERT(conn != NULL);
+	ASSERT(addr_str != NULL);
 	ASSERT(buf != NULL);
 
-	if (msg_log_file == NULL)
+	mutex_enter(&msg_log_lock);
+
+	if (msg_log_file == NULL) {
+		mutex_exit(&msg_log_lock);
 		return;
+	}
 
 	now = time(NULL);
 	gmtime_r(&now, &tm);
 	strftime(datebuf, sizeof (datebuf), "%Y%m%d_%H%M%SZ", &tm);
-	fprintf(msg_log_file, "%s|%s|%s|%s", datebuf, conn->addr_str,
+	fprintf(msg_log_file, "%s|%s|%s|%s", datebuf, addr_str,
 	    inout ? "IN" : "OUT", buf);
 	fflush(msg_log_file);
+
+	mutex_exit(&msg_log_lock);
 }
 
 static void
-conn_log_msg(conn_t *conn, const cpdlc_msg_t *msg, bool inout)
+conn_log_msg(const char *addr_str, const cpdlc_msg_t *msg, bool inout)
 {
 	char *buf;
 	int l;
 	cpdlc_msg_t *copymsg = NULL;
 
-	ASSERT(conn != NULL);
+	ASSERT(addr_str != NULL);
 	ASSERT(msg != NULL);
-
-	if (msg_log_file == NULL)
-		return;
-
-	/* Don't log anything prior to LOGON (except for the actual logon) */
-	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon)
-		return;
-	/* Don't log ping & pong packets, they're not interesting */
-	if (msg->pkt_type == CPDLC_PKT_PING || msg->pkt_type == CPDLC_PKT_PONG)
-		return;
-
 	/*
 	 * LOGON messages are special, we don't to log the logon data, as
 	 * that could dump user passwords into the log.
@@ -1336,7 +1357,7 @@ conn_log_msg(conn_t *conn, const cpdlc_msg_t *msg, bool inout)
 	l = cpdlc_msg_encode(msg, NULL, 0);
 	buf = safe_malloc(l + 1);
 	cpdlc_msg_encode(msg, buf, l + 1);
-	conn_log_buf(conn, buf, inout);
+	conn_log_buf(addr_str, buf, inout);
 	free(buf);
 
 	if (copymsg != NULL)
@@ -1387,7 +1408,7 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	l = cpdlc_msg_encode(msg, NULL, 0);
 	buf = safe_malloc(l + 1);
 	cpdlc_msg_encode(msg, buf, l + 1);
-	conn_log_buf(conn, buf, false);
+	conn_log_buf(conn->addr_str, buf, false);
 	conn_send_buf(conn, buf, l);
 	free(buf);
 
@@ -1619,38 +1640,51 @@ msg_auto_assign_from(cpdlc_msg_t *msg)
 }
 
 static void
-forward_msg_cb(const cpdlc_msg_t *msg, const char *to, void *userinfo)
+forward_msg_cb(const cpdlc_msg_t *msg, const char *addr_str, void *userinfo)
 {
+	const char *to;
+	const list_t *l;
+
 	ASSERT(msg != NULL);
+	to = cpdlc_msg_get_to(msg);
+	ASSERT(addr_str != NULL);
 	UNUSED(userinfo);
 
-	if (to != NULL) {
-		const list_t *l;
-		/*
-		 * If there is at least one connection matching the identity of
-		 * the intended recipient, forward the message without storing it.
-		 * Otherwise, we store it for later delivery as soon as the
-		 * recipient becomes available, or until the message expires.
-		 */
-		mutex_enter(&conns_by_from_lock);
-		l = htbl_lookup_multi(&conns_by_from, to);
-		if (l != NULL && list_count(l) != 0) {
-			for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
-			    mv = mv_next) {
-				conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
-	
-				mv_next = list_next(l, mv);
-				ASSERT(tgt_conn != NULL);
-				conn_send_msg(tgt_conn, msg);
-			}
-		} else {
-			if (!store_msg(msg, to, false)) {
-				send_error_msg_to(cpdlc_msg_get_from(msg), msg,
-				    "TOO MANY QUEUED MESSAGES");
-			}
+	conn_log_msg(addr_str, msg, true);
+	/*
+	 * If there is at least one connection matching the identity of
+	 * the intended recipient, forward the message without storing it.
+	 * Otherwise, we store it for later delivery as soon as the
+	 * recipient becomes available, or until the message expires.
+	 */
+	mutex_enter(&conns_by_from_lock);
+	l = htbl_lookup_multi(&conns_by_from, to);
+	if (l != NULL && list_count(l) != 0) {
+		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
+		    mv = mv_next) {
+			conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
+
+			mv_next = list_next(l, mv);
+			ASSERT(tgt_conn != NULL);
+			conn_send_msg(tgt_conn, msg);
 		}
-		mutex_exit(&conns_by_from_lock);
+	} else {
+		if (!store_msg(msg, to, false)) {
+			send_error_msg_to(cpdlc_msg_get_from(msg), msg,
+			    "TOO MANY QUEUED MESSAGES");
+		}
 	}
+	mutex_exit(&conns_by_from_lock);
+}
+
+static void
+discard_msg_cb(const cpdlc_msg_t *msg, const char *addr_str, void *userinfo)
+{
+	ASSERT(msg != NULL);
+	ASSERT(addr_str != NULL);
+	UNUSED(userinfo);
+	/* Only log the message for tracking purposes */
+	conn_log_msg(addr_str, msg, true);
 }
 
 static void
@@ -1669,7 +1703,7 @@ forward_msg(conn_t *conn, cpdlc_msg_t *msg, char to[CALLSIGN_LEN])
 		cpdlc_msg_set_from(msg, idl->ident);
 	}
 	msg_router(conn->addr_str, conn->is_atc, conn->is_lws, msg, to,
-	    forward_msg_cb, NULL);
+	    forward_msg_cb, discard_msg_cb, NULL);
 }
 
 /*
@@ -1690,7 +1724,6 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	ASSERT(msg != NULL);
 	ASSERT_CONNS_MUTEX_HELD(conn);
 
-	conn_log_msg(conn, msg, true);
 	/*
 	 * If the user isn't logged on, don't allow anything other than
 	 * LOGON through.
@@ -1706,6 +1739,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 
 	if (msg->is_logon || msg->is_logoff) {
 		/* Logon messages do not get forwarded. */
+		conn_log_msg(conn->addr_str, msg, true);
 		process_logon_msg(conn, msg);
 		cpdlc_msg_free(msg);
 		return;
@@ -1717,6 +1751,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		conn_send_msg(conn, pong);
 		cpdlc_msg_free(pong);
 		cpdlc_msg_free(msg);
+		/* These messages do not get logged */
 		return;
 	}
 	if (msg->to[0] != '\0') {
@@ -1725,6 +1760,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * LOGON target.
 		 */
 		if (!conn->is_atc && !msg_is_not_cda(msg)) {
+			conn_log_msg(conn->addr_str, msg, true);
 			send_error_msg(conn, msg,
 			    "MESSAGE CANNOT CONTAIN TO= HEADER");
 			cpdlc_msg_free(msg);
@@ -1745,6 +1781,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * ATC stations MUST provide a TO= header, as they
 		 * otherwise have no default send target.
 		 */
+		conn_log_msg(conn->addr_str, msg, true);
 		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
 		cpdlc_msg_free(msg);
 		return;
@@ -1758,6 +1795,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 * that all segments have the same is_dl value.
 	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
+		conn_log_msg(conn->addr_str, msg, true);
 		send_error_msg(conn, msg,
 		    "MESSAGE UPLINK/DOWNLINK MISMATCH");
 		cpdlc_msg_free(msg);
@@ -1765,15 +1803,18 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	}
 	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
 	    !msg_auto_assign_from(msg)) {
+		conn_log_msg(conn->addr_str, msg, true);
 		send_error_msg(conn, msg, "REMOTE END NOT CONNECTED");
 		cpdlc_msg_free(msg);
 		return;
 	}
 	if (!conn->is_atc && !msg->segs[0].info->is_dl) {
+		conn_log_msg(conn->addr_str, msg, true);
 		send_svc_unavail_msg(conn, cpdlc_msg_get_min(msg));
 		cpdlc_msg_free(msg);
 		return;
 	}
+	/* Forwarded messages are only logged after the routing decision */
 	forward_msg(conn, msg, to);
 }
 
@@ -2431,12 +2472,20 @@ log_dbg_string(const char *str)
 	fputs(str, stderr);
 }
 
+static void
+handle_sighup(int signum)
+{
+	UNUSED(signum);
+	msglog_reopen();
+}
+
 int
 main(int argc, char *argv[])
 {
 	int opt;
 	const char *conf_path = NULL;
 	bool encrypt_silent = false;
+	const struct sigaction sa_hup = { .sa_handler = handle_sighup };
 
 	/* Initialize libacfutils' logMsg and crc64 functions */
 	log_init(log_dbg_string, "cpdlcd");
@@ -2483,6 +2532,8 @@ main(int argc, char *argv[])
 		return (1);
 	(void) blocklist_refresh();
 
+	sigaction(SIGHUP, &sa_hup, NULL);
+
 	while (!do_shutdown) {
 		poll_sockets();
 		handle_lws_input();
@@ -2507,6 +2558,7 @@ main(int argc, char *argv[])
 		fclose(msg_log_file);
 		msg_log_file = NULL;
 	}
+	mutex_destroy(&msg_log_lock);
 
 	return (0);
 }
