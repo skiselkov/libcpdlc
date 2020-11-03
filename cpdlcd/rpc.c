@@ -314,8 +314,9 @@ resp_parse_xml_rpc(const char *buf, rpc_result_t *result)
 		goto errout;
 	}
 	result_obj = xmlXPathEvalExpression((xmlChar *)
-	    "/methodResponse/params/param/value/string/text()", xpath_ctx);
-	if (result_obj->nodesetval->nodeNr != 0) {
+	    "/methodResponse/params/param/value/string/text()|"
+	    "/methodResponse/params/param/value/text()", xpath_ctx);
+	if (result_obj != NULL && result_obj->nodesetval->nodeNr != 0) {
 		for (int i = 0; i < result_obj->nodesetval->nodeNr &&
 		    i < RPC_MAX_PARAMS; i++) {
 			result->num_results = i + 1;
@@ -327,7 +328,8 @@ resp_parse_xml_rpc(const char *buf, rpc_result_t *result)
 		logMsg("Error parsing server response: XML-RPC response "
 		    "contained an error");
 	}
-	xmlXPathFreeObject(result_obj);
+	if (result_obj != NULL)
+		xmlXPathFreeObject(result_obj);
 	xmlXPathFreeContext(xpath_ctx);
 	xmlFreeDoc(doc);
 
