@@ -88,8 +88,11 @@ rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec)
 	memset(spec, 0, sizeof (*spec));
 	spec->timeout = RPC_TIMEOUT;
 
-	if (!conf_get_str_v(conf, "%s/style", &str, prefix))
+	if (!conf_get_str_v(conf, "%s/style", &str, prefix)) {
+		logMsg("Missing config key %s/style is required when using RPC",
+		    prefix);
 		return (false);
+	}
 	if (strcmp(str, "www-form") == 0) {
 		spec->style = RPC_STYLE_WWW_FORM;
 	} else if (strcmp(str, "xmlrpc") == 0) {

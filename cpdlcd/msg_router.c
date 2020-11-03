@@ -138,10 +138,19 @@ router_discard(void *userinfo, void *task)
 static bool
 rpc_router_init(const conf_t *conf)
 {
+	const char *str;
 	int min_threads = DFL_NUM_THREADS_MIN;
 	int max_threads = DFL_NUM_THREADS_MAX;
 	uint64_t stop_delay = DFL_THR_STOP_DELAY;
 
+	/*
+	 * If the required RPC keys are missing, the user doesn't want
+	 * to have dynamic routing enabled.
+	 */
+	if (!conf_get_str(conf, "msg_router/rpc/style", &str) &&
+	    !conf_get_str(conf, "msg_router/rpc/url", &str)) {
+		return (true);
+	}
 	if (!rpc_spec_parse(conf, "msg_router/rpc", &rpc.spec))
 		return (false);
 
