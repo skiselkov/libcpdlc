@@ -39,6 +39,8 @@ DAEMON_OBJS=\
 	blocklist.o \
 	cpdlcd.o \
 	msgquota.o \
+	msg_router.o \
+	rpc.o \
 	$(COMPREFIX)/cpdlc_config_common.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o \

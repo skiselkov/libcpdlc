@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,18 +23,53 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_CPDLCD_COMMON_H_
-#define	_CPDLCD_COMMON_H_
+#ifndef	_LIBCPDLC_RPC_H_
+#define	_LIBCPDLC_RPC_H_
+
+#include <stdbool.h>
+#include <stdlib.h>
+#include <curl/curl.h>
+
+#include <acfutils/conf.h>
+#include <acfutils/sysmacros.h>
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-#define	CALLSIGN_LEN	16
-#define	SOCKADDR_STRLEN	64
+#define	RPC_MAX_PARAMS		32
+#define	RPC_MAX_PARAM_NAME_LEN	128
+
+typedef enum {
+	RPC_STYLE_WWW_FORM,
+	RPC_STYLE_XML_RPC
+} rpc_style_t;
+
+typedef struct {
+	rpc_style_t	style;
+	char		url[PATH_MAX];
+	char		methodName[128];
+	unsigned	num_params;
+	unsigned	timeout;
+	char		params[RPC_MAX_PARAMS][RPC_MAX_PARAM_NAME_LEN];
+	char		username[64];
+	char		password[64];
+	char		cainfo[PATH_MAX];
+} rpc_spec_t;
+
+typedef struct {
+	unsigned	num_results;
+	char		names[RPC_MAX_PARAMS][RPC_MAX_PARAM_NAME_LEN];
+	char		values[RPC_MAX_PARAMS][RPC_MAX_PARAM_NAME_LEN];
+} rpc_result_t;
+
+bool rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec);
+void rpc_curl_setup(CURL *curl, const rpc_spec_t *spec);
+bool rpc_perform(const rpc_spec_t *spec, rpc_result_t *result,
+    CURL *curl, ...) SENTINEL_ATTR;
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _CPDLCD_COMMON_H_ */
+#endif	/* _LIBCPDLC_RPC_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2020 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,18 +23,31 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_CPDLCD_COMMON_H_
-#define	_CPDLCD_COMMON_H_
+#ifndef	_LIBCPDLC_MSG_ROUTER_H_
+#define	_LIBCPDLC_MSG_ROUTER_H_
+
+#include <stdbool.h>
+
+#include <acfutils/conf.h>
+
+#include "../src/cpdlc_msg.h"
+#include "common.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-#define	CALLSIGN_LEN	16
-#define	SOCKADDR_STRLEN	64
+typedef void (*msg_router_cb_t)(const cpdlc_msg_t *msg, const char *to,
+    void *userinfo);
+
+bool msg_router_init(const conf_t *conf);
+void msg_router_fini(void);
+
+void msg_router(const char *conn_addr, bool is_atc, bool is_lws,
+    cpdlc_msg_t *msg, const char *to, msg_router_cb_t cb, void *userinfo);
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _CPDLCD_COMMON_H_ */
+#endif	/* _LIBCPDLC_MSG_ROUTER_H_ */

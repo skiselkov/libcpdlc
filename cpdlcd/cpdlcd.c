@@ -69,6 +69,7 @@
 #include "blocklist.h"
 #include "common.h"
 #include "msgquota.h"
+#include "msg_router.h"
 
 #define	CONN_BACKLOG		UINT16_MAX
 #define	READ_BUF_SZ		4096	/* bytes */
@@ -92,8 +93,6 @@
  * having been established, the connection is terminated.
  */
 #define	LOGON_GRACE_TIME	30	/* seconds */
-
-#define	SOCKADDR_STRLEN		64
 
 #define	AF2ADDRLEN(sa_family) \
 	((sa_family) == AF_INET ? sizeof (struct sockaddr_in) : \
@@ -329,7 +328,11 @@ static struct lws_protocols proto_list_lws[] =
     { .name = NULL }	/* list terminator */
 };
 
+static void send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg,
+    const char *fmt, va_list ap);
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
+    const char *fmt, ...);
+static void send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
     const char *fmt, ...);
 static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
@@ -375,8 +378,8 @@ exec_cmd_common(const char *cmd_in, const char *from, const conn_t *conn)
 	cmd = str_subst(cmd, "${FROM}", from);
 	cmd = str_subst(cmd, "${TO}", to);
 	cmd = str_subst(cmd, "${ADDR}", conn->addr_str);
-	cmd = str_subst(cmd, "${CONNTYPE}",
-	    conn->is_atc ? "ATC" : "ACFT");
+	cmd = str_subst(cmd, "${STATYPE}", conn->is_atc ? "ATC" : "ACFT");
+	cmd = str_subst(cmd, "${CONNTYPE}", conn->is_lws ? "WS" : "TLS");
 	switch (fork()) {
 	case -1:
 		logMsg("fork() failed: %s", strerror(errno));
@@ -757,7 +760,7 @@ parse_config(const char *conf_path)
 	conf_t *conf = conf_read_file(conf_path, &errline);
 	const char *key, *value;
 	void *cookie;
-	const char *auth_url = NULL, *auth_cainfo = NULL;
+	const char *auth_url = NULL, *cainfo = NULL;
 	const char *auth_username = NULL, *auth_password = NULL;
 
 	if (msg_log_file != NULL) {
@@ -801,8 +804,8 @@ parse_config(const char *conf_path)
 		blocklist_set_filename(value);
 	if (conf_get_str(conf, "auth/url", &value))
 		auth_url = value;
-	if (conf_get_str(conf, "auth/cainfo", &value))
-		auth_cainfo = value;
+	if (conf_get_str(conf, "cainfo", &value))
+		cainfo = value;
 	if (conf_get_str(conf, "auth/username", &value))
 		auth_username = value;
 	if (conf_get_str(conf, "auth/password", &value))
@@ -846,8 +849,10 @@ parse_config(const char *conf_path)
 	    !add_listen_sock("loopback", true))) {
 		goto errout;
 	}
-	auth_init(auth_url, auth_cainfo, auth_username, auth_password);
+	auth_init(auth_url, cainfo, auth_username, auth_password);
 	msgquota_init(msgquota_max);
+	if (!msg_router_init(conf))
+		goto errout;
 
 	conf_free(conf);
 	return (true);
@@ -865,6 +870,7 @@ static bool
 auto_config(void)
 {
 	auth_init(NULL, NULL, NULL, NULL);
+	VERIFY(msg_router_init(NULL));
 	msgquota_init(0);
 	return (add_listen_sock("localhost", false));
 }
@@ -1413,23 +1419,23 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
  *	details in the error message body.
  */
 static void
-send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
+send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt,
+    va_list ap)
 {
 	int l;
-	va_list ap;
+	va_list ap2;
 	char *buf;
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn != NULL);
 	ASSERT(fmt != NULL);
 
-	va_start(ap, fmt);
-	l = vsnprintf(NULL, 0, fmt, ap);
-	va_end(ap);
+	va_copy(ap2, ap);
+	l = vsnprintf(NULL, 0, fmt, ap2);
+	va_end(ap2);
+
 	buf = safe_malloc(l + 1);
-	va_start(ap, fmt);
 	vsnprintf(buf, l + 1, fmt, ap);
-	va_end(ap);
 
 	if (orig_msg != NULL) {
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
@@ -1451,6 +1457,44 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
 
 	free(buf);
 	cpdlc_msg_free(msg);
+}
+
+static void
+send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	send_error_msg_v(conn, orig_msg, fmt, ap);
+	va_end(ap);
+}
+
+static void
+send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
+    const char *fmt, ...)
+{
+	const list_t *l;
+
+	ASSERT(to != NULL);
+	ASSERT(orig_msg != NULL);
+	ASSERT(fmt != NULL);
+
+	mutex_enter(&conns_by_from_lock);
+	l = htbl_lookup_multi(&conns_by_from, to);
+	if (l != NULL && list_count(l) != 0) {
+		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
+		    mv = mv_next) {
+			conn_t *conn = HTBL_VALUE_MULTI(mv);
+			va_list ap;
+
+			mv_next = list_next(l, mv);
+			ASSERT(conn != NULL);
+			va_start(ap, fmt);
+			send_error_msg_v(conn, orig_msg, fmt, ap);
+			va_end(ap);
+		}
+	}
+	mutex_exit(&conns_by_from_lock);
 }
 
 /*
@@ -1574,27 +1618,79 @@ msg_auto_assign_from(cpdlc_msg_t *msg)
 	return (false);
 }
 
+static void
+forward_msg_cb(const cpdlc_msg_t *msg, const char *to, void *userinfo)
+{
+	ASSERT(msg != NULL);
+	UNUSED(userinfo);
+
+	if (to != NULL) {
+		const list_t *l;
+		/*
+		 * If there is at least one connection matching the identity of
+		 * the intended recipient, forward the message without storing it.
+		 * Otherwise, we store it for later delivery as soon as the
+		 * recipient becomes available, or until the message expires.
+		 */
+		mutex_enter(&conns_by_from_lock);
+		l = htbl_lookup_multi(&conns_by_from, to);
+		if (l != NULL && list_count(l) != 0) {
+			for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
+			    mv = mv_next) {
+				conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
+	
+				mv_next = list_next(l, mv);
+				ASSERT(tgt_conn != NULL);
+				conn_send_msg(tgt_conn, msg);
+			}
+		} else {
+			if (!store_msg(msg, to, false)) {
+				send_error_msg_to(cpdlc_msg_get_from(msg), msg,
+				    "TOO MANY QUEUED MESSAGES");
+			}
+		}
+		mutex_exit(&conns_by_from_lock);
+	}
+}
+
+static void
+forward_msg(conn_t *conn, cpdlc_msg_t *msg, char to[CALLSIGN_LEN])
+{
+	ASSERT(conn != NULL);
+	ASSERT(msg != NULL);
+	/*
+	 * Stamp the message with its sender connection. No matter what
+	 * FROM= header the client provided, this overrides it. On ATC
+	 * connections, we allow other IDs.
+	 */
+	ASSERT(list_count(&conn->from_list) != 0);
+	if (cpdlc_msg_get_from(msg)[0] == '\0' || !conn->is_atc) {
+		ident_list_t *idl = list_head(&conn->from_list);
+		cpdlc_msg_set_from(msg, idl->ident);
+	}
+	msg_router(conn->addr_str, conn->is_atc, conn->is_lws, msg, to,
+	    forward_msg_cb, NULL);
+}
+
 /*
  * Handles an incoming message from a connection. This performs all
  * necessary permissions checks, logon hooks and message forwarding.
  *
  * @param conn The connection which received the message.
- * @param msg The message to process. As any forwarding of the message
- *	is done in encoded form, the caller retains ownership of the
- *	message object.
+ * @param msg The message to process. The message is consumed by this
+ *	function (either storing it, or freeing it), so the caller
+ *	relinquishes control of the object.
  */
 static void
 conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 {
 	char to[CALLSIGN_LEN] = { 0 };
-	const list_t *l;
 
 	ASSERT(conn != NULL);
 	ASSERT(msg != NULL);
 	ASSERT_CONNS_MUTEX_HELD(conn);
 
 	conn_log_msg(conn, msg, true);
-
 	/*
 	 * If the user isn't logged on, don't allow anything other than
 	 * LOGON through.
@@ -1603,6 +1699,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
 		send_error_msg(conn, msg, "LOGON REQUIRED");
+		cpdlc_msg_free(msg);
 		return;
 	}
 	mutex_exit(&conn->lock);
@@ -1610,6 +1707,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	if (msg->is_logon || msg->is_logoff) {
 		/* Logon messages do not get forwarded. */
 		process_logon_msg(conn, msg);
+		cpdlc_msg_free(msg);
 		return;
 	}
 	if (msg->pkt_type == CPDLC_PKT_PING) {
@@ -1618,9 +1716,9 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		cpdlc_msg_set_mrn(pong, cpdlc_msg_get_min(msg));
 		conn_send_msg(conn, pong);
 		cpdlc_msg_free(pong);
+		cpdlc_msg_free(msg);
 		return;
 	}
-
 	if (msg->to[0] != '\0') {
 		/*
 		 * Aircraft stations can only communicate with their
@@ -1629,6 +1727,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		if (!conn->is_atc && !msg_is_not_cda(msg)) {
 			send_error_msg(conn, msg,
 			    "MESSAGE CANNOT CONTAIN TO= HEADER");
+			cpdlc_msg_free(msg);
 			return;
 		}
 		lacf_strlcpy(to, msg->to, sizeof (to));
@@ -1647,6 +1746,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * otherwise have no default send target.
 		 */
 		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
+		cpdlc_msg_free(msg);
 		return;
 	}
 	ASSERT(msg->num_segs > 0);
@@ -1658,49 +1758,23 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 * that all segments have the same is_dl value.
 	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
-		send_error_msg(conn, msg, "MESSAGE UPLINK/DOWNLINK MISMATCH");
+		send_error_msg(conn, msg,
+		    "MESSAGE UPLINK/DOWNLINK MISMATCH");
+		cpdlc_msg_free(msg);
 		return;
 	}
 	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
 	    !msg_auto_assign_from(msg)) {
 		send_error_msg(conn, msg, "REMOTE END NOT CONNECTED");
+		cpdlc_msg_free(msg);
+		return;
 	}
 	if (!conn->is_atc && !msg->segs[0].info->is_dl) {
 		send_svc_unavail_msg(conn, cpdlc_msg_get_min(msg));
+		cpdlc_msg_free(msg);
 		return;
 	}
-	/*
-	 * Stamp the message with its sender connection. No matter what
-	 * FROM= header the client provided, this overrides it. On ATC
-	 * connections, we allow other IDs.
-	 */
-	ASSERT(list_count(&conn->from_list) != 0);
-	if (cpdlc_msg_get_from(msg)[0] == '\0' || !conn->is_atc) {
-		ident_list_t *idl = list_head(&conn->from_list);
-		cpdlc_msg_set_from(msg, idl->ident);
-	}
-	/*
-	 * If there is at least one connection matching the identity of
-	 * the intended recipient, forward the message without storing it.
-	 * Otherwise, we store it for later delivery as soon as the
-	 * recipient becomes available, or until the message expires.
-	 */
-	mutex_enter(&conns_by_from_lock);
-	l = htbl_lookup_multi(&conns_by_from, to);
-	if (l != NULL && list_count(l) != 0) {
-		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
-		    mv = mv_next) {
-			conn_t *tgt_conn = HTBL_VALUE_MULTI(mv);
-
-			mv_next = list_next(l, mv);
-			ASSERT(tgt_conn != NULL);
-			conn_send_msg(tgt_conn, msg);
-		}
-	} else {
-		if (!store_msg(msg, to, conn->is_atc))
-			send_error_msg(conn, msg, "TOO MANY QUEUED MESSAGES");
-	}
-	mutex_exit(&conns_by_from_lock);
+	forward_msg(conn, msg, to);
 }
 
 /*
@@ -1738,13 +1812,8 @@ conn_process_input(conn_t *conn)
 		if (msg == NULL)
 			break;
 		ASSERT(consumed != 0);
+		/* This consumes the msg, so no need to free it */
 		conn_process_msg(conn, msg);
-		/*
-		 * If the message was queued for later delivery, it will
-		 * have been encoded into a textual form. So we can get
-		 * rid of the in-memory representation now.
-		 */
-		cpdlc_msg_free(msg);
 		consumed_total += consumed;
 		ASSERT3S(consumed_total, <=, conn->inbuf_sz);
 	}
@@ -2427,6 +2496,7 @@ main(int argc, char *argv[])
 
 	msgquota_fini();
 	auth_fini();
+	msg_router_fini();
 	tls_fini();
 	fini_structs();
 	curl_global_cleanup();
