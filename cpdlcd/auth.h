@@ -33,6 +33,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <acfutils/conf.h>
+
 #include "../src/cpdlc_msg.h"
 
 #ifdef	__cplusplus
@@ -52,12 +54,11 @@ extern "C" {
 typedef uint64_t auth_sess_key_t;
 typedef void (*auth_done_cb_t)(bool result, bool is_atc, void *userinfo);
 
-void auth_init(const char *url, const char *cainfo, const char *username,
-    const char *password);
+bool auth_init(const conf_t *conf);
 void auth_fini(void);
 
 auth_sess_key_t auth_sess_open(const cpdlc_msg_t *logon_msg,
-    const void *sockaddr, auth_done_cb_t done_cb, void *userinfo);
+    const char *remote_addr, auth_done_cb_t done_cb, void *userinfo);
 void auth_sess_kill(auth_sess_key_t key);
 
 bool auth_encrypt_userpwd(bool silent);

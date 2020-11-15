@@ -46,6 +46,7 @@ typedef enum {
 } rpc_style_t;
 
 typedef struct {
+	bool		debug;
 	rpc_style_t	style;
 	char		url[PATH_MAX];
 	char		methodName[128];

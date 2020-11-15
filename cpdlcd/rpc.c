@@ -80,6 +80,7 @@ bool
 rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec)
 {
 	const char *str;
+	bool debug;
 
 	ASSERT(conf != NULL);
 	ASSERT(prefix != NULL);
@@ -123,6 +124,8 @@ rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec)
 		cpdlc_strlcpy(spec->params[i], str, sizeof (spec->params[i]));
 		spec->num_params = i + 1;
 	}
+	if (conf_get_b2_v(conf, "%s/debug", &debug, prefix) && debug)
+		spec->debug = debug;
 	if (conf_get_str_v(conf, "%s/username", &str, prefix))
 		cpdlc_strlcpy(spec->username, str, sizeof (spec->username));
 	if (conf_get_str_v(conf, "%s/password", &str, prefix))
@@ -212,26 +215,29 @@ resp_parse_www_form(const char *buf, CURL *curl, rpc_result_t *result)
 
 	result->num_results = n_comps;
 	for (size_t i = 0; i < n_comps; i++) {
-		char *key_unenc, *value_unenc;
-		char *key, *value;
+		char *value_unenc, *value;
 
-		key = comps[i];
 		value = strchr(comps[i], '=');
-		if (value == NULL) {
-			logMsg("Error parsing RPC server response: "
-			    "malformed key=value pair \"%s\"", comps[i]);
-			goto errout;
-		}
-		*value = '\0';
-		value++;
+		/*
+		 * If the value lacks a key=value pair, just treat the
+		 * entire string as a non-named return value.
+		 */
+		if (value != NULL) {
+			char *key_unenc;
 
-		key_unenc = curl_easy_unescape(curl, key, 0, NULL);
+			*value = '\0';
+			value++;
+
+			key_unenc = curl_easy_unescape(curl, comps[i], 0, NULL);
+			cpdlc_strlcpy(result->names[i], key_unenc,
+			    sizeof (result->names[i]));
+			curl_free(key_unenc);
+		} else {
+			value = comps[i];
+		}
 		value_unenc = curl_easy_unescape(curl, value, 0, NULL);
-		cpdlc_strlcpy(result->names[i], key_unenc,
-		    sizeof (result->names[i]));
 		cpdlc_strlcpy(result->values[i], value_unenc,
 		    sizeof (result->values[i]));
-		curl_free(key_unenc);
 		curl_free(value_unenc);
 	}
 	free_strlist(comps, n_comps);
@@ -244,17 +250,21 @@ errout:
 static bool
 req_prepare_xml_rpc(const rpc_spec_t *spec, CURL *curl, va_list ap)
 {
-	char *buf = NULL;
-	size_t bufcap = 0;
+	xmlDocPtr doc;
+	xmlNodePtr methodCall, params;
+	xmlChar *buf;
+	int bufsz;
 
 	ASSERT(spec != NULL);
 	ASSERT(curl != NULL);
 
-	append_format(&buf, &bufcap,
-	    "<?xml version=\"1.0\"?>\n"
-	    "<methodCall>\n"
-	    "  <methodName>%s</methodName>\n"
-	    "  <params>\n", spec->methodName);
+	doc = xmlNewDoc((xmlChar *)XML_DEFAULT_VERSION);
+	methodCall = xmlNewDocNode(doc, NULL, (xmlChar *)"methodCall", NULL);
+	xmlDocSetRootElement(doc, methodCall);
+	(void)xmlNewChild(methodCall, NULL, (xmlChar *)"methodName",
+	    (xmlChar *)spec->methodName);
+	params = xmlNewChild(methodCall, NULL, (xmlChar *)"params", NULL);
+
 	for (unsigned i = 0; i < spec->num_params; i++) {
 		va_list ap2;
 
@@ -271,19 +281,21 @@ req_prepare_xml_rpc(const rpc_spec_t *spec, CURL *curl, va_list ap)
 			}
 			value = va_arg(ap2, const char *);
 			if (strcmp(spec->params[i], name) == 0) {
-				append_format(&buf, &bufcap,
-				    "    <param><value><string>%s"
-				    "</string></value></param>\n", value);
+				xmlNodePtr param;
+
+				param = xmlNewChild(params, NULL,
+				    (xmlChar *)"param", NULL);
+				xmlNewChild(param, NULL, (xmlChar *)"value",
+				    (xmlChar *)value);
 				break;
 			}
 		}
 		va_end(ap2);
 	}
-	append_format(&buf, &bufcap,
-	    "  </params>\n"
-	    "</methodCall>");
+	xmlDocDumpMemory(doc, &buf, &bufsz);
 	curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, buf);
-	free(buf);
+	xmlFree(buf);
+	xmlFreeDoc(doc);
 
 	return (true);
 errout:
@@ -313,10 +325,30 @@ resp_parse_xml_rpc(const char *buf, rpc_result_t *result)
 		    "XPath context for document");
 		goto errout;
 	}
+#define	PARAM_VALUE	"/methodResponse/params/param/value"
 	result_obj = xmlXPathEvalExpression((xmlChar *)
-	    "/methodResponse/params/param/value/string/text()|"
-	    "/methodResponse/params/param/value/text()", xpath_ctx);
-	if (result_obj != NULL && result_obj->nodesetval->nodeNr != 0) {
+	    "("
+	    PARAM_VALUE "/string/text()|"
+	    PARAM_VALUE "/int/text()|"
+	    PARAM_VALUE "/i4/text()|"
+	    PARAM_VALUE "/boolean/text()|"
+	    PARAM_VALUE "/double/text()|"
+	    PARAM_VALUE "/dateTime.iso8601/text()|"
+	    PARAM_VALUE "/base64/text()|"
+	    PARAM_VALUE "/text()[normalize-space(.) != '']|"
+	    PARAM_VALUE "/array/data/value/string/text()|"
+	    PARAM_VALUE "/array/data/value/int/text()|"
+	    PARAM_VALUE "/array/data/value/i4/text()|"
+	    PARAM_VALUE "/array/data/value/boolean/text()|"
+	    PARAM_VALUE "/array/data/value/double/text()|"
+	    PARAM_VALUE "/array/data/value/dateTime.iso8601/text()|"
+	    PARAM_VALUE "/array/data/value/base64/text()|"
+	    PARAM_VALUE "/array/data/value/text()[normalize-space(.) != '']"
+	    ")[not(./*)]",
+	    xpath_ctx);
+#undef	PARAM_VALUE
+	if (result_obj != NULL && result_obj->nodesetval != NULL &&
+	    result_obj->nodesetval->nodeNr != 0) {
 		for (int i = 0; i < result_obj->nodesetval->nodeNr &&
 		    i < RPC_MAX_PARAMS; i++) {
 			result->num_results = i + 1;
@@ -383,6 +415,10 @@ rpc_perform(const rpc_spec_t *spec, rpc_result_t *rpc_res, CURL *curl, ...)
 		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
 
 	if (curl_res == CURLE_OK && code == 200 && dl_info.bufsz != 0) {
+		if (spec->debug) {
+			printf("RPC debug response:\n%s",
+			    (const char *)dl_info.buf);
+		}
 		switch (spec->style) {
 		case RPC_STYLE_WWW_FORM:
 			ret = resp_parse_www_form((const char *)dl_info.buf,

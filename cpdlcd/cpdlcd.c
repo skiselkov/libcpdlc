@@ -791,8 +791,6 @@ parse_config(const char *conf_path)
 	conf_t *conf = conf_read_file(conf_path, &errline);
 	const char *key, *value;
 	void *cookie;
-	const char *auth_url = NULL, *cainfo = NULL;
-	const char *auth_username = NULL, *auth_password = NULL;
 
 	if (conf == NULL) {
 		if (errline == -1)
@@ -828,14 +826,6 @@ parse_config(const char *conf_path)
 	conf_get_b(conf, "tls/req_client_cert", (bool_t *)&req_client_cert);
 	if (conf_get_str(conf, "blocklist", &value))
 		blocklist_set_filename(value);
-	if (conf_get_str(conf, "auth/url", &value))
-		auth_url = value;
-	if (conf_get_str(conf, "cainfo", &value))
-		cainfo = value;
-	if (conf_get_str(conf, "auth/username", &value))
-		auth_username = value;
-	if (conf_get_str(conf, "auth/password", &value))
-		auth_password = value;
 	if (conf_get_str(conf, "msgqueue/quota", &value))
 		msgquota_max = parse_bytes(value);
 	if (conf_get_str(conf, "msgqueue/max", &value))
@@ -875,7 +865,8 @@ parse_config(const char *conf_path)
 	    !add_listen_sock("loopback", true))) {
 		goto errout;
 	}
-	auth_init(auth_url, cainfo, auth_username, auth_password);
+	if (!auth_init(conf))
+		goto errout;
 	msgquota_init(msgquota_max);
 	if (!msg_router_init(conf))
 		goto errout;
@@ -895,7 +886,7 @@ errout:
 static bool
 auto_config(void)
 {
-	auth_init(NULL, NULL, NULL, NULL);
+	auth_init(NULL);
 	VERIFY(msg_router_init(NULL));
 	msgquota_init(0);
 	return (add_listen_sock("localhost", false));
@@ -1297,8 +1288,8 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	conn->logon_min = cpdlc_msg_get_min(msg);
 
 	/* This is async */
-	conn->auth_key = auth_sess_open(msg, &conn->sockaddr, logon_done_cb,
-	    conn);
+	conn->auth_key = auth_sess_open(msg, conn->addr_str,
+	    logon_done_cb, conn);
 	/*
 	 * Mustn't touch logon status after this, as logon_done_cb might
 	 * have already been called (auth.c does this if it has no
