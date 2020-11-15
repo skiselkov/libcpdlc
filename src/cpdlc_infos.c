@@ -27,12 +27,6 @@
 
 #include "cpdlc_msg.h"
 
-#define	NUM_UL_DENY_REASONS	3
-#define	UL_DENY_REASONS \
-	CPDLC_UM166_DUE_TO_TFC, \
-	CPDLC_UM167_DUE_TO_AIRSPACE_RESTR, \
-	CPDLC_UM169_FREETEXT_NORMAL_text
-
 #define	LONG_TIMEOUT		300	/* seconds */
 #define	MED_TIMEOUT		200	/* seconds */
 #define	SHORT_TIMEOUT		100	/* seconds */
