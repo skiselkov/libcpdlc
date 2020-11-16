@@ -36,6 +36,7 @@
 #include <acfutils/helpers.h>
 #include <acfutils/hexcode.h>
 #include <acfutils/safe_alloc.h>
+#include <acfutils/taskq.h>
 #include <acfutils/thread.h>
 
 #include "auth.h"
@@ -60,6 +61,19 @@ typedef struct {
 	char		logon_data[128];
 } auth_sess_t;
 
+typedef struct {
+	bool		logon;
+	char		remote_addr[SOCKADDR_STRLEN];
+	char		from[CALLSIGN_LEN];
+	char		to[CALLSIGN_LEN];
+	bool		is_atc;
+	bool		is_lws;
+} logon_notify_t;
+
+typedef struct {
+	CURL		*curl;
+} logon_notifier_t;
+
 static bool		inited = false;
 static char		auth_url[PATH_MAX] = { 0 };
 static rpc_spec_t	rpc_spec = {};
@@ -75,6 +89,16 @@ static avl_tree_t	sessions;
  * for all authentication session to shut down before returning.
  */
 static condvar_t	sess_shutdown_cv;
+
+static struct {
+	taskq_t		*tq;
+	rpc_spec_t	rpc_spec;
+} notify = {};
+
+static void *logon_notifier_init(void *userinfo);
+static void logon_notifier_fini(void *userinfo, void *thr_info);
+static void logon_notifier_proc(void *userinfo, void *thr_info, void *task);
+static void logon_notifier_discard(void *userinfo, void *task);
 
 /*
  * `sessions' AVL tree comparator function.
@@ -152,6 +176,31 @@ auth_worker(void *userinfo)
 	free(sess);
 }
 
+static bool
+parse_conf_logon_notify(const conf_t *conf)
+{
+	int min_threads = 0, max_threads = 4;
+	uint64_t stop_delay = SEC2USEC(2);
+
+	ASSERT(conf != NULL);
+
+	if (!rpc_spec_parse(conf, "logon_notify/rpc", false, &notify.rpc_spec))
+		return (false);
+	if (conf_get_i(conf, "logon_notify/min_threads", &min_threads))
+		min_threads = MAX(min_threads, 0);
+	if (conf_get_i(conf, "logon_notify/max_threads", &max_threads))
+		max_threads = MAX(max_threads, min_threads);
+	if (conf_get_lli(conf, "logon_notify/stop_delay",
+	    (long long *)&stop_delay)) {
+		stop_delay = SEC2USEC(stop_delay);
+	}
+	notify.tq = taskq_alloc(min_threads, max_threads, stop_delay,
+	    logon_notifier_init, logon_notifier_fini,
+	    logon_notifier_proc, logon_notifier_discard, NULL);
+
+	return (true);
+}
+
 /*
  * Authenticator system global initializer function.
  */
@@ -172,7 +221,11 @@ auth_init(const conf_t *conf)
 		if (conf_get_str(conf, "auth/rpc/url", &str))
 			lacf_strlcpy(auth_url, str, sizeof (auth_url));
 		if (strncmp(auth_url, "file://", 7) != 0 &&
-		    !rpc_spec_parse(conf, "auth/rpc", &rpc_spec)) {
+		    !rpc_spec_parse(conf, "auth/rpc", true, &rpc_spec)) {
+			return (false);
+		}
+		if (conf_get_str(conf, "logon_notify/rpc/url", &str) &&
+		    !parse_conf_logon_notify(conf)) {
 			return (false);
 		}
 	}
@@ -190,6 +243,10 @@ auth_fini(void)
 		return;
 	inited = false;
 
+	if (notify.tq != NULL) {
+		taskq_free(notify.tq);
+		notify.tq = NULL;
+	}
 	mutex_enter(&lock);
 	for (auth_sess_t *sess = avl_first(&sessions); sess != NULL;
 	    sess = AVL_NEXT(&sessions, sess)) {
@@ -447,4 +504,91 @@ auth_encrypt_userpwd(bool silent)
 	lacf_free(password);
 
 	return (true);
+}
+
+static void *
+logon_notifier_init(void *userinfo)
+{
+	logon_notifier_t *nter = safe_calloc(1, sizeof (*nter));
+
+	UNUSED(userinfo);
+
+	nter->curl = curl_easy_init();
+	ASSERT(nter->curl != NULL);
+	rpc_curl_setup(nter->curl, &notify.rpc_spec);
+
+	return (nter);
+}
+
+static void
+logon_notifier_fini(void *userinfo, void *thr_info)
+{
+	logon_notifier_t *nter;
+
+	UNUSED(userinfo);
+	ASSERT(thr_info != NULL);
+	nter = thr_info;
+
+	curl_easy_cleanup(nter->curl);
+	free(nter);
+}
+
+static void
+logon_notifier_proc(void *userinfo, void *thr_info, void *task)
+{
+	logon_notifier_t *nter;
+	logon_notify_t *ln;
+	rpc_result_t result;
+
+	UNUSED(userinfo);
+	ASSERT(thr_info != NULL);
+	nter = thr_info;
+	ASSERT(task != NULL);
+	ln = task;
+
+	(void)rpc_perform(&notify.rpc_spec, &result, nter->curl,
+	    "TYPE", ln->logon ? "LOGON" : "LOGOFF",
+	    "FROM", ln->from,
+	    "TO", ln->to,
+	    "STATYPE", ln->is_atc ? "ATC" : "ACFT",
+	    "CONNTYPE", ln->is_lws ? "LWS" : "TLS",
+	    "ADDR", ln->remote_addr,
+	    NULL);
+	free(ln);
+}
+
+static void
+logon_notifier_discard(void *userinfo, void *task)
+{
+	UNUSED(userinfo);
+	ASSERT(task != NULL);
+	free(task);
+}
+
+void
+auth_notify_logon(bool is_logon, const char *from, const char *to,
+    const char *remote_addr, bool is_atc, bool is_lws)
+{
+	logon_notify_t *ln;
+
+	ASSERT(inited);
+	ASSERT(from != NULL);
+	/* to can be NULL */
+	ASSERT(remote_addr != NULL);
+
+	if (notify.tq == NULL)
+		return;
+
+	ln = safe_calloc(1, sizeof (*ln));
+	ln->logon = is_logon;
+	strlcpy(ln->from, from, sizeof (ln->from));
+	if (to != NULL)
+		strlcpy(ln->to, to, sizeof (ln->to));
+	else
+		strlcpy(ln->to, "-", sizeof (ln->to));
+	strlcpy(ln->remote_addr, remote_addr, sizeof (ln->remote_addr));
+	ln->is_atc = is_atc;
+	ln->is_lws = is_lws;
+
+	taskq_submit(notify.tq, ln);
 }

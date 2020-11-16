@@ -398,15 +398,19 @@ exec_cmd_common(const char *cmd_in, const char *from, const conn_t *conn)
 }
 
 static void
-exec_logon_cmd(const char *from, const conn_t *conn)
+logon_hook(const char *from, const conn_t *conn)
 {
+	auth_notify_logon(true, from, !conn->is_atc ? conn->to : NULL,
+	    conn->addr_str, conn->is_atc, conn->is_lws);
 	if (logon_cmd != NULL)
 		exec_cmd_common(logon_cmd, from, conn);
 }
 
 static void
-exec_logoff_cmd(const char *from, const conn_t *conn)
+logoff_hook(const char *from, const conn_t *conn)
 {
+	auth_notify_logon(false, from, !conn->is_atc ? conn->to : NULL,
+	    conn->addr_str, conn->is_atc, conn->is_lws);
 	if (logoff_cmd != NULL)
 		exec_cmd_common(logoff_cmd, from, conn);
 }
@@ -1018,7 +1022,7 @@ conns_by_from_remove(conn_t *conn, const char ident[CALLSIGN_LEN])
 		conn_t *c = HTBL_VALUE_MULTI(mv);
 
 		if (conn == c) {
-			exec_logoff_cmd(ident, c);
+			logoff_hook(ident, c);
 			htbl_remove_multi(&conns_by_from, ident, mv);
 			conns_by_from_changed = true;
 			break;
@@ -1171,7 +1175,7 @@ complete_logon(conn_t *conn)
 
 		mutex_enter(&conns_by_from_lock);
 		htbl_set(&conns_by_from, idl->ident, conn);
-		exec_logon_cmd(idl->ident, conn);
+		logon_hook(idl->ident, conn);
 		conns_by_from_changed = true;
 		mutex_exit(&conns_by_from_lock);
 

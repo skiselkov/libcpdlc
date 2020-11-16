@@ -165,7 +165,7 @@ rpc_router_init(const conf_t *conf)
 	    !conf_get_str(conf, "msg_router/rpc/url", &str)) {
 		return (true);
 	}
-	if (!rpc_spec_parse(conf, "msg_router/rpc", &rpc.spec))
+	if (!rpc_spec_parse(conf, "msg_router/rpc", true, &rpc.spec))
 		return (false);
 
 	conf_get_i(conf, "msg_router/min_threads", &min_threads);

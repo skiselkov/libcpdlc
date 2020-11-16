@@ -77,7 +77,8 @@ dl_write(char *ptr, size_t size, size_t nmemb, void *userdata)
 }
 
 bool
-rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec)
+rpc_spec_parse(const conf_t *conf, const char *prefix, bool need_return,
+    rpc_spec_t *spec)
 {
 	const char *str;
 	bool debug;
@@ -133,6 +134,7 @@ rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec)
 	if (conf_get_str(conf, "cainfo", &str))
 		cpdlc_strlcpy(spec->cainfo, str, sizeof (spec->cainfo));
 	conf_get_i_v(conf, "%s/timeout", (int *)&spec->timeout, prefix);
+	spec->need_return = need_return;
 
 	return (true);
 }
@@ -419,17 +421,21 @@ rpc_perform(const rpc_spec_t *spec, rpc_result_t *rpc_res, CURL *curl, ...)
 			logMsg("RPC debug response: %s",
 			    (const char *)dl_info.buf);
 		}
-		switch (spec->style) {
-		case RPC_STYLE_WWW_FORM:
-			ret = resp_parse_www_form((const char *)dl_info.buf,
-			    curl, rpc_res);
-			break;
-		case RPC_STYLE_XML_RPC:
-			ret = resp_parse_xml_rpc((const char *)dl_info.buf,
-			    rpc_res);
-			break;
-		default:
-			VERIFY_FAIL();
+		if (spec->need_return) {
+			switch (spec->style) {
+			case RPC_STYLE_WWW_FORM:
+				ret = resp_parse_www_form(
+				    (const char *)dl_info.buf, curl, rpc_res);
+				break;
+			case RPC_STYLE_XML_RPC:
+				ret = resp_parse_xml_rpc(
+				    (const char *)dl_info.buf, rpc_res);
+				break;
+			default:
+				VERIFY_FAIL();
+			}
+		} else {
+			ret = true;
 		}
 	} else {
 		if (curl_res != CURLE_OK) {

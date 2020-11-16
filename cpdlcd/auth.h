@@ -63,6 +63,9 @@ void auth_sess_kill(auth_sess_key_t key);
 
 bool auth_encrypt_userpwd(bool silent);
 
+void auth_notify_logon(bool logon, const char *from, const char *to,
+    const char *remote_addr, bool is_atc, bool is_lws);
+
 #ifdef	__cplusplus
 }
 #endif

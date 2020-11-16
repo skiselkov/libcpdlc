@@ -48,6 +48,7 @@ typedef enum {
 typedef struct {
 	bool		debug;
 	rpc_style_t	style;
+	bool		need_return;
 	char		url[PATH_MAX];
 	char		methodName[128];
 	unsigned	num_params;
@@ -64,7 +65,8 @@ typedef struct {
 	char		values[RPC_MAX_PARAMS][RPC_MAX_PARAM_NAME_LEN];
 } rpc_result_t;
 
-bool rpc_spec_parse(const conf_t *conf, const char *prefix, rpc_spec_t *spec);
+bool rpc_spec_parse(const conf_t *conf, const char *prefix, bool need_return,
+    rpc_spec_t *spec);
 void rpc_curl_setup(CURL *curl, const rpc_spec_t *spec);
 bool rpc_perform(const rpc_spec_t *spec, rpc_result_t *result,
     CURL *curl, ...) SENTINEL_ATTR;
