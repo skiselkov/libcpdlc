@@ -416,7 +416,7 @@ rpc_perform(const rpc_spec_t *spec, rpc_result_t *rpc_res, CURL *curl, ...)
 
 	if (curl_res == CURLE_OK && code == 200 && dl_info.bufsz != 0) {
 		if (spec->debug) {
-			printf("RPC debug response:\n%s",
+			logMsg("RPC debug response: %s",
 			    (const char *)dl_info.buf);
 		}
 		switch (spec->style) {
