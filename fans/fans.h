@@ -151,6 +151,11 @@ void fans_free(fans_t *box);
 cpdlc_client_t *fans_get_client(const fans_t *box);
 cpdlc_msglist_t *fans_get_msglist(const fans_t *box);
 
+const char *fans_get_flt_id(const fans_t *box);
+
+const char *fans_get_logon_to(const fans_t *box);
+void fans_set_logon_to(fans_t *box, const char *to);
+
 fans_network_t fans_get_network(const fans_t *box);
 void fans_set_network(fans_t *box, fans_network_t net);
 
@@ -165,6 +170,8 @@ void fans_set_host(fans_t *box, const char *hostname);
 const char *fans_get_host(const fans_t *box);
 void fans_set_port(fans_t *box, int port);
 int fans_get_port(const fans_t *box);
+void fans_set_secret(fans_t *box, const char *secret);
+const char *fans_get_secret(const fans_t *box);
 
 const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);
 

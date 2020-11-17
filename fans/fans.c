@@ -674,6 +674,36 @@ fans_get_msglist(const fans_t *box)
 	return (box->msglist);
 }
 
+const char *
+fans_get_flt_id(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (box->flt_id[0] != '\0')
+		return (box->flt_id);
+	if (box->flt_id_auto[0] != '\0')
+		return (box->flt_id_auto);
+	return (NULL);
+}
+
+const char *
+fans_get_logon_to(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (box->to[0] != '\0')
+		return (box->to);
+	return (NULL);
+}
+
+void
+fans_set_logon_to(fans_t *box, const char *to)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (to == NULL || to[0] == '\0')
+		memset(box->to, 0, sizeof (box->to));
+	else
+		cpdlc_strlcpy(box->to, to, sizeof (box->to));
+}
+
 fans_network_t
 fans_get_network(const fans_t *box)
 {
@@ -1250,6 +1280,26 @@ fans_get_port(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	return (box->port);
+}
+
+void
+fans_set_secret(fans_t *box, const char *secret)
+{
+	CPDLC_ASSERT(box != NULL);
+
+	if (secret == NULL || secret[0] == '\0')
+		memset(box->secret, 0, sizeof (box->secret));
+	else
+		cpdlc_strlcpy(box->secret, secret, sizeof (box->secret));
+}
+
+const char *
+fans_get_secret(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (box->secret[0] != '\0')
+		return (box->secret);
+	return (NULL);
 }
 
 void

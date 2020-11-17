@@ -144,44 +144,61 @@ draw_page1(fans_t *box, cpdlc_logon_status_t st)
 static void
 draw_page2(fans_t *box)
 {
+	fms_color_t cust_color, dfl_color;
+	cpdlc_logon_status_t st;
+	char mod_char;
+
+	CPDLC_ASSERT(box != NULL);
+	st = cpdlc_client_get_logon_status(box->cl, NULL);
+
+	if (st == CPDLC_LOGON_NONE) {
+		cust_color = FMS_COLOR_WHITE;
+		dfl_color = FMS_COLOR_GREEN;
+		mod_char = 'v';
+	} else {
+		cust_color = FMS_COLOR_WHITE;
+		dfl_color = FMS_COLOR_WHITE;
+		mod_char = ' ';
+	}
+
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "NETWORK");
 	switch (box->net) {
 	case FANS_NETWORK_CUSTOM:
-		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_LARGE, "vCUSTOM");
+		fans_put_str(box, LSK1_ROW, 0, false, cust_color,
+		    FMS_FONT_LARGE, "%cCUSTOM", mod_char);
 
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "HOSTNAME");
 		if (strcmp(box->hostname, "localhost") == 0) {
-			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
+			fans_put_str(box, LSK2_ROW, 0, false, dfl_color,
 			    FMS_FONT_SMALL, "LOCALHOST");
 		} else {
 			char buf[32];
 			cpdlc_strlcpy(buf, box->hostname, sizeof (buf));
 			fans_strtoupper(buf);
-			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE,
+			fans_put_str(box, LSK2_ROW, 0, false, cust_color,
 			    FMS_FONT_LARGE, "%s", buf);
 		}
 
 		fans_put_lsk_title(box, FMS_KEY_LSK_L3, "PORT");
 		if (box->port != 0) {
-			fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_WHITE,
+			fans_put_str(box, LSK3_ROW, 0, false, cust_color,
 			    FMS_FONT_LARGE, "%d", box->port);
 		} else {
-			fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_GREEN,
+			fans_put_str(box, LSK3_ROW, 0, false, dfl_color,
 			    FMS_FONT_SMALL, "DEFAULT");
 		}
 
 		fans_put_lsk_title(box, FMS_KEY_LSK_L4, "SECRET");
 		if (strlen(box->secret) != 0) {
-			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+			fans_put_str(box, LSK4_ROW, 0, false, cust_color,
 			    FMS_FONT_LARGE, "********");
 		} else {
-			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
+			fans_put_str(box, LSK4_ROW, 0, false, cust_color,
 			    FMS_FONT_LARGE, "--------");
 		}
 		break;
 	case FANS_NETWORK_PILOTEDGE:
-		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
+		fans_put_str(box, LSK1_ROW, 0, false, cust_color,
 		    FMS_FONT_LARGE, "vPILOTEDGE");
 		break;
 	}
@@ -263,9 +280,13 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		fans_scratchpad_xfer(box, box->to, sizeof (box->to),
 		    st <= CPDLC_LOGON_LINK_AVAIL);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1) {
-		box->net++;
-		if (box->net > FANS_NETWORK_PILOTEDGE)
-			box->net = FANS_NETWORK_CUSTOM;
+		if (st == CPDLC_LOGON_NONE) {
+			box->net++;
+			if (box->net > FANS_NETWORK_PILOTEDGE)
+				box->net = FANS_NETWORK_CUSTOM;
+		} else {
+			fans_set_error(box, "MOD NOT ALLOWED");
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
 		const char *host = cpdlc_client_get_host(box->cl);
@@ -274,7 +295,8 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		cpdlc_strlcpy(buf, host, sizeof (buf));
 		for (int i = 0, n = strlen(buf); i < n; i++)
 			buf[i] = toupper(buf[i]);
-		fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+		fans_scratchpad_xfer(box, buf, sizeof (buf),
+		    st == CPDLC_LOGON_NONE);
 		if (strlen(buf) != 0) {
 			for (int i = 0, n = strlen(buf); i < n; i++)
 				buf[i] = tolower(buf[i]);
@@ -286,22 +308,33 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
-		bool set = true;
-		unsigned port = cpdlc_client_get_port(box->cl);
-		fans_scratchpad_xfer_uint(box, &port, &set, 0, UINT16_MAX);
-		if (set)
-			box->port = port;
-		else
-			box->port = 0;
+		if (st == CPDLC_LOGON_NONE) {
+			bool set = true;
+			unsigned port = cpdlc_client_get_port(box->cl);
+
+			fans_scratchpad_xfer_uint(box, &port, &set, 0,
+			    UINT16_MAX);
+			if (set)
+				box->port = port;
+			else
+				box->port = 0;
+		} else {
+			fans_set_error(box, "MOD NOT ALLOWED");
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L4 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
-		if (fans_scratchpad_is_delete(box)) {
-			memset(box->secret, 0, sizeof (box->secret));
-		} else if (!fans_scratchpad_is_empty(box)) {
-			cpdlc_strlcpy(box->secret, fans_scratchpad_get(box),
-			    sizeof (box->secret));
+		if (st == CPDLC_LOGON_NONE) {
+			if (fans_scratchpad_is_delete(box)) {
+				memset(box->secret, 0, sizeof (box->secret));
+			} else if (!fans_scratchpad_is_empty(box)) {
+				cpdlc_strlcpy(box->secret,
+				    fans_scratchpad_get(box),
+				    sizeof (box->secret));
+			}
+			fans_scratchpad_clear(box);
+		} else {
+			fans_set_error(box, "MOD NOT ALLOWED");
 		}
-		fans_scratchpad_clear(box);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R1 &&
 	    box->show_volume) {
 		unsigned vol = box->volume * 100;

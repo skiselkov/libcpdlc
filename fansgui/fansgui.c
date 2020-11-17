@@ -710,25 +710,62 @@ parse_conf(const conf_t *conf)
 static void
 parse_user(const conf_t *conf)
 {
+	const char *str;
 	double vol;
+	int network;
 
 	CPDLC_ASSERT(conf != NULL);
 	CPDLC_ASSERT(box != NULL);
 
 	if (conf_get_d(conf, "volume", &vol))
 		fans_set_volume(box, vol);
+	if (conf_get_str(conf, "fltid", &str))
+		cpdlc_strlcpy(auto_flt_id, str, sizeof (auto_flt_id));
+	if (conf_get_str(conf, "logon_to", &str))
+		fans_set_logon_to(box, str);
+	if (conf_get_i(conf, "network", &network)) {
+		network = MAX(MIN(network, FANS_NETWORK_PILOTEDGE), 0);
+		fans_set_network(box, network);
+		if (network == FANS_NETWORK_CUSTOM) {
+			const char *host, *secret;
+			int port;
+
+			if (conf_get_str(conf, "host", &host))
+				fans_set_host(box, host);
+			if (conf_get_i(conf, "port", &port))
+				fans_set_port(box, port);
+			if (conf_get_str(conf, "secret", &secret))
+				fans_set_secret(box, secret);
+		}
+	}
 }
 
 static void
 save_user(void)
 {
+	fans_network_t network;
 	conf_t *conf = conf_create_empty();
+	const char *flt_id, *logon_to;
 
 	CPDLC_ASSERT(box != NULL);
+	flt_id = fans_get_flt_id(box);
+	logon_to = fans_get_logon_to(box);
+	network = fans_get_network(box);
 
 	conf_set_f(conf, "volume", fans_get_volume(box));
-	conf_write_file(conf, "user.conf");
+	if (flt_id != NULL)
+		conf_set_str(conf, "fltid", flt_id);
+	if (logon_to != NULL)
+		conf_set_str(conf, "logon_to", logon_to);
+	conf_set_i(conf, "network", network);
+	if (network == FANS_NETWORK_CUSTOM) {
+		conf_set_str(conf, "host", fans_get_host(box));
+		conf_set_i(conf, "port", fans_get_port(box));
+		if (fans_get_secret(box) != NULL)
+			conf_set_str(conf, "secret", fans_get_secret(box));
+	}
 
+	conf_write_file(conf, "user.conf");
 	conf_free(conf);
 }
 
@@ -746,19 +783,19 @@ fms_init(void)
 
 	fans_set_shows_volume(box, true);
 
-	if (file_exists("client.conf", NULL)) {
-		conf_t *conf = conf_read_file("client.conf", NULL);
-
-		if (conf != NULL) {
-			parse_conf(conf);
-			conf_free(conf);
-		}
-	}
 	if (file_exists("user.conf", NULL)) {
 		conf_t *conf = conf_read_file("user.conf", NULL);
 
 		if (conf != NULL) {
 			parse_user(conf);
+			conf_free(conf);
+		}
+	}
+	if (file_exists("client.conf", NULL)) {
+		conf_t *conf = conf_read_file("client.conf", NULL);
+
+		if (conf != NULL) {
+			parse_conf(conf);
 			conf_free(conf);
 		}
 	}
