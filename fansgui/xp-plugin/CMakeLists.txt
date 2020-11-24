@@ -69,6 +69,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W -Wall -Wextra -Werror --std=c++11 \
 add_definitions(-DDEBUG)
 add_definitions(-DPLUGIN_VERSION="${PLUGIN_VERSION}")
 add_definitions(-DXPLM200=1 -DXPLM210=1 -DXPLM300=1 -DXPLM301=1 -DXPLM302=1)
+add_definitions(-DZMQ_STATIC)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
 set(ACFUTILS_INCLUDES "${LIBACFUTILS}/src")
@@ -85,7 +86,16 @@ set(ZEROMQ_LIBRARY "${ZEROMQ}/lib/libzmq.a")
 if(WIN32)
 	find_library(ACFUTILS_LIBRARY "acfutils" "${LIBACFUTILS}/qmake/win64")
 	find_library(XPLM_LIBRARY "XPLM_64" "${LIBACFUTILS}/SDK/Libraries/Win")
-	set(PLATFORM_LIBS "-lws2_32 -lgdi32 -ldbghelp -lpsapi")
+	# Need iphlpapi for ZeroMQ
+	list(APPEND PLATFORM_LIBS
+	    "${CMAKE_SOURCE_DIR}/../../gnutls-win64/lib/libgnutls.dll.a"
+	    "-lstdc++"
+	    "-liphlpapi"
+	    "-lws2_32"
+	    "-lgdi32"
+	    "-ldbghelp"
+	    "-lpsapi"
+	)
 elseif(APPLE)
 	find_library(ACFUTILS_LIBRARY "acfutils" "${LIBACFUTILS}/qmake/mac64")
 	find_library(XPLM_LIBRARY "XPLM" "${LIBACFUTILS}/SDK/Libraries/Mac")
@@ -96,11 +106,20 @@ endif()
 find_library(LZMA_LIBRARY "lzma" "${LIBACFUTILS}/lzma/qmake/${PLAT_NAME}")
 find_library(ZLIB_LIBRARY "z" "${LIBACFUTILS}/zlib/zlib-${PLAT_NAME}/lib")
 
-target_include_directories(fans_plugin PUBLIC
-    "${ZEROMQ}/include"
-    ${ACFUTILS_INCLUDES}
-    ${XP_SDK_INCLUDES}
-)
+if(WIN32)
+	target_include_directories(fans_plugin PUBLIC
+	    "${CMAKE_SOURCE_DIR}/../../gnutls-win64/lib"
+	    "${ZEROMQ}/include"
+	    ${ACFUTILS_INCLUDES}
+	    ${XP_SDK_INCLUDES}
+	)
+else()
+	target_include_directories(fans_plugin PUBLIC
+	    "${ZEROMQ}/include"
+	    ${ACFUTILS_INCLUDES}
+	    ${XP_SDK_INCLUDES}
+	)
+endif()
 
 target_link_libraries(fans_plugin
     ${ACFUTILS_LIBRARY}
@@ -110,8 +129,6 @@ target_link_libraries(fans_plugin
     ${PTHREAD_LIBRARY}
     ${MATH_LIBRARY}
     ${PLATFORM_LIBS}
-    "-static-libgcc"
-    "-static-libstdc++"
 )
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")

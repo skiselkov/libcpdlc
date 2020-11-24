@@ -37,13 +37,19 @@ else
 		    -framework CoreAudio \
 		    -framework AudioUnit
 	else
-		PLATFORM_LIBS = -lopengl32 -mwindows
+		# iphlpapi is needed for ZeroMQ
+		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows
 	endif
 endif
 
 BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
 PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib --static-openal
 ZEROMQ=zmq/zeromq-$(PLATFORM_NAME)/install
+
+CFLAGS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
+    --cflags libzmq) -DZMQ_STATIC
+LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
+    --libs libzmq)
 
 CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
     $(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
@@ -53,11 +59,6 @@ CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --libs) \
-
-CFLAGS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
-    --cflags libzmq)
-LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
-    --libs libzmq)
 
 ifeq ($(PLATFORM_NAME),win-64)
 	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)
@@ -94,21 +95,29 @@ endif
 
 all : $(OUTBIN)
 
+OUTDIR=fansgui-$(PLATFORM_NAME)
+
 $(OUTBIN) : $(OBJS)
 	$(HOSTCXX) $(LDFLAGS) -o $@ $^ $(LIBS)
-ifeq ($(PLATFORM_NAME),win-64)
-	rm -rf fansgui-app
-	mkdir fansgui-app
-	cp $(OUTBIN) \
+	rm -rf $(OUTDIR)
+	mkdir $(OUTDIR)
+	cp -r $(OUTBIN) \
+	    xp-plugin/fans.plugin \
 	    sample-client.conf \
 	    fans_alert.wav \
-	    $(wildcard ../gnutls-win64/bin/*.dll) \
 	    $(wildcard *.png) \
 	    $(wildcard ../ca_cert.pem) \
-	    fansgui-app
-	zip -r fansgui-app.zip fansgui-app
-	rm -rf fansgui-app
+	    $(OUTDIR)
+ifeq ($(PLATFORM_NAME),win-64)
+	cp $(wildcard ../gnutls-win64/bin/*.dll) $(OUTDIR)
 endif
+	strip $(OUTDIR)/$(OUTBIN)
+ifeq ($(PLATFORM_NAME),win-64)
+	zip -r $(OUTDIR).zip $(OUTDIR)
+else
+	tar czf $(OUTDIR).tar.gz $(OUTDIR)
+endif
+	rm -rf $(OUTDIR)
 
 clean :
 	rm -f fansgui fansgui.exe $(OBJS)

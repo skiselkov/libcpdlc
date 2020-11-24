@@ -13,7 +13,9 @@ fansgui/client.conf
 fansgui/cpdlc_cert.pem
 fansgui/fansgui
 fansgui/fansgui.exe
-fansgui/fansgui-app.zip
+fansgui/fansgui-win-64.zip
+fansgui/fansgui-linux-64.tar.gz
+fansgui/fansgui-mac-64.tar.gz
 fansgui/user.conf
 fansgui/zmq/zeromq-4.3.1
 fansgui/zmq/zeromq-linux-64
@@ -23,6 +25,7 @@ fansgui/xp-plugin/CMakeFiles
 fansgui/xp-plugin/Makefile
 fansgui/xp-plugin/cmake_install.cmake
 fansgui/xp-plugin/fans.plugin
+fansgui/xp-plugin/libfans.plugin.xpl.dll.a
 test/build/CMakeCache.txt
 test/build/CMakeFiles/
 test/build/Makefile
