@@ -23,6 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <errno.h>
 #if	APL || LIN
 #include <libgen.h>
 #endif

@@ -71,11 +71,13 @@ else
 	else
 		CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
 		    pkg-config --cflags gnutls nettle hogweed)
-		LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-		    --libs gnutls) \
-		    $(NETTLE)/install_tgt/lib/libnettle.a \
-		    $(NETTLE)/install_tgt/lib/libhogweed.a \
-		    -lcrypto
+		LIBS += -Wl,-Bstatic \
+		    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
+		    --libs --static gnutls libidn2) \
+		    -Wl,-Bdynamic
+		ifeq ($(PLATFORM_NAME),linux-64)
+			LIBS += -static-libgcc
+		endif
 	endif
 endif
 LIBS += $(PLATFORM_LIBS) -lpthread -lm
