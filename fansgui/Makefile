@@ -119,6 +119,7 @@ ifeq ($(PLATFORM_NAME),mac-64)
 	    fans_alert.wav \
 	    $(wildcard *.png) \
 	    $(wildcard ../ca_cert.pem) \
+	    fansgui-icon.icns \
 	    $(OUTDIR)/fansgui.app/Contents/Resources
 	cp $(OUTBIN) $(OUTDIR)/fansgui.app/Contents/MacOS
 	strip $(OUTDIR)/fansgui.app/Contents/MacOS/$(OUTBIN)

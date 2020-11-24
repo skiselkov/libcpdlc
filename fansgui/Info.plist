@@ -12,5 +12,7 @@
     <string>fansgui</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>fansgui-icon.icns</string>
 </dict>
 </plist>
