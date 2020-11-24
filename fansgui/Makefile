@@ -71,12 +71,15 @@ else
 	else
 		CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
 		    pkg-config --cflags gnutls nettle hogweed)
-		LIBS += -Wl,-Bstatic \
-		    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-		    --libs --static gnutls libidn2) \
-		    -Wl,-Bdynamic
 		ifeq ($(PLATFORM_NAME),linux-64)
+			LIBS += -Wl,-Bstatic \
+			    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
+			    --libs --static gnutls libidn2) \
+			    -Wl,-Bdynamic
 			LIBS += -static-libgcc
+		else
+			LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
+			    pkg-config --libs --static gnutls)
 		endif
 	endif
 endif

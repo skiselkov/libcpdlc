@@ -164,6 +164,7 @@ if [[ "$do_clean" = 0 ]]; then
 	    (
 		cd "${GMP}" && \
 		./configure --enable-static --disable-shared \
+		    --disable-shared --enable-static \
 		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
 		make -j ${NCPUS} && make install
 	    ) || exit 1
@@ -180,6 +181,7 @@ if [[ "$do_clean" = 0 ]]; then
 		cd "${NETTLE}" && \
 		LDFLAGS="$STATIC_LIB_OPTS" \
 		./configure --enable-mini-gmp \
+		    --disable-shared --enable-static \
 		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
 		make -j ${NCPUS} && make install
 	    ) || exit 1
