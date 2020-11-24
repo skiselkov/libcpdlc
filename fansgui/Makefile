@@ -35,7 +35,8 @@ else
 		    -framework Cocoa \
 		    -framework AudioToolbox \
 		    -framework CoreAudio \
-		    -framework AudioUnit
+		    -framework AudioUnit \
+		    -framework Security
 	else
 		# iphlpapi is needed for ZeroMQ
 		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows
@@ -71,7 +72,10 @@ else
 		CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
 		    pkg-config --cflags gnutls nettle hogweed)
 		LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-		    --libs gnutls nettle hogweed) -lcrypto
+		    --libs gnutls) \
+		    $(NETTLE)/install_tgt/lib/libnettle.a \
+		    $(NETTLE)/install_tgt/lib/libhogweed.a \
+		    -lcrypto
 	endif
 endif
 LIBS += $(PLATFORM_LIBS) -lpthread -lm
@@ -101,18 +105,29 @@ $(OUTBIN) : $(OBJS)
 	$(HOSTCXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 	rm -rf $(OUTDIR)
 	mkdir $(OUTDIR)
-	cp -r $(OUTBIN) \
-	    xp-plugin/fans.plugin \
-	    sample-client.conf \
+	cp -r xp-plugin/fans.plugin $(OUTDIR)
+ifeq ($(PLATFORM_NAME),mac-64)
+	mkdir -p $(OUTDIR)/fansgui.app/Contents/Resources \
+	    $(OUTDIR)/fansgui.app/Contents/MacOS
+	cp Info.plist $(OUTDIR)/fansgui.app/Contents
+	cp sample-client.conf \
+	    fans_alert.wav \
+	    $(wildcard *.png) \
+	    $(wildcard ../ca_cert.pem) \
+	    $(OUTDIR)/fansgui.app/Contents/Resources
+	cp $(OUTBIN) $(OUTDIR)/fansgui.app/Contents/MacOS
+	strip $(OUTDIR)/fansgui.app/Contents/MacOS/$(OUTBIN)
+else
+	cp sample-client.conf \
 	    fans_alert.wav \
 	    $(wildcard *.png) \
 	    $(wildcard ../ca_cert.pem) \
 	    $(OUTDIR)
+	cp $(OUTBIN) $(OUTDIR)
+	strip $(OUTDIR)/$(OUTBIN)
+endif
 ifeq ($(PLATFORM_NAME),win-64)
 	cp $(wildcard ../gnutls-win64/bin/*.dll) $(OUTDIR)
-endif
-	strip $(OUTDIR)/$(OUTBIN)
-ifeq ($(PLATFORM_NAME),win-64)
 	zip -r $(OUTDIR).zip $(OUTDIR)
 else
 	tar czf $(OUTDIR).tar.gz $(OUTDIR)

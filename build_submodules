@@ -202,6 +202,7 @@ if [[ "$do_clean" == 0 ]]; then
 		NETTLE_CFLAGS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --cflags nettle)" \
 		NETTLE_LIBS="$(PKG_CONFIG_PATH=../${NETTLE}/install_tgt/lib/pkgconfig pkg-config --libs nettle)" \
 		./configure --prefix="$(pwd)/install_tgt" \
+		    --enable-static --disable-shared \
 		    --with-included-libtasn1 --with-pic \
 		    --with-included-unistring --without-p11-kit --disable-doc \
 		    --disable-tools --disable-cxx --disable-tests $HOST_SUFFIX && \

@@ -23,6 +23,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#if	APL || LIN
+#include <libgen.h>
+#endif
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -951,9 +954,35 @@ do_wsa_startup(void)
 #endif	/* defined(_WIN32) */
 
 int
-main(void)
+main(int argc, char **argv)
 {
 	GLenum err;
+#if	APL || LIN
+	char *progname, *dir, *chdir_tgt, *appdir;
+#endif
+
+	UNUSED(argc);
+	UNUSED(argv);
+
+#if	APL || LIN
+	progname = safe_strdup(argv[0]);
+	dir = dirname(progname);
+	/* chdir into the Resources subdirectory */
+	appdir = strstr(dir, ".app/Contents/MacOS");
+	if (appdir != NULL) {
+		appdir[13] = '\0';
+		chdir_tgt = sprintf_alloc("%s/Resources", dir);
+	} else {
+		chdir_tgt = safe_strdup(dir);
+	}
+	if (chdir(chdir_tgt) < 0) {
+		fprintf(stderr, "Cannot chdir to %s: %s", chdir_tgt,
+		    strerror(errno));
+		return (1);
+	}
+	free(chdir_tgt);
+	free(progname);
+#endif	/* APL || LIN */
 
 	memset(font_bitmaps, 0, sizeof (font_bitmaps));
 	log_init(do_log_msg, "fansgui");
