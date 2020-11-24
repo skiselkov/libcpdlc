@@ -136,9 +136,16 @@ ifeq ($(PLATFORM_NAME),win-64)
 	cp $(wildcard ../gnutls-win64/bin/*.dll) $(OUTDIR)
 	rm -f $(OUTDIR).zip
 	zip -r $(OUTDIR).zip $(OUTDIR)
-else
+endif
+ifeq ($(PLATFORM_NAME),linux-64)
 	rm -f $(OUTDIR).tar.gz
 	tar czf $(OUTDIR).tar.gz $(OUTDIR)
+endif
+ifeq ($(PLATFORM_NAME),mac-64)
+	rm -f $(OUTDIR).dmg
+	ln -s /Applications $(OUTDIR)/Applications
+	hdiutil create -srcfolder $(OUTDIR) -fs HFS+ -volname FANSgui \
+	    $(OUTDIR).dmg
 endif
 	rm -rf $(OUTDIR)
 

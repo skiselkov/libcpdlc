@@ -1,4 +1,5 @@
 *.o
+.DS_Store
 Makefile.vars
 test/msgtest
 test/client_test
@@ -15,7 +16,7 @@ fansgui/fansgui
 fansgui/fansgui.exe
 fansgui/fansgui-win-64.zip
 fansgui/fansgui-linux-64.tar.gz
-fansgui/fansgui-mac-64.tar.gz
+fansgui/fansgui-mac-64.dmg
 fansgui/user.conf
 fansgui/zmq/zeromq-4.3.1
 fansgui/zmq/zeromq-linux-64
