@@ -25,8 +25,8 @@ fansgui/xp-plugin/CMakeCache.txt
 fansgui/xp-plugin/CMakeFiles
 fansgui/xp-plugin/Makefile
 fansgui/xp-plugin/cmake_install.cmake
-fansgui/xp-plugin/fans.plugin
-fansgui/xp-plugin/libfans.plugin.xpl.dll.a
+fansgui/xp-plugin/fans-xplane.plugin
+fansgui/xp-plugin/libfans-xplane.plugin.xpl.dll.a
 test/build/CMakeCache.txt
 test/build/CMakeFiles/
 test/build/Makefile

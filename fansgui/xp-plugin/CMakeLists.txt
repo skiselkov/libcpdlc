@@ -146,27 +146,34 @@ target_link_libraries(fans_plugin
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 set(CMAKE_SHARED_LIBRARY_SUFFIX "")
-set_target_properties(fans_plugin PROPERTIES OUTPUT_NAME "fans.plugin.xpl")
+set_target_properties(fans_plugin PROPERTIES OUTPUT_NAME
+    "fans-xplane.plugin.xpl")
 if(WIN32)
 	set_target_properties(fans_plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -fvisibility=hidden")
 	set_target_properties(fans_plugin PROPERTIES
-	    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/win_x64"
-	    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/win_x64"
+	    RUNTIME_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/win_x64"
+	    LIBRARY_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/win_x64"
 	)
 elseif(APPLE)
 	set_target_properties(fans_plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -fvisibility=hidden")
 	set_target_properties(fans_plugin PROPERTIES
-	    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/mac_x64"
-	    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/mac_x64"
+	    RUNTIME_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/mac_x64"
+	    LIBRARY_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/mac_x64"
 	)
 elseif(UNIX)
 	set_target_properties(fans_plugin PROPERTIES LINK_FLAGS
 	    "${CMAKE_SHARED_LINKER_FLAGS} -rdynamic -nodefaultlibs \
 	    -undefined_warning -fPIC -fvisibility=hidden")
 	set_target_properties(fans_plugin PROPERTIES
-	    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/lin_x64"
-	    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/fans.plugin/lin_x64"
+	    RUNTIME_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/lin_x64"
+	    LIBRARY_OUTPUT_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/fans-xplane.plugin/lin_x64"
 	)
 endif()

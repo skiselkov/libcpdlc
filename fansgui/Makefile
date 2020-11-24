@@ -110,7 +110,7 @@ $(OUTBIN) : $(OBJS)
 	$(HOSTCXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 	rm -rf $(OUTDIR)
 	mkdir $(OUTDIR)
-	cp -r xp-plugin/fans.plugin $(OUTDIR)
+	cp -r xp-plugin/fans-xplane.plugin $(OUTDIR)
 ifeq ($(PLATFORM_NAME),mac-64)
 	mkdir -p $(OUTDIR)/fansgui.app/Contents/Resources \
 	    $(OUTDIR)/fansgui.app/Contents/MacOS
@@ -133,8 +133,10 @@ else
 endif
 ifeq ($(PLATFORM_NAME),win-64)
 	cp $(wildcard ../gnutls-win64/bin/*.dll) $(OUTDIR)
+	rm -f $(OUTDIR).zip
 	zip -r $(OUTDIR).zip $(OUTDIR)
 else
+	rm -f $(OUTDIR).tar.gz
 	tar czf $(OUTDIR).tar.gz $(OUTDIR)
 endif
 	rm -rf $(OUTDIR)
