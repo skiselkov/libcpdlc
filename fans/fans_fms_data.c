@@ -34,9 +34,9 @@ static void
 fms_data_draw_page1(fans_t *box)
 {
 	cpdlc_arg_t spd;
-	float value_f32;
+	float value_f32, dest_dist_NM;
 	fms_wpt_info_t wpt;
-	fms_temp_t temp;
+	unsigned dest_time_sec;
 
 	CPDLC_ASSERT(box != NULL);
 
@@ -74,40 +74,52 @@ fms_data_draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L5, "PREV WPT");
 	if (fans_get_prev_wpt(box, &wpt)) {
+		cpdlc_arg_t alt = {
+		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
+		};
 		fans_put_str(box, LSK5_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%s", wpt.wpt_name);
+		    FMS_FONT_SMALL, "%-7s/", wpt.wpt_name);
+		fans_put_alt(box, LSK5_ROW, 8, false, NULL, &alt, false, false);
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "NEXT WPT");
 	if (fans_get_next_wpt(box, &wpt)) {
-		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%s", wpt.wpt_name);
+		cpdlc_arg_t alt = {
+		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
+		};
+		fans_put_str(box, LSK1_ROW, 5, true, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%7s/", wpt.wpt_name);
+		fans_put_alt(box, LSK1_ROW, 0, true, NULL, &alt, false, false);
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "NEXTNEXT WPT");
 	if (fans_get_next_next_wpt(box, &wpt)) {
-		fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%s", wpt.wpt_name);
+		cpdlc_arg_t alt = {
+		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
+		};
+		fans_put_str(box, LSK2_ROW, 5, true, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%7s/", wpt.wpt_name);
+		fans_put_alt(box, LSK2_ROW, 0, true, NULL, &alt, false, false);
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "DEST WPT");
-	if (fans_get_dest_wpt(box, &wpt)) {
+	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "DEST DIST");
+	if (fans_get_dest_info(box, &wpt, &dest_dist_NM, &dest_time_sec)) {
+		int hrs = dest_time_sec / 3600;
+		int mins = (dest_time_sec % 3600) / 60;
 		fans_put_str(box, LSK3_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%s", wpt.wpt_name);
+
+		fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%.*fNM/%02d:%02d",
+		    dest_dist_NM < 99.5 ? 1 : 0, dest_dist_NM, hrs, mins);
 	}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "OFFSET");
+	fans_put_lsk_title(box, FMS_KEY_LSK_R5, "OFFSET");
 	value_f32 = fans_get_offset(box);
 	if (!isnan(value_f32)) {
-		fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%.1f NM", value_f32);
-	}
-
-	fans_put_lsk_title(box, FMS_KEY_LSK_R5, "SAT");
-	fans_get_sat(box, &temp);
-	if (temp.set) {
 		fans_put_str(box, LSK5_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%d`C", temp.temp);
+		    FMS_FONT_SMALL, "%.1f NM", value_f32);
 	}
 }
 
@@ -116,26 +128,34 @@ fms_data_draw_page2(fans_t *box)
 {
 	unsigned value_u32;
 	fms_wind_t wind;
+	fms_temp_t temp;
 	unsigned hrs, mins;
 
 	CPDLC_ASSERT(box != NULL);
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "WIND");
+	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "SAT");
+	fans_get_sat(box, &temp);
+	if (temp.set) {
+		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
+		    FMS_FONT_SMALL, "%d`C", temp.temp);
+	}
+
+	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "WIND");
 	fans_get_wind(box, &wind);
 	if (wind.set) {
-		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
+		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%03dT/%3dKT", wind.deg, wind.spd);
 	}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "FUEL");
+	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "FUEL");
 	if (fans_get_fuel(box, &hrs, &mins)) {
-		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
+		fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%02d:%02d", hrs, mins);
 	}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "SOULS");
+	fans_put_lsk_title(box, FMS_KEY_LSK_L4, "SOULS");
 	if (fans_get_souls(box, &value_u32)) {
-		fans_put_str(box, LSK3_ROW, 0, false, FMS_COLOR_GREEN,
+		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%d", value_u32);
 	}
 }

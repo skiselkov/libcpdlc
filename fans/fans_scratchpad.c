@@ -255,9 +255,9 @@ fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
 	CPDLC_ASSERT(useralt != NULL);
 
 	if (useralt->alt.alt != 0)
-		fans_print_alt(useralt, userbuf, sizeof (userbuf));
+		fans_print_alt(useralt, userbuf, sizeof (userbuf), false);
 	if (autoalt != NULL && autoalt->alt.alt != 0)
-		fans_print_alt(autoalt, autobuf, sizeof (autobuf));
+		fans_print_alt(autoalt, autobuf, sizeof (autobuf), false);
 	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
 	    true);
 	if (strlen(userbuf) != 0)
@@ -421,9 +421,9 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
 	CPDLC_ASSERT(userspd != NULL);
 
 	if (userspd->spd.spd != 0)
-		fans_print_spd(userspd, userbuf, sizeof (userbuf));
+		fans_print_spd(userspd, userbuf, sizeof (userbuf), false);
 	if (autospd != NULL && autospd->spd.spd != 0)
-		fans_print_spd(autospd, autobuf, sizeof (autobuf));
+		fans_print_spd(autospd, autobuf, sizeof (autobuf), false);
 	fans_scratchpad_xfer_auto(box, userbuf, autobuf, sizeof (userbuf),
 	    true);
 	if (strlen(userbuf) != 0) {

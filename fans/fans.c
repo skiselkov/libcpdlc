@@ -424,13 +424,13 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
     bool req, bool units)
 {
 	CPDLC_ASSERT(box != NULL);
-	DATA_PICK(const cpdlc_arg_t *, alt, useralt->alt.alt != 0,
-	    useralt, autoalt);
+	DATA_PICK(const cpdlc_arg_t *, alt,
+	    useralt != NULL && useralt->alt.alt != 0, useralt, autoalt);
 
 	if (alt != NULL && alt->alt.alt != 0) {
 		char buf[8];
 
-		fans_print_alt(alt, buf, sizeof (buf));
+		fans_print_alt(alt, buf, sizeof (buf), false);
 		if (units && !alt->alt.fl) {
 			put_str_with_units(box, row, col, align_right,
 			    color, font, "FT", "%s", buf);
@@ -456,14 +456,9 @@ fans_put_spd(fans_t *box, int row, int col, bool align_right,
 	    userspd, autospd);
 
 	if (spd != NULL && spd->spd.spd != 0) {
-		fans_print_spd(spd, buf, sizeof (buf));
-		if (units && !spd->spd.mach) {
-			put_str_with_units(box, row, col, align_right,
-			    color, font, "KT", "%s", buf);
-		} else {
-			fans_put_str(box, row, col, align_right,
-			    color, font, "%s", buf);
-		}
+		fans_print_spd(spd, buf, sizeof (buf), units);
+		fans_put_str(box, row, col, align_right, color, font,
+		    "%s", buf);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
 		    FMS_FONT_LARGE, req ? "___" : "---");
@@ -1058,6 +1053,22 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 }
 
 bool
+fans_get_cur_pos(const fans_t *box, double *lat, double *lon)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(lat != NULL);
+	CPDLC_ASSERT(lon != NULL);
+	if (box->funcs.get_cur_pos != NULL &&
+	    box->funcs.get_cur_pos(box->userinfo, lat, lon)) {
+		return (true);
+	} else {
+		*lat = NAN;
+		*lon = NAN;
+		return (false);
+	}
+}
+
+bool
 fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 {
 	CPDLC_ASSERT(box != NULL);
@@ -1139,9 +1150,30 @@ fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info)
 }
 
 bool
-fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info)
+fans_get_dest_info(const fans_t *box, fms_wpt_info_t *info,
+    float *dist_NM, unsigned *flt_time_sec)
 {
-	return (get_wpt_common(box, box->funcs.get_dest_wpt, info));
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(dist_NM != NULL);
+	CPDLC_ASSERT(flt_time_sec != NULL);
+	memset(info, 0, sizeof (*info));
+	*dist_NM = NAN;
+	*flt_time_sec = 0;
+	if (box->funcs.get_dest_info != NULL) {
+		bool res = box->funcs.get_dest_info(box->userinfo, info,
+		    dist_NM, flt_time_sec);
+		if (res) {
+			if (strlen(info->wpt_name) == 0)
+				return (false);
+			info->hrs = MIN(info->hrs, 23);
+			info->mins = MIN(info->mins, 60);
+			info->alt_ft = MAX(MIN(info->alt_ft, 60000), -2000);
+			info->spd = MIN(info->spd, 999);
+		}
+		return (res);
+	}
+	return (false);
 }
 
 float
@@ -1206,9 +1238,13 @@ fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos)
 	CPDLC_ASSERT(pos != NULL);
 
 	memset(pos, 0, sizeof (*pos));
-	pos->set = true;
-	pos->type = FMS_POS_FIX;
-	cpdlc_strlcpy(pos->name, info->wpt_name, sizeof (pos->name));
+	if (info->wpt_name[0] != '\0') {
+		pos->set = true;
+		pos->type = FMS_POS_FIX;
+		cpdlc_strlcpy(pos->name, info->wpt_name, sizeof (pos->name));
+	} else {
+		pos->set = false;
+	}
 }
 
 void

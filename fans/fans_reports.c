@@ -155,14 +155,14 @@ put_report_info(fans_t *box, const fans_report_t *report, int row, bool is_list)
 		    FMS_FONT_SMALL, "BACK ON ROUTE");
 		break;
 	case CPDLC_UM128_REPORT_LEAVING_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str));
+		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "LEAVING ALT");
 		fans_put_str(box, row, data_off, false, data_color,
 		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM129_REPORT_LEVEL_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str));
+		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "LEVEL ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,
@@ -175,15 +175,15 @@ put_report_info(fans_t *box, const fans_report_t *report, int row, bool is_list)
 		    FMS_FONT_SMALL, "%s", arg1->pos);
 		break;
 	case CPDLC_UM175_REPORT_REACHING_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str));
+		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "REACHING ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,
 		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM180_REPORT_REACHING_BLOCK_alt_TO_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str));
-		fans_print_alt(arg2, arg2_str, sizeof (arg2_str));
+		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
+		fans_print_alt(arg2, arg2_str, sizeof (arg2_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "BLOCK ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,

@@ -23,6 +23,8 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"
@@ -33,18 +35,160 @@
 #include "fans_scratchpad.h"
 #include "fans_vrfy.h"
 
-/*
+#define	VVI_CLB_DES_THRESH	300	/* fpm */
+#define	SAME_ALT_THRESH		100	/* ft */
+
 static void
 verify_pos_rep(fans_t *box)
 {
-	int l = 0;
-	char buf[1024];
+	int seg = 0;
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
+	unsigned l = 0;
+	char buf[1024] = {};
+	char pos_buf[64], alt_buf[8], spd_buf[8];
+	fms_pos_t pos;
+	fms_time_t tim;
+	fms_wind_t wind;
+	fms_temp_t temp;
+	cpdlc_arg_t spd, alt, cur_alt;
+	fms_wpt_info_t wpt;
+	float dist_NM;
+	unsigned flt_time_sec;
 
 	CPDLC_ASSERT(box != NULL);
 
-	APPEND_SNPRINTF(buf, l, "POSITION REPORT");
+	if (box->pos_rep.cur_pos.set) {
+		pos = box->pos_rep.cur_pos;
+	} else {
+		CPDLC_ASSERT(box->pos_rep.cur_pos_auto.set);
+		pos = box->pos_rep.cur_pos_auto;
+	}
+	if (box->pos_rep.alt.alt.alt != 0) {
+		cur_alt = box->pos_rep.alt;
+	} else {
+		CPDLC_ASSERT(box->pos_rep.alt_auto.alt.alt != 0);
+		cur_alt = box->pos_rep.alt_auto;
+	}
+	if (box->pos_rep.pos_time.set) {
+		tim = box->pos_rep.pos_time;
+	} else {
+		CPDLC_ASSERT(box->pos_rep.pos_time_auto.set);
+		tim = box->pos_rep.pos_time_auto;
+	}
+	fans_get_cur_spd(box, &spd);
+	fans_print_pos(&pos, pos_buf, sizeof (pos_buf), POS_PRINT_NORM_SPACE);
+	fans_print_alt(&cur_alt, alt_buf, sizeof (alt_buf), true);
+	fans_print_spd(&spd, spd_buf, sizeof (spd_buf), true);
+
+	APPEND_SNPRINTF(buf, l, "%02d%02dZ %s %s %s",
+	    tim.hrs, tim.mins, pos_buf, alt_buf, spd_buf);
+
+	if (box->pos_rep.rpt_wpt.name[0] != '\0')
+		pos = box->pos_rep.rpt_wpt;
+	else
+		pos = box->pos_rep.rpt_wpt_auto;
+	if (pos.name[0] != '\0') {
+		APPEND_SNPRINTF(buf, l, " PREV %s", pos.name);
+
+		if (box->pos_rep.wpt_time.set)
+			tim = box->pos_rep.wpt_time;
+		else
+			tim = box->pos_rep.wpt_time_auto;
+		if (tim.set) {
+			APPEND_SNPRINTF(buf, l, " %02d%02dZ",
+			    tim.hrs, tim.mins);
+		}
+
+		if (box->pos_rep.wpt_alt.alt.alt != 0)
+			alt = box->pos_rep.wpt_alt;
+		else
+			alt = box->pos_rep.wpt_alt_auto;
+		if (alt.alt.alt != 0) {
+			fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
+			APPEND_SNPRINTF(buf, l, " %s", alt_buf);
+		}
+		if (box->pos_rep.wpt_spd.spd.spd != 0)
+			spd = box->pos_rep.wpt_spd;
+		else
+			spd = box->pos_rep.wpt_spd_auto;
+		if (spd.spd.spd != 0) {
+			fans_print_spd(&spd, spd_buf, sizeof (spd_buf), true);
+			APPEND_SNPRINTF(buf, l, " %s", spd_buf);
+		}
+	}
+	if (box->pos_rep.nxt_fix.name[0] != '\0')
+		pos = box->pos_rep.nxt_fix;
+	else
+		pos = box->pos_rep.nxt_fix_auto;
+	if (pos.name[0] != '\0') {
+		APPEND_SNPRINTF(buf, l, " NEXT %s", pos.name);
+
+		if (box->pos_rep.nxt_fix_time.set)
+			tim = box->pos_rep.nxt_fix_time;
+		else
+			tim = box->pos_rep.nxt_fix_time_auto;
+		if (tim.set) {
+			APPEND_SNPRINTF(buf, l, " %02d%02dZ",
+			    tim.hrs, tim.mins);
+		}
+	}
+	if (box->pos_rep.nxt_fix1.name[0] != '\0')
+		pos = box->pos_rep.nxt_fix1;
+	else
+		pos = box->pos_rep.nxt_fix1_auto;
+	if (pos.name[0] != '\0')
+		APPEND_SNPRINTF(buf, l, " NEXT+1 %s", pos.name);
+
+	if (fans_get_dest_info(box, &wpt, &dist_NM, &flt_time_sec)) {
+		APPEND_SNPRINTF(buf, l, " DEST %s", wpt.wpt_name);
+
+		if (box->pos_rep.time_at_dest.set)
+			tim = box->pos_rep.time_at_dest;
+		else
+			tim = box->pos_rep.time_at_dest_auto;
+		if (tim.set) {
+			APPEND_SNPRINTF(buf, l, " ETA %02d%02dZ",
+			    tim.hrs, tim.mins);
+		}
+	}
+
+	if (box->pos_rep.clb_des.alt.alt != 0)
+		alt = box->pos_rep.clb_des;
+	else
+		alt = box->pos_rep.clb_des_auto;
+	if (alt.alt.alt != 0) {
+		fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
+		APPEND_SNPRINTF(buf, l, " %s %s",
+		    alt.alt.alt > cur_alt.alt.alt ? "CLB" : "DES", alt_buf);
+	}
+	if (fabs(box->pos_rep.off.nm) >= 0.5) {
+		APPEND_SNPRINTF(buf, l, " OFFSET %s%.0f",
+		    box->pos_rep.off.dir == CPDLC_DIR_LEFT ? "L" : "R",
+		    box->pos_rep.off.nm);
+	}
+
+	if (box->pos_rep.winds_aloft.set)
+		wind = box->pos_rep.winds_aloft;
+	else
+		wind = box->pos_rep.winds_aloft_auto;
+	if (wind.set)
+		APPEND_SNPRINTF(buf, l, " WIND %03d%03dKT", wind.deg, wind.spd);
+
+	if (box->pos_rep.temp.set)
+		temp = box->pos_rep.temp;
+	else
+		temp = box->pos_rep.temp_auto;
+	if (temp.set) {
+		APPEND_SNPRINTF(buf, l, " OAT %s%02d",
+		    temp.temp < 0 ? "M" : "", (int)fabs(temp.temp));
+	}
+
+	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM48_POS_REPORT_posreport, 0);
+	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
+	fans_req_add_common(box, msg);
+
+	fans_verify_msg(box, msg, "POS REP", FMS_PAGE_POS_REP, true);
 }
-*/
 
 static void
 set_rpt_wpt(fans_t *box, const fms_pos_t *pos)
@@ -81,14 +225,14 @@ set_cur_pos(fans_t *box, const fms_pos_t *pos)
 static bool
 can_verify_pos_rep(fans_t *box)
 {
-	CPDLC_ASSERT(box != NULL);
-	return (true);
-}
+	cpdlc_arg_t spd;
 
-static void
-verify_pos_rep(fans_t *box)
-{
-	CPDLC_UNUSED(box);
+	CPDLC_ASSERT(box != NULL);
+	return ((box->pos_rep.cur_pos.set || box->pos_rep.cur_pos_auto.set) &&
+	    (box->pos_rep.alt.alt.alt != 0 ||
+	    box->pos_rep.alt_auto.alt.alt != 0) &&
+	    (box->pos_rep.pos_time.set || box->pos_rep.pos_time_auto.set) &&
+	    fans_get_cur_spd(box, &spd));
 }
 
 static void
@@ -138,23 +282,23 @@ draw_page2(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "CURR POS");
 	fans_put_pos(box, LSK2_ROW, 0, false, &box->pos_rep.cur_pos,
-	    NULL, true);
+	    &box->pos_rep.cur_pos_auto, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "ALT");
-	fans_put_alt(box, LSK3_ROW, 0, false, &box->pos_rep.alt, NULL,
-	    true, true);
+	fans_put_alt(box, LSK3_ROW, 0, false, &box->pos_rep.alt,
+	    &box->pos_rep.alt_auto, true, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L4, "CLB/DES");
 	fans_put_alt(box, LSK4_ROW, 0, false, &box->pos_rep.clb_des,
-	    NULL, false, true);
+	    &box->pos_rep.clb_des_auto, false, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "POS TIME");
 	fans_put_time(box, LSK2_ROW, 0, true, &box->pos_rep.pos_time,
-	    NULL, true, false);
+	    &box->pos_rep.pos_time_auto, true, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "TIME AT DEST");
 	fans_put_time(box, LSK3_ROW, 0, true, &box->pos_rep.time_at_dest,
-	    NULL, false, false);
+	    &box->pos_rep.time_at_dest_auto, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "OFFSET");
 	fans_put_off(box, LSK4_ROW, 0, true, &box->pos_rep.off, NULL, false);
@@ -163,34 +307,92 @@ draw_page2(fans_t *box)
 void
 fans_pos_rep_init_cb(fans_t *box)
 {
-	fms_wpt_info_t wptinfo;
-
 	CPDLC_ASSERT(box != NULL);
 	/* The POS REP page can send freetext as well */
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
 	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
+}
 
-	if (fans_get_prev_wpt(box, &wptinfo)) {
-		fans_wptinfo2pos(&wptinfo, &box->pos_rep.rpt_wpt_auto);
-		fans_wptinfo2time(&wptinfo, &box->pos_rep.wpt_time_auto);
-		fans_wptinfo2alt(&wptinfo, &box->pos_rep.wpt_alt_auto);
-		fans_wptinfo2spd(&wptinfo, &box->pos_rep.wpt_spd_auto);
+static void
+update_auto_data(fans_t *box)
+{
+	fms_wpt_info_t wptinfo;
+	time_t now = time(NULL);
+	struct tm t = *gmtime(&now);
+	float cur_alt, sel_alt, vvi, dest_dist_NM;
+	unsigned dest_time_sec;
+
+	CPDLC_ASSERT(box != NULL);
+
+	(void)fans_get_prev_wpt(box, &wptinfo);
+	fans_wptinfo2pos(&wptinfo, &box->pos_rep.rpt_wpt_auto);
+	fans_wptinfo2time(&wptinfo, &box->pos_rep.wpt_time_auto);
+	fans_wptinfo2alt(&wptinfo, &box->pos_rep.wpt_alt_auto);
+	fans_wptinfo2spd(&wptinfo, &box->pos_rep.wpt_spd_auto);
+
+	(void)fans_get_next_wpt(box, &wptinfo);
+	fans_wptinfo2pos(&wptinfo, &box->pos_rep.nxt_fix_auto);
+	fans_wptinfo2time(&wptinfo, &box->pos_rep.nxt_fix_time_auto);
+
+	(void)fans_get_next_next_wpt(box, &wptinfo);
+	fans_wptinfo2pos(&wptinfo, &box->pos_rep.nxt_fix1_auto);
+
+	if (fans_get_dest_info(box, &wptinfo, &dest_dist_NM, &dest_time_sec)) {
+		time_t then = now + dest_time_sec;
+		struct tm *tm = gmtime(&then);
+
+		if (tm != NULL) {
+			box->pos_rep.time_at_dest_auto.set = true;
+			box->pos_rep.time_at_dest_auto.hrs = tm->tm_hour;
+			box->pos_rep.time_at_dest_auto.mins = tm->tm_min;
+		} else {
+			box->pos_rep.time_at_dest_auto.set = false;
+		}
+	} else {
+		box->pos_rep.time_at_dest_auto.set = false;
 	}
-	if (fans_get_next_wpt(box, &wptinfo)) {
-		fans_wptinfo2pos(&wptinfo, &box->pos_rep.nxt_fix_auto);
-		fans_wptinfo2time(&wptinfo, &box->pos_rep.nxt_fix_time_auto);
-	}
-	if (fans_get_next_next_wpt(box, &wptinfo))
-		fans_wptinfo2pos(&wptinfo, &box->pos_rep.nxt_fix1_auto);
 	fans_get_sat(box, &box->pos_rep.temp_auto);
 	fans_get_wind(box, &box->pos_rep.winds_aloft_auto);
+
+	if (fans_get_cur_pos(box, &box->pos_rep.cur_pos_auto.lat,
+	    &box->pos_rep.cur_pos_auto.lon)) {
+		box->pos_rep.cur_pos_auto.set = true;
+		box->pos_rep.cur_pos_auto.type = FMS_POS_LAT_LON;
+	} else {
+		memset(&box->pos_rep.cur_pos_auto, 0, sizeof (fms_pos_t));
+	}
+	cur_alt = fans_get_cur_alt(box);
+	if (!isnan(cur_alt)) {
+		box->pos_rep.alt_auto.alt.fl = false;
+		box->pos_rep.alt_auto.alt.alt = cur_alt;
+	} else {
+		memset(&box->pos_rep.alt_auto, 0, sizeof (cpdlc_arg_t));
+	}
+	box->pos_rep.pos_time_auto.set = true;
+	box->pos_rep.pos_time_auto.hrs = t.tm_hour;
+	box->pos_rep.pos_time_auto.mins = t.tm_min;
+
+	sel_alt = fans_get_sel_alt(box);
+	vvi = fans_get_cur_vvi(box);
+	if (!isnan(sel_alt) && !isnan(vvi) && !isnan(cur_alt) &&
+	    ((vvi >= VVI_CLB_DES_THRESH &&
+	    sel_alt > cur_alt + SAME_ALT_THRESH) ||
+	    (vvi <= -VVI_CLB_DES_THRESH &&
+	    sel_alt < cur_alt - SAME_ALT_THRESH))) {
+		box->pos_rep.clb_des_auto.alt.fl = false;
+		box->pos_rep.clb_des_auto.alt.alt = sel_alt;
+	} else {
+		memset(&box->pos_rep.clb_des_auto, 0, sizeof (cpdlc_arg_t));
+	}
 }
 
 void
 fans_pos_rep_draw_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
+
+	update_auto_data(box);
 
 	fans_set_num_subpages(box, 3);
 
@@ -236,7 +438,7 @@ fans_pos_rep_key_cb(fans_t *box, fms_key_t key)
 		    &box->pos_rep.wpt_spd_auto);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R3) {
 		fans_scratchpad_xfer_time(box, &box->pos_rep.nxt_fix_time,
-		    NULL);
+		    &box->pos_rep.nxt_fix_time_auto);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		fans_scratchpad_xfer_temp(box, &box->pos_rep.temp,
 		    &box->pos_rep.temp_auto);
@@ -246,13 +448,17 @@ fans_pos_rep_key_cb(fans_t *box, fms_key_t key)
 		fans_scratchpad_xfer_pos(box, &box->pos_rep.cur_pos,
 		    FMS_PAGE_POS_REP, set_cur_pos);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3) {
-		fans_scratchpad_xfer_alt(box, &box->pos_rep.alt, NULL);
+		fans_scratchpad_xfer_alt(box, &box->pos_rep.alt,
+		    &box->pos_rep.alt_auto);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer_alt(box, &box->pos_rep.clb_des, NULL);
+		fans_scratchpad_xfer_alt(box, &box->pos_rep.clb_des,
+		    &box->pos_rep.clb_des_auto);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.pos_time, NULL);
+		fans_scratchpad_xfer_time(box, &box->pos_rep.pos_time,
+		    &box->pos_rep.pos_time_auto);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R3) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.time_at_dest, NULL);
+		fans_scratchpad_xfer_time(box, &box->pos_rep.time_at_dest,
+		    &box->pos_rep.time_at_dest_auto);
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R4) {
 		fans_scratchpad_xfer_offset(box, &box->pos_rep.off, NULL);
 	} else if (key == FMS_KEY_LSK_L5) {

@@ -25,20 +25,25 @@
 
 #include <time.h>
 
+#include <zmq.h>
+
 #include <cpdlc_net_util.h>
 #include <cpdlc_string.h>
 
 #include <acfutils/delay_line.h>
 #include <acfutils/helpers.h>
 #include <acfutils/log.h>
+#include <acfutils/perf.h>
 #include <acfutils/thread.h>
 
 #include "xpintf.h"
+#include "xp-plugin/plugin_intf.h"
 
 #define	DEFAULT_XP_PORT		49000
 #define	RREF_FREQ		2
 #define	DATA_REQ_INTVAL		1000000	/* usec */
 #define	RREF_DATA_TIMEOUT	3000000	/* usec */
+#define	XP_PLUGIN_DATA_TIMEOUT	3	/* secs */
 #define	CHECK_FOURCC(buf, str) \
 	(((buf)[0] == (str)[0]) && ((buf)[1] == (str)[1]) && \
 	((buf)[2] == (str)[2]) && ((buf)[3] == (str)[3]))
@@ -82,6 +87,8 @@ static rpos_data_t rpos_data = {};
  * RREF data
  */
 enum {
+    RREF_LAT,
+    RREF_LON,
     RREF_SAT,
     RREF_IAS,
     RREF_MACH,
@@ -100,6 +107,8 @@ enum {
     NUM_RREFS
 };
 static const char *rref_names[NUM_RREFS] = {
+    [RREF_LAT] = "sim/flightmodel/position/latitude",
+    [RREF_LON] = "sim/flightmodel/position/longitude",
     [RREF_SAT] = "sim/cockpit2/temperature/outside_air_temp_degc",
     [RREF_IAS] = "sim/cockpit2/gauges/indicators/airspeed_kts_pilot",
     [RREF_MACH] = "sim/cockpit2/gauges/indicators/mach_pilot",
@@ -117,7 +126,7 @@ static const char *rref_names[NUM_RREFS] = {
     [RREF_ON_GROUND] = "sim/flightmodel2/gear/on_ground[0]"
 };
 static uint64_t rref_data_recv_t = 0;
-static uint8_t rref_data[4 * NUM_RREFS] = {};
+static uint8_t rref_data[sizeof (float) * NUM_RREFS] = {};
 
 static struct {
 	float	init;	/* kg */
@@ -131,12 +140,17 @@ static struct {
 
 static delay_line_t off_ground_delay;
 
+static void *zmq_ctx = NULL;
+static void *zmq_sock = NULL;
+static time_t xp_plugin_data_time = 0;
+static xp_plugin_data_t xp_plugin_data = {};
+
 static void send_data_cmd(const void *extra_buf, size_t extra_sz, ...)
     SENTINEL_ATTR;
 
-static bool rref_read_fp32(unsigned index, float *outval) UNUSED_ATTR;
+static bool rref_read(unsigned index, float *outval) UNUSED_ATTR;
 static bool
-rref_read_fp32(unsigned index, float *outval)
+rref_read(unsigned index, float *outval)
 {
 	ASSERT3U(index, <, NUM_RREFS);
 	ASSERT(outval != NULL);
@@ -146,22 +160,6 @@ rref_read_fp32(unsigned index, float *outval)
 		return (false);
 	}
 	*outval = *(float *)(&rref_data[index * 4]);
-	mutex_exit(&lock);
-	return (true);
-}
-
-static bool rref_read_int32(unsigned index, int32_t *outval) UNUSED_ATTR;
-static bool
-rref_read_int32(unsigned index, int32_t *outval)
-{
-	ASSERT3U(index, <, NUM_RREFS);
-	ASSERT(outval != NULL);
-	mutex_enter(&lock);
-	if (now > rref_data_recv_t + RREF_DATA_TIMEOUT) {
-		mutex_exit(&lock);
-		return (false);
-	}
-	*outval = *(int32_t *)(&rref_data[index * 4]);
 	mutex_exit(&lock);
 	return (true);
 }
@@ -233,6 +231,36 @@ disable_data(void)
 	}
 }
 
+static bool
+connect_zmq(void)
+{
+	ASSERT3P(zmq_ctx, ==, NULL);
+	zmq_ctx = zmq_ctx_new();
+	ASSERT(zmq_ctx != NULL);
+
+	ASSERT3P(zmq_sock, ==, NULL);
+	zmq_sock = zmq_socket(zmq_ctx, ZMQ_SUB);
+	ASSERT(zmq_sock != NULL);
+	VERIFY(zmq_connect(zmq_sock, XP_PLUGIN_SOCK_ADDR) != -1);
+	/* Listen for everything */
+	zmq_setsockopt(zmq_sock, ZMQ_SUBSCRIBE, NULL, 0);
+
+	return (true);
+}
+
+static void
+destroy_zmq(void)
+{
+	if (zmq_sock != NULL) {
+		zmq_close(zmq_sock);
+		zmq_sock = NULL;
+	}
+	if (zmq_ctx != NULL) {
+		zmq_ctx_destroy(zmq_ctx);
+		zmq_ctx = NULL;
+	}
+}
+
 bool
 xpintf_init(const char *host, int port)
 {
@@ -273,6 +301,8 @@ xpintf_init(const char *host, int port)
 		    cpdlc_get_last_socket_error());
 		goto errout;
 	}
+	if (!connect_zmq())
+		goto errout;
 
 	return (true);
 errout:
@@ -297,6 +327,7 @@ xpintf_fini(void)
 		freeaddrinfo(ai);
 		ai = NULL;
 	}
+	destroy_zmq();
 	mutex_destroy(&lock);
 }
 
@@ -350,10 +381,10 @@ drain_input(void)
 static void
 update_ground_data(void)
 {
-	int32_t on_ground;
+	float on_ground;
 
-	if (rref_read_int32(RREF_ON_GROUND, &on_ground)) {
-		if (on_ground)
+	if (rref_read(RREF_ON_GROUND, &on_ground)) {
+		if (on_ground != 0.0)
 			delay_line_push_imm_u64(&off_ground_delay, false);
 		else
 			delay_line_push_u64(&off_ground_delay, true);
@@ -367,8 +398,8 @@ update_fuel_data(double d_t)
 
 	ASSERT3F(d_t, >, 0);
 
-	if (rref_read_fp32(RREF_FUEL_TOT_INIT, &fuel_init) &&
-	    rref_read_fp32(RREF_FUEL_TOT_USED, &fuel_used)) {
+	if (rref_read(RREF_FUEL_TOT_INIT, &fuel_init) &&
+	    rref_read(RREF_FUEL_TOT_USED, &fuel_used)) {
 		if (!isnan(fuel_sys.init) && !isnan(fuel_sys.used) &&
 		    fuel_init == fuel_sys.init && fuel_used >= fuel_sys.used) {
 			float fuel1 = fuel_sys.init - fuel_sys.used;
@@ -396,6 +427,7 @@ xpintf_update(void)
 	int res;
 	uint64_t now_prev;
 	double d_t;
+	xp_plugin_data_t xp_data;
 
 	if (!inited)
 		return;
@@ -423,6 +455,14 @@ xpintf_update(void)
 			    cpdlc_get_last_socket_error());
 		}
 	} while (res == 1);
+	/*
+	 * Receive data from the plugin over a local ZeroMQ pub-sub socket.
+	 */
+	while (zmq_recv(zmq_sock, &xp_data, sizeof (xp_data), ZMQ_DONTWAIT) ==
+	    sizeof (xp_data)) {
+		xp_plugin_data = xp_data;
+		xp_plugin_data_time = time(NULL);
+	}
 
 	update_ground_data();
 	update_fuel_data(d_t);
@@ -445,27 +485,42 @@ xpintf_get_sat(int *temp_C)
 {
 	float temp;
 	ASSERT(temp_C != NULL);
-	if (!rref_read_fp32(RREF_SAT, &temp))
+	if (!rref_read(RREF_SAT, &temp))
 		return (false);
 	*temp_C = round(temp);
 	return (true);
 }
 
 bool
+xpintf_get_cur_pos(double *lat, double *lon)
+{
+	float lat_f, lon_f;
+
+	ASSERT(lat != NULL);
+	ASSERT(lon != NULL);
+	if (rref_read(RREF_LAT, &lat_f) && rref_read(RREF_LON, &lon_f)) {
+		*lat = lat_f;
+		*lon = lon_f;
+		return (true);
+	} else {
+		return (false);
+	}
+}
+
+bool
 xpintf_get_cur_spd(bool *mach, unsigned *spd)
 {
-	int32_t is_mach;
-	float spd_f32;
+	float is_mach, spd_f32;
 
 	ASSERT(mach != NULL);
 	ASSERT(spd != NULL);
 
-	if (rref_read_int32(RREF_IS_MACH, &is_mach)) {
+	if (rref_read(RREF_IS_MACH, &is_mach)) {
 		*mach = is_mach;
-		if (is_mach && rref_read_fp32(RREF_MACH, &spd_f32)) {
-			*spd = round(spd_f32 * 100);
+		if (is_mach && rref_read(RREF_MACH, &spd_f32)) {
+			*spd = round(spd_f32 * 1000);
 			return (true);
-		} else if (!is_mach && rref_read_fp32(RREF_IAS, &spd_f32)) {
+		} else if (!is_mach && rref_read(RREF_IAS, &spd_f32)) {
 			*spd = round(spd_f32);
 			return (true);
 		}
@@ -478,7 +533,7 @@ xpintf_get_cur_alt(void)
 {
 	float alt_ft;
 
-	if (rref_read_fp32(RREF_ALT, &alt_ft))
+	if (rref_read(RREF_ALT, &alt_ft))
 		return (round(alt_ft / 10.0) * 10.0);
 	return (NAN);
 }
@@ -487,7 +542,7 @@ float
 xpintf_get_cur_vvi(void)
 {
 	float vvi_fpm;
-	if (rref_read_fp32(RREF_VVI, &vvi_fpm))
+	if (rref_read(RREF_VVI, &vvi_fpm))
 		return (round(vvi_fpm / 50.0) * 50.0);
 	return (NAN);
 }
@@ -496,7 +551,7 @@ float
 xpintf_get_sel_alt(void)
 {
 	float alt_ft;
-	if (rref_read_fp32(RREF_ALT_SEL, &alt_ft))
+	if (rref_read(RREF_ALT_SEL, &alt_ft))
 		return (round(alt_ft / 100.0) * 100.0);
 	return (NAN);
 }
@@ -505,8 +560,8 @@ float
 xpintf_get_offset(void)
 {
 	float hdef_dots, nm_per_dot;
-	if (rref_read_fp32(RREF_GPS_HDEF_DOT, &hdef_dots) &&
-	    rref_read_fp32(RREF_GPS_NM_PER_DOT, &nm_per_dot)) {
+	if (rref_read(RREF_GPS_HDEF_DOT, &hdef_dots) &&
+	    rref_read(RREF_GPS_NM_PER_DOT, &nm_per_dot)) {
 		return (-hdef_dots * nm_per_dot);
 	}
 	return (NAN);
@@ -521,9 +576,9 @@ xpintf_get_wind(unsigned *deg_true, unsigned *knots)
 	ASSERT(knots != NULL);
 
 	if (delay_line_peek_u64(&off_ground_delay) &&
-	    rref_read_fp32(RREF_WIND_DEG_MAG, &deg_mag) &&
-	    rref_read_fp32(RREF_WIND_SPD_KT, &spd_kt) &&
-	    rref_read_fp32(RREF_MAGVAR, &magvar)) {
+	    rref_read(RREF_WIND_DEG_MAG, &deg_mag) &&
+	    rref_read(RREF_WIND_SPD_KT, &spd_kt) &&
+	    rref_read(RREF_MAGVAR, &magvar)) {
 		*deg_true = round(deg_mag - magvar);
 		*knots = round(spd_kt);
 		return (true);
@@ -546,4 +601,53 @@ xpintf_get_fuel(unsigned *hours, unsigned *mins)
 	*mins = (secs - (*hours) * 3600) / 60.0;
 
 	return (true);
+}
+
+static bool
+get_wpt_common(const fms_wpt_info_t *xp_wpt, fms_wpt_info_t *info)
+{
+	ASSERT(xp_wpt != NULL);
+	ASSERT(info != NULL);
+	if (time(NULL) > xp_plugin_data_time + XP_PLUGIN_DATA_TIMEOUT)
+		return (false);
+	*info = *xp_wpt;
+	return (true);
+}
+
+bool
+xpintf_get_prev_wpt(fms_wpt_info_t *info)
+{
+	ASSERT(info != NULL);
+	return (get_wpt_common(&xp_plugin_data.prev_wpt, info));
+}
+
+bool
+xpintf_get_next_wpt(fms_wpt_info_t *info)
+{
+	ASSERT(info != NULL);
+	return (get_wpt_common(&xp_plugin_data.nxt_wpt, info));
+}
+
+bool
+xpintf_get_next_next_wpt(fms_wpt_info_t *info)
+{
+	ASSERT(info != NULL);
+	return (get_wpt_common(&xp_plugin_data.nxt_p1_wpt, info));
+}
+
+bool
+xpintf_get_dest_info(fms_wpt_info_t *info, float *dist_NM,
+    unsigned *flt_time_sec)
+{
+	ASSERT(info != NULL);
+	ASSERT(dist_NM != NULL);
+	ASSERT(flt_time_sec != NULL);
+
+	if (get_wpt_common(&xp_plugin_data.dest_wpt, info)) {
+		*dist_NM = MET2NM(xp_plugin_data.dest_dist);
+		*flt_time_sec = xp_plugin_data.dest_flt_time;
+		return (true);
+	} else {
+		return (false);
+	}
 }

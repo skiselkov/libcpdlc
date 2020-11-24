@@ -37,19 +37,27 @@ else
 		    -framework CoreAudio \
 		    -framework AudioUnit
 	else
-		PLATFORM_LIBS += -lopengl32 -mwindows
+		PLATFORM_LIBS = -lopengl32 -mwindows
 	endif
 endif
 
 BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
 PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib --static-openal
+ZEROMQ=zmq/zeromq-$(PLATFORM_NAME)/install
 
 CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
-	$(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) $(PKG_CONFIG_DEPS_FLAGS) --cflags) \
+    $(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
+    $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
+    $(PKG_CONFIG_DEPS_FLAGS) --cflags)
 
 LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
-	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) $(PKG_CONFIG_DEPS_FLAGS) --libs) \
+    $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
+    $(PKG_CONFIG_DEPS_FLAGS) --libs) \
+
+CFLAGS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
+    --cflags libzmq)
+LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
+    --libs libzmq)
 
 ifeq ($(PLATFORM_NAME),win-64)
 	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)

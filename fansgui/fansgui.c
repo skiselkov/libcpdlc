@@ -174,6 +174,7 @@ static void msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids,
     unsigned n);
 
 static void get_time(void *userinfo, unsigned *hours, unsigned *mins);
+static bool get_cur_pos(void *userinfo, double *lat, double *lon);
 static bool get_cur_spd(void *userinfo, bool *mach, unsigned *spd);
 static float get_cur_alt(void *userinfo);
 static float get_cur_vvi(void *userinfo);
@@ -182,11 +183,17 @@ static bool get_sat(void *userinfo, int *temp);
 static bool get_wind(void *userinfo, unsigned *deg_true, unsigned *knots);
 static float get_offset(void *userinfo);
 static bool get_fuel(void *userinfo, unsigned *hours, unsigned *mins);
+static bool get_prev_wpt(void *userinfo, fms_wpt_info_t *info);
+static bool get_next_wpt(void *userinfo, fms_wpt_info_t *info);
+static bool get_next_next_wpt(void *userinfo, fms_wpt_info_t *info);
+static bool get_dest_info(void *userinfo, fms_wpt_info_t *info,
+    float *dist_NM, unsigned *flt_dur_sec);
 
 static const fans_funcs_t funcs = {
     .get_flt_id = get_auto_flt_id,
     .msgs_updated = msgs_updated_cb,
     .get_time = get_time,
+    .get_cur_pos = get_cur_pos,
     .get_cur_spd = get_cur_spd,
     .get_cur_alt = get_cur_alt,
     .get_cur_vvi = get_cur_vvi,
@@ -194,7 +201,11 @@ static const fans_funcs_t funcs = {
     .get_sat = get_sat,
     .get_wind = get_wind,
     .get_offset = get_offset,
-    .get_fuel = get_fuel
+    .get_fuel = get_fuel,
+    .get_prev_wpt = get_prev_wpt,
+    .get_next_wpt = get_next_wpt,
+    .get_next_next_wpt = get_next_next_wpt,
+    .get_dest_info = get_dest_info
 };
 
 static void
@@ -213,6 +224,15 @@ get_time(void *userinfo, unsigned *hours, unsigned *mins)
 	tm = gmtime(&now);
 	*hours = tm->tm_hour;
 	*mins = tm->tm_min;
+}
+
+static bool
+get_cur_pos(void *userinfo, double *lat, double *lon)
+{
+	UNUSED(userinfo);
+	ASSERT(lat != NULL);
+	ASSERT(lon != NULL);
+	return (xpintf_get_cur_pos(lat, lon));
 }
 
 static bool
@@ -278,6 +298,41 @@ get_fuel(void *userinfo, unsigned *hours, unsigned *mins)
 {
 	UNUSED(userinfo);
 	return (xpintf_get_fuel(hours, mins));
+}
+
+static bool
+get_prev_wpt(void *userinfo, fms_wpt_info_t *info)
+{
+	UNUSED(userinfo);
+	ASSERT(info != NULL);
+	return (xpintf_get_prev_wpt(info));
+}
+
+static bool
+get_next_wpt(void *userinfo, fms_wpt_info_t *info)
+{
+	UNUSED(userinfo);
+	ASSERT(info != NULL);
+	return (xpintf_get_next_wpt(info));
+}
+
+static bool
+get_next_next_wpt(void *userinfo, fms_wpt_info_t *info)
+{
+	UNUSED(userinfo);
+	ASSERT(info != NULL);
+	return (xpintf_get_next_next_wpt(info));
+}
+
+static bool
+get_dest_info(void *userinfo, fms_wpt_info_t *info, float *dist_NM,
+    unsigned *flt_time_sec)
+{
+	UNUSED(userinfo);
+	ASSERT(info != NULL);
+	ASSERT(dist_NM != NULL);
+	ASSERT(flt_time_sec != NULL);
+	return (xpintf_get_dest_info(info, dist_NM, flt_time_sec));
 }
 
 static void

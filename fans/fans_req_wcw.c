@@ -168,7 +168,7 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		const char *error;
 
 		memset(&arg, 0, sizeof (arg));
-		fans_print_alt(&box->wcw_req.alt, buf, sizeof (buf));
+		fans_print_alt(&box->wcw_req.alt, buf, sizeof (buf), false);
 		fans_scratchpad_xfer(box, buf, sizeof (buf), true);
 		if (strlen(buf) == 0) {
 			memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));

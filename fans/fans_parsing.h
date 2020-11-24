@@ -36,6 +36,7 @@ extern "C" {
 
 typedef enum {
 	POS_PRINT_NORM,
+	POS_PRINT_NORM_SPACE,
 	POS_PRINT_PRETTY,
 	POS_PRINT_COMPACT
 } pos_print_style_t;
@@ -72,8 +73,8 @@ const char *fans_delete_wind(fans_t *box, void *userinfo);
 
 const char *fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo);
 
-int fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap);
-int fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap);
+int fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units);
+int fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool units);
 int fans_print_off(const fms_off_t *off, char *buf, size_t cap);
 
 void fans_print_pos(const fms_pos_t *pos, char *buf, size_t cap,

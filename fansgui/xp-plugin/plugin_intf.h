@@ -23,39 +23,29 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef	_XPINTF_H_
-#define	_XPINTF_H_
+#ifndef	_LIBCPDLC_PLUGIN_INTF_H_
+#define	_LIBCPDLC_PLUGIN_INTF_H_
 
-#include <stdbool.h>
-
-#include "../fans/fans.h"
+#include "../../fans/fans.h"
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-bool xpintf_init(const char *host, int port);
-void xpintf_fini(void);
-void xpintf_update(void);
+/* ZeroMQ pub-sub localhost port */
+#define	XP_PLUGIN_SOCK_ADDR	"tcp://127.0.0.1:7087"
 
-bool xpintf_get_time(unsigned *hours, unsigned *mins);
-bool xpintf_get_sat(int *temp_C);
-bool xpintf_get_cur_pos(double *lat, double *lon);
-bool xpintf_get_cur_spd(bool *mach, unsigned *spd);
-float xpintf_get_cur_alt(void);
-float xpintf_get_cur_vvi(void);
-float xpintf_get_sel_alt(void);
-float xpintf_get_offset(void);
-bool xpintf_get_wind(unsigned *deg_true, unsigned *knots);
-bool xpintf_get_fuel(unsigned *hours, unsigned *mins);
-bool xpintf_get_prev_wpt(fms_wpt_info_t *info);
-bool xpintf_get_next_wpt(fms_wpt_info_t *info);
-bool xpintf_get_next_next_wpt(fms_wpt_info_t *info);
-bool xpintf_get_dest_info(fms_wpt_info_t *info, float *dist_NM,
-    unsigned *flt_time_sec);
+typedef struct {
+	fms_wpt_info_t	dest_wpt;
+	double		dest_dist;	/* meters */
+	double		dest_flt_time;	/* seconds to reach dest */
+	fms_wpt_info_t	prev_wpt;
+	fms_wpt_info_t	nxt_wpt;
+	fms_wpt_info_t	nxt_p1_wpt;
+} xp_plugin_data_t;
 
 #ifdef	__cplusplus
 }
 #endif
 
-#endif	/* _XPINTF_H_ */
+#endif	/* _LIBCPDLC_PLUGIN_INTF_H_ */

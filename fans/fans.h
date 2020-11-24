@@ -26,7 +26,7 @@
 #ifndef	_LIBCPDLC_FANS_H_
 #define	_LIBCPDLC_FANS_H_
 
-#include "cpdlc_msglist.h"
+#include "../src/cpdlc_msglist.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -91,22 +91,26 @@ typedef struct {
 } fms_char_t;
 
 typedef struct {
-	char		wpt_name[32];
-	bool		time_set;
+	char		wpt_name[16];
+	float		lat, lon;	/* degrees, set to NAN if unknown */
+	bool		time_set;	/* are the hrs and mins fields set? */
 	unsigned	hrs, mins;
-	bool		alt_set;
+	bool		alt_set;	/* is the alt field set? */
 	bool		alt_fl;
 	int		alt_ft;
-	bool		spd_set;
+	bool		spd_set;	/* is the spd field set? */
 	bool		spd_mach;
 	unsigned	spd;
 } fms_wpt_info_t;
 
 typedef bool (*fans_get_flt_id_t)(void *userinfo, char flt_id[8]);
+typedef bool (*fans_get_geo_pos_t)(void *userinfo, double *lat, double *lon);
 typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd_KIAS);
 typedef float (*fans_get_alt_t)(void *userinfo);
 typedef float (*fans_get_vvi_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
+typedef bool (*fans_get_dest_info_t)(void *userinfo, fms_wpt_info_t *info,
+    float *dist_NM, unsigned *flt_time_sec);
 typedef float (*fans_get_offset_t)(void *userinfo);
 typedef bool (*fans_get_fuel_t)(void *userinfo, unsigned *hrs, unsigned *mins);
 typedef bool (*fans_get_temp_t)(void *userinfo, int *temp_C);
@@ -119,6 +123,7 @@ typedef bool (*fans_get_souls_t)(void *userinfo, unsigned *souls);
 typedef struct {
 	fans_get_flt_id_t	get_flt_id;
 	cpdlc_get_time_func_t	get_time;
+	fans_get_geo_pos_t	get_cur_pos;
 	fans_get_spd_t		get_cur_spd;
 	fans_get_alt_t		get_cur_alt;
 	fans_get_vvi_t		get_cur_vvi;
@@ -126,7 +131,7 @@ typedef struct {
 	fans_get_wpt_info_t	get_prev_wpt;
 	fans_get_wpt_info_t	get_next_wpt;
 	fans_get_wpt_info_t	get_next_next_wpt;
-	fans_get_wpt_info_t	get_dest_wpt;
+	fans_get_dest_info_t	get_dest_info;
 	fans_get_offset_t	get_offset;
 	fans_get_fuel_t		get_fuel;
 	fans_get_temp_t		get_sat;

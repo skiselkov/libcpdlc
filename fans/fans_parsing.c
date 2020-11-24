@@ -172,12 +172,12 @@ fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
-		int l = fans_print_alt(outarg, str, READ_FUNC_BUF_SZ);
+		int l = fans_print_alt(outarg, str, READ_FUNC_BUF_SZ, false);
 		if (outarg[1].alt.alt != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
 			fans_print_alt(&outarg[1], &str[l],
-			    READ_FUNC_BUF_SZ - l);
+			    READ_FUNC_BUF_SZ - l, false);
 		}
 	}
 }
@@ -263,12 +263,12 @@ fans_read_spd_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
-		int l = fans_print_spd(outarg, str, READ_FUNC_BUF_SZ);
+		int l = fans_print_spd(outarg, str, READ_FUNC_BUF_SZ, false);
 		if (outarg[1].spd.spd != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
 			fans_print_spd(&outarg[1], &str[l],
-			    READ_FUNC_BUF_SZ - l);
+			    READ_FUNC_BUF_SZ - l, false);
 		}
 	}
 }
@@ -365,21 +365,27 @@ fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 }
 
 int
-fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap)
+fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units)
 {
 	CPDLC_ASSERT(arg != NULL);
 	if (arg->alt.fl)
 		return (snprintf(str, cap, "FL%d", arg->alt.alt / 100));
-	return (snprintf(str, cap, "%d", arg->alt.alt));
+	return (snprintf(str, cap, "%d%s", arg->alt.alt, units ? "FT" : ""));
 }
 
 int
-fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap)
+fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool units)
 {
 	CPDLC_ASSERT(arg != NULL);
-	if (arg->spd.mach)
-		return (snprintf(str, cap, "M%d", arg->spd.spd / 10));
-	return (snprintf(str, cap, "%d", arg->spd.spd));
+	if (arg->spd.mach) {
+		if (units)
+			return (snprintf(str, cap, "M%03d", arg->spd.spd / 10));
+		else
+			return (snprintf(str, cap, "M%02d", arg->spd.spd / 10));
+	} else {
+		return (snprintf(str, cap, "%03d%s", arg->spd.spd,
+		    units ? "KT" : ""));
+	}
 }
 
 int
@@ -445,6 +451,9 @@ fans_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
 			    ns, lat, lat_mins, ew, lon, lon_mins);
 		} else if (style == POS_PRINT_COMPACT) {
 			snprintf(buf, bufsz, "%c%02d%c%03d", ns, lat, ew, lon);
+		} else if (style == POS_PRINT_NORM_SPACE) {
+			snprintf(buf, bufsz, "%c%02d%05.2f %c%03d%05.2f",
+			    ns, lat, lat_mins, ew, lon, lon_mins);
 		} else {
 			snprintf(buf, bufsz, "%c%02d%05.2f%c%03d%05.2f",
 			    ns, lat, lat_mins, ew, lon, lon_mins);

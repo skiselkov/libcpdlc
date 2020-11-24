@@ -74,9 +74,8 @@ verify_emer(fans_t *box)
 	des = (box->emer.des.alt.alt != 0 ? box->emer.des : box->emer.des_auto);
 	if (des.alt.alt != 0) {
 		char altbuf[128];
-		fans_print_alt(&des, altbuf, sizeof (altbuf));
-		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s%s.", altbuf,
-		    des.alt.fl ? "" : " FT");
+		fans_print_alt(&des, altbuf, sizeof (altbuf), true);
+		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s.", altbuf);
 	}
 	if (box->emer.off.nm != 0) {
 		APPEND_SNPRINTF(buf, l, " OFFSETTING %.0f NM %c OF ROUTE.",

@@ -1,0 +1,132 @@
+#!/bin/bash
+#
+# Copyright 2020 Saso Kiselkov
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+
+function build_dep() {
+	PLATFORM="$1"
+	CONFOPTS="$2"
+	TARBALL="$3"
+	PRODNAME="$4"
+	PRODFILE="$5"
+	PATCHFILES="$6"
+
+	if [[ "$PLATFORM" == "win-64" ]] && [[ "$minimal" == 1 ]]; then
+		return
+	fi
+
+	if [[ "$SRCDIR" = "" ]]; then
+		SRCDIR="$(basename "${TARBALL/%.tar.*/}")"
+		SRCDIR="$(basename "${SRCDIR/%.zip/}")"
+	fi
+
+	if [[ "$BUILDDIR" = "" ]]; then
+		BUILDDIR="$PRODNAME-$PLATFORM"
+	fi
+
+	if [ -n "$do_clean" ]; then
+		echo rm -rf "$BUILDDIR"
+		rm -rf "$BUILDDIR"
+		SRCDIR=""
+		BUILDDIR=""
+		return
+	fi
+
+	case $(uname) in
+	Linux)
+		NCPUS=$(( $(grep 'processor[[:space:]]\+:' /proc/cpuinfo \
+		    | wc -l) + 1 ))
+		;;
+	Darwin)
+		NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
+		CFLAGS_ADDTL="-mmacosx-version-min=10.9"
+		CXXFLAGS_ADDTL="-mmacosx-version-min=10.9"
+		LDFLAGS_ADDTL="-mmacosx-version-min=10.9"
+		;;
+	esac
+
+	export PKG_CONFIG_PATH=$(echo "$PKG_CONFIG_PATH_IN" | \
+	    sed "s/{PLATFORM}/$PLATFORM/g")
+
+	if ! [ -d "$SRCDIR" ]; then
+		case "${TARBALL##*.}" in
+		bz2)	tar -xjf "$TARBALL" || exit 1 ;;
+		gz)	tar -xzf "$TARBALL" || exit 1 ;;
+		xz)	tar -xJf "$TARBALL" || exit 1 ;;
+		zip)	unzip -o "$TARBALL" || exit 1 ;;
+		*)
+			echo "Unknown archive extension of $TARBALL" >&2
+			exit 1
+			;;
+		esac
+
+		if [ -n "$PATCHFILES" ]; then
+			for PATCHFILE in $PATCHFILES; do
+				( cd "$SRCDIR" && patch -p1 < "../$PATCHFILE" )
+			done
+		fi
+	fi
+	if [ -f "$BUILDDIR/$PRODFILE" ] && \
+	    [ "$BUILDDIR/$PRODFILE" -nt "$TARBALL" ]; then
+		SRCDIR=""
+		BUILDDIR=""
+		return
+	fi
+	(
+		if [[ "$BUILDDIR" != "$SRCDIR" ]]; then
+			rm -rf "$BUILDDIR"
+			mkdir "$BUILDDIR"
+		fi
+		cd "$BUILDDIR"
+
+		if [ -n "$CUSTPREPCMD" ]; then
+			eval "$CUSTPREPCMD" || exit 1
+		fi
+		if [[ "$PLATFORM" = "linux-32" ]] || \
+		    [[ "$PLATFORM" = "linux-64" ]]; then
+			FPIC="-fPIC"
+		fi
+
+		# Linux: for some reason, we need to specify an optimization
+		# level or we won't get lstat/fstat correctly defined. WTF...
+		eval CFLAGS="-fvisibility=hidden\\ -O2\\ $FPIC\\ ${CFLAGS}\\ \
+$CFLAGS_ADDTL" \
+		CXXFLAGS="-fvisibility=hidden\\ -O2\\ $FPIC\\ ${CXXFLAGS}\\ \
+$CXXFLAGS_ADDTL" \
+		LDFLAGS="-fvisibility=hidden\\ $FPIC\\ ${LDFLAGS}\\ \
+$LDFLAGS_ADDTL" \
+		    "../$SRCDIR/configure" --prefix="$(pwd)/$INSTALL_DIR" \
+		    ${CONFOPTS} || exit 1
+
+		if [ -n "$CUSTPREMAKECMD" ]; then
+			eval "$CUSTPREMAKECMD" || exit 1
+		fi
+
+		make -j $NCPUS || exit 1
+		if [ -z "$NOINSTALL" ]; then
+			make install || exit 1
+		fi
+	)
+	SRCDIR=""
+	BUILDDIR=""
+}

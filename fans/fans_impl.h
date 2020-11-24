@@ -265,10 +265,15 @@ struct fans_s {
 			fms_wind_t	winds_aloft;
 			fms_wind_t	winds_aloft_auto;
 			fms_pos_t	cur_pos;
+			fms_pos_t	cur_pos_auto;
 			fms_time_t	pos_time;
+			fms_time_t	pos_time_auto;
 			cpdlc_arg_t	alt;
+			cpdlc_arg_t	alt_auto;
 			fms_time_t	time_at_dest;
+			fms_time_t	time_at_dest_auto;
 			cpdlc_arg_t	clb_des;
+			cpdlc_arg_t	clb_des_auto;
 			fms_off_t	off;
 		} pos_rep;
 	};
@@ -396,6 +401,7 @@ void fans_put_step_at(fans_t *box, const fms_step_at_t *step_at);
 void fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
+bool fans_get_cur_pos(const fans_t *box, double *lat, double *lon);
 bool fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
 float fans_get_cur_alt(const fans_t *box);
 float fans_get_cur_vvi(const fans_t *box);
@@ -403,7 +409,8 @@ float fans_get_sel_alt(const fans_t *box);
 bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
-bool fans_get_dest_wpt(const fans_t *box, fms_wpt_info_t *info);
+bool fans_get_dest_info(const fans_t *box, fms_wpt_info_t *info,
+    float *dist_NM, unsigned *flt_dur_sec);
 float fans_get_offset(const fans_t *box);
 bool fans_get_fuel(const fans_t *box, unsigned *hrs, unsigned *mins);
 void fans_get_sat(const fans_t *box, fms_temp_t *temp);

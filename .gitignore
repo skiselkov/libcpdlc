@@ -15,6 +15,14 @@ fansgui/fansgui
 fansgui/fansgui.exe
 fansgui/fansgui-app.zip
 fansgui/user.conf
+fansgui/zmq/zeromq-4.3.1
+fansgui/zmq/zeromq-linux-64
+fansgui/zmq/zeromq-win-64
+fansgui/xp-plugin/CMakeCache.txt
+fansgui/xp-plugin/CMakeFiles
+fansgui/xp-plugin/Makefile
+fansgui/xp-plugin/cmake_install.cmake
+fansgui/xp-plugin/fans.plugin
 test/build/CMakeCache.txt
 test/build/CMakeFiles/
 test/build/Makefile
