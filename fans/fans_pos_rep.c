@@ -179,8 +179,8 @@ verify_pos_rep(fans_t *box)
 	else
 		temp = box->pos_rep.temp_auto;
 	if (temp.set) {
-		APPEND_SNPRINTF(buf, l, " OAT %s%02d",
-		    temp.temp < 0 ? "M" : "", (int)fabs(temp.temp));
+		APPEND_SNPRINTF(buf, l, " OAT %s%02d", temp.temp < 0 ? "M" : "",
+		    temp.temp >= 0 ? temp.temp : -temp.temp);
 	}
 
 	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM48_POS_REPORT_posreport, 0);
