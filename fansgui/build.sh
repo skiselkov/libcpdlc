@@ -53,6 +53,13 @@ Linux)
 	;;
 Darwin)
 	NCPUS=$(( $(sysctl -n hw.ncpu) + 1 ))
+	(
+	    cd xp-plugin
+	    rm -rf CMakeCache.txt fans.plugin
+	    cmake .
+	    make clean
+	    make -j${NCPUS}
+	) || exit 1
 	make clean
 	make -j${NCPUS}
 	make clean

@@ -19,6 +19,7 @@ fansgui/fansgui-mac-64.tar.gz
 fansgui/user.conf
 fansgui/zmq/zeromq-4.3.1
 fansgui/zmq/zeromq-linux-64
+fansgui/zmq/zeromq-mac-64
 fansgui/zmq/zeromq-win-64
 fansgui/xp-plugin/CMakeCache.txt
 fansgui/xp-plugin/CMakeFiles

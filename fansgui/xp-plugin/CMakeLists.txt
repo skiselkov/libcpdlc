@@ -22,7 +22,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.9)
 
 project(fans_plugin)
 
@@ -57,6 +57,17 @@ string(REGEX REPLACE "\n$" "" ACFUTILS_CFLAGS "${ACFUTILS_CFLAGS}")
 execute_process(COMMAND ${LIBACFUTILS}/pkg-config-deps ${PLAT_NAME} ${PKG_CONFIG_DEPS_OPTS} --libs
     OUTPUT_VARIABLE ACFUTILS_LIBS)
 string(REGEX REPLACE "\n$" "" ACFUTILS_LIBS "${ACFUTILS_LIBS}")
+
+set(GNUTLS "${CMAKE_SOURCE_DIR}/../../gnutls-3.6.11.1/install_tgt")
+if(UNIX)
+	execute_process(COMMAND PKG_CONFIG_PATH="${GNUTLS}/lib/pkgconfig" pkg-config --cflags --static gnutls
+	    OUTPUT_VARIABLE GNUTLS_CFLAGS)
+	string(REGEX REPLACE "\n$" "" GNUTLS_CFLAGS "${GNUTLS_CFLAGS}")
+
+	execute_process(COMMAND PKG_CONFIG_PATH="${GNUTLS}/lib/pkgconfig" pkg-config --libs --static gnutls
+	    OUTPUT_VARIABLE GNUTLS_LIBS)
+	string(REGEX REPLACE "\n$" "" GNUTLS_LIBS "${GNUTLS_LIBS}")
+endif()
 
 execute_process(COMMAND git describe --abbrev=0 --tags
     OUTPUT_VARIABLE PLUGIN_VERSION)
@@ -115,6 +126,7 @@ if(WIN32)
 	)
 else()
 	target_include_directories(fans_plugin PUBLIC
+	    "${GNUTLS}/include"
 	    "${ZEROMQ}/include"
 	    ${ACFUTILS_INCLUDES}
 	    ${XP_SDK_INCLUDES}
@@ -124,6 +136,7 @@ endif()
 target_link_libraries(fans_plugin
     ${ACFUTILS_LIBRARY}
     ${ACFUTILS_LIBS}
+    ${GNUTLS_LIBS}
     ${XPLM_LIBRARY}
     ${ZEROMQ_LIBRARY}
     ${PTHREAD_LIBRARY}
