@@ -24,6 +24,14 @@
 
 include ../Makefile.com
 
+DIST_RESOURCES = \
+    sample-client.conf \
+    fans_alert.wav \
+    fansgui.png \
+    MCDU.png \
+    MCDU_small.png \
+    $(wildcard ../ca_cert.pem)
+
 ifeq ($(PLATFORM_NAME),linux-64)
 	PLATFORM_LIBS = -lGL -lX11 -ldl
 else
@@ -40,6 +48,7 @@ else
 	else
 		# iphlpapi is needed for ZeroMQ
 		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows
+		EXE_RESOURCES = fansgui.res
 	endif
 endif
 
@@ -106,7 +115,7 @@ all : $(OUTBIN)
 
 OUTDIR=fansgui-$(PLATFORM_NAME)
 
-$(OUTBIN) : $(OBJS)
+$(OUTBIN) : $(OBJS) $(EXE_RESOURCES)
 	$(HOSTCXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 	rm -rf $(OUTDIR)
 	mkdir $(OUTDIR)
@@ -115,19 +124,11 @@ ifeq ($(PLATFORM_NAME),mac-64)
 	mkdir -p $(OUTDIR)/fansgui.app/Contents/Resources \
 	    $(OUTDIR)/fansgui.app/Contents/MacOS
 	cp Info.plist $(OUTDIR)/fansgui.app/Contents
-	cp sample-client.conf \
-	    fans_alert.wav \
-	    $(wildcard *.png) \
-	    $(wildcard ../ca_cert.pem) \
-	    fansgui-icon.icns \
+	cp $(DIST_RESOURCES) fansgui-icon.icns \
 	    $(OUTDIR)/fansgui.app/Contents/Resources
 	cp $(OUTBIN) $(OUTDIR)/fansgui.app/Contents/MacOS
 else
-	cp sample-client.conf \
-	    fans_alert.wav \
-	    $(wildcard *.png) \
-	    $(wildcard ../ca_cert.pem) \
-	    $(OUTDIR)
+	cp $(DIST_RESOURCES) $(OUTDIR)
 	cp $(OUTBIN) $(OUTDIR)
 	strip $(OUTDIR)/$(OUTBIN)
 endif

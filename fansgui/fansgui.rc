@@ -1,0 +1,25 @@
+id ICON "fansgui-icon.ico"
+
+1 VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName", "The libcpdlc project"
+      VALUE "FileDescription", "FANS CPDLC client for a libcpdlc server"
+      VALUE "FileVersion", "1.0"
+      VALUE "InternalName", "fansgui"
+      VALUE "LegalCopyright", "Copyright 2020 Saso Kiselkov"
+      VALUE "OriginalFilename", "fansgui.exe"
+      VALUE "ProductName", "FANSgui"
+      VALUE "ProductVersion", "1.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END

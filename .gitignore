@@ -14,6 +14,7 @@ fansgui/client.conf
 fansgui/cpdlc_cert.pem
 fansgui/fansgui
 fansgui/fansgui.exe
+fansgui/fansgui.res
 fansgui/fansgui-win-64.zip
 fansgui/fansgui-linux-64.tar.gz
 fansgui/fansgui-mac-64.dmg

@@ -25,5 +25,8 @@
 %.o : %.c
 	$(HOSTCC) $(CFLAGS) -c -o $@ $^
 
+%.res : %.rc
+	x86_64-w64-mingw32-windres $^ -O coff -o $@
+
 ../libwebsockets/lib/libwebsockets.a :
 	( cd ../libwebsockets && cmake . && make )
