@@ -122,7 +122,6 @@ ifeq ($(PLATFORM_NAME),mac-64)
 	    fansgui-icon.icns \
 	    $(OUTDIR)/fansgui.app/Contents/Resources
 	cp $(OUTBIN) $(OUTDIR)/fansgui.app/Contents/MacOS
-	strip $(OUTDIR)/fansgui.app/Contents/MacOS/$(OUTBIN)
 else
 	cp sample-client.conf \
 	    fans_alert.wav \
