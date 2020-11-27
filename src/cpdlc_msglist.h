@@ -64,11 +64,14 @@ CPDLC_API void cpdlc_msglist_free(cpdlc_msglist_t *msglist);
 
 CPDLC_API void cpdlc_msglist_update(cpdlc_msglist_t *msglist);
 
-CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
-    cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist,
     bool ignore_closed, time_t timeout, cpdlc_msg_thr_id_t *thr_ids,
     unsigned *cap);
+CPDLC_API bool cpdlc_msglist_thr_id_exists(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
+
+CPDLC_API cpdlc_msg_thr_id_t cpdlc_msglist_send(cpdlc_msglist_t *msglist,
+    cpdlc_msg_t *msg, cpdlc_msg_thr_id_t thr_id);
 CPDLC_API bool cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist,
@@ -90,6 +93,8 @@ CPDLC_API void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id, unsigned msg_nr, const cpdlc_msg_t **msg_p,
     cpdlc_msg_token_t *token_p, unsigned *hours_p, unsigned *mins_p,
     bool *is_sent_p);
+CPDLC_API bool cpdlc_msglist_get_remote_callsign(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id, char callsign[CPDLC_CALLSIGN_LEN]);
 
 CPDLC_API void cpdlc_msglist_set_userinfo(cpdlc_msglist_t *msglist,
     void *userinfo);

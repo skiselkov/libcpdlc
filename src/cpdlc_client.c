@@ -152,7 +152,7 @@ struct cpdlc_client_s {
 		bool			new_msgs;
 	} pollinfo;
 #else	/* !CPDLC_CLIENT_LWS */
-	cpdlc_socktype_t			sock;
+	cpdlc_socktype_t		sock;
 	time_t				conn_begin_time;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;

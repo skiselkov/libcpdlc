@@ -27,6 +27,7 @@
 
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
+#include "cpdlc_string.h"
 #include "cpdlc_msglist.h"
 #include "cpdlc_thread.h"
 #include "minilist.h"
@@ -286,7 +287,8 @@ dfl_get_time_func(void *unused, unsigned *hours, unsigned *mins)
 }
 
 static msg_thr_t *
-find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
+find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
+    bool missing_ok)
 {
 	CPDLC_ASSERT(msglist != NULL);
 
@@ -296,7 +298,9 @@ find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 			if (thr->thr_id == thr_id)
 				return (thr);
 		}
-		CPDLC_VERIFY_MSG(0, "Invalid message thread ID %x", thr_id);
+		CPDLC_VERIFY_MSG(missing_ok, "Invalid message thread ID %x",
+		    thr_id);
+		return (NULL);
 	} else {
 		msg_thr_t *thr = safe_calloc(1, sizeof (*thr));
 		thr->thr_id = msglist->next_thr_id++;
@@ -391,7 +395,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 		msg_bucket_t *bucket;
 
 		if (thr == NULL)
-			thr = find_msg_thr(msglist, CPDLC_NO_MSG_THR_ID);
+			thr = find_msg_thr(msglist, CPDLC_NO_MSG_THR_ID, false);
 		bucket = safe_calloc(1, sizeof (*bucket));
 		bucket->msg = msg;
 		bucket->tok = CPDLC_INVALID_MSG_TOKEN;
@@ -478,7 +482,7 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	CPDLC_ASSERT(msglist != NULL);
 	CPDLC_ASSERT(msg != NULL);
 
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	if (thr_id == CPDLC_NO_MSG_THR_ID)
 		thr->status = CPDLC_MSG_THR_OPEN;
 	else
@@ -560,6 +564,24 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 		*cap = MIN(*cap, thr_i);
 }
 
+/*
+ * Checks if a given message thread ID exists in the message list.
+ */
+bool
+cpdlc_msglist_thr_id_exists(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
+{
+	bool result = false;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+
+	mutex_enter(&msglist->lock);
+	result = (find_msg_thr(msglist, thr_id, true) != NULL);
+	mutex_exit(&msglist->lock);
+
+	return (result);
+}
+
 cpdlc_msg_thr_status_t
 cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id, bool *dirty)
@@ -571,7 +593,7 @@ cpdlc_msglist_get_thr_status(cpdlc_msglist_t *msglist,
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	status = thr->status;
 	if (dirty != NULL)
 		*dirty = thr->dirty;
@@ -589,7 +611,7 @@ cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	thr->dirty = false;
 	mutex_exit(&msglist->lock);
 }
@@ -605,7 +627,7 @@ cpdlc_msglist_thr_is_reviewed(cpdlc_msglist_t *msglist,
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	reviewed = thr->reviewed;
 	mutex_exit(&msglist->lock);
 
@@ -622,7 +644,7 @@ cpdlc_msglist_thr_mark_reviewed(cpdlc_msglist_t *msglist,
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	thr->reviewed = true;
 	mutex_exit(&msglist->lock);
 }
@@ -638,7 +660,7 @@ cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	count = list_count(&thr->buckets);
 	mutex_exit(&msglist->lock);
 
@@ -658,7 +680,7 @@ cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 
 	mutex_enter(&msglist->lock);
 
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	CPDLC_ASSERT3U(msg_nr, <, list_count(&thr->buckets));
 	bucket = list_head(&thr->buckets);
 	for (unsigned i = 0; i < msg_nr; i++)
@@ -678,6 +700,30 @@ cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	mutex_exit(&msglist->lock);
 }
 
+bool
+cpdlc_msglist_get_remote_callsign(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id, char callsign[CPDLC_CALLSIGN_LEN])
+{
+	bool sent;
+	const cpdlc_msg_t *msg;
+
+	CPDLC_ASSERT(msglist != NULL);
+	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+	CPDLC_ASSERT(callsign != NULL);
+
+	cpdlc_msglist_get_thr_msg(msglist, thr_id, 0, &msg, NULL, NULL, NULL,
+	    &sent);
+	if (!sent) {
+		cpdlc_strlcpy(callsign, cpdlc_msg_get_from(msg),
+		    CPDLC_CALLSIGN_LEN);
+	} else {
+		cpdlc_strlcpy(callsign, cpdlc_msg_get_to(msg),
+		    CPDLC_CALLSIGN_LEN);
+	}
+
+	return (callsign[0] != '\0');
+}
+
 void
 cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 {
@@ -687,7 +733,7 @@ cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	list_remove(&msglist->thr, thr);
 	mutex_exit(&msglist->lock);
 
@@ -704,7 +750,7 @@ cpdlc_msglist_thr_is_done(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	result = thr_status_is_final(thr->status);
 	mutex_exit(&msglist->lock);
 
@@ -720,7 +766,7 @@ cpdlc_msglist_thr_close(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
 
 	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id);
+	thr = find_msg_thr(msglist, thr_id, false);
 	if (!thr_status_is_final(thr->status))
 		thr->status = CPDLC_MSG_THR_CLOSED;
 	mutex_exit(&msglist->lock);
