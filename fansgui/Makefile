@@ -1,5 +1,5 @@
 #
-# Copyright 2019 Saso Kiselkov
+# Copyright 2020 Saso Kiselkov
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -141,13 +141,23 @@ ifeq ($(PLATFORM_NAME),linux-64)
 	rm -f $(OUTDIR).tar.gz
 	tar czf $(OUTDIR).tar.gz $(OUTDIR)
 endif
+
 ifeq ($(PLATFORM_NAME),mac-64)
+dmg : $(OUTDIR).dmg
+
+$(OUTDIR).dmg : $(OUTBIN)
 	rm -f $(OUTDIR).dmg
-	ln -s /Applications $(OUTDIR)/Applications
-	hdiutil create -srcfolder $(OUTDIR) -fs HFS+ -volname FANSgui \
-	    $(OUTDIR).dmg
+	create-dmg \
+	    --no-internet-enable \
+	    --volname "FANSgui" \
+	    --volicon "fansgui-icon.icns" \
+	    --window-size 560 425 \
+	    --background "fansgui-dmg-background.png" \
+	    --icon fansgui.app 105 82 \
+	    --icon fans-xplane.plugin 105 290 \
+	    --app-drop-link 442 82 \
+	    $(OUTDIR).dmg $(OUTDIR)
 endif
-	rm -rf $(OUTDIR)
 
 clean :
 	rm -f fansgui fansgui.exe $(OBJS)
