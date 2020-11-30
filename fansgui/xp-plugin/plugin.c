@@ -51,6 +51,9 @@
 #define	PLUGIN_DESCRIPTION	\
 	"Interface plugin for the standalone FANS CPDLC client"
 
+#define	MINIMUM_XPLANE_VERSION		11500
+#define	MINIMUM_XPLANE_VERSION_READABLE	"11.50"
+
 #define	PUB_DATA_FLOOP_INTVAL		1.0	/* seconds */
 
 static void *ctx = NULL;
@@ -287,11 +290,22 @@ destroy_zmq(void)
 PLUGIN_API int
 XPluginStart(char *name, char *sig, char *desc)
 {
+	int xpver, xplmver;
+	XPLMHostApplicationID host_ID;
+
 	log_init(log_dbg_string, "FANS");
 	logMsg("This is the FANS plugin (" PLUGIN_VERSION ") libacfutils-%s",
 	    libacfutils_version);
 	crc64_init();
 	crc64_srand(microclock() + clock());
+
+	XPLMGetVersions(&xpver, &xplmver, &host_ID);
+	if (xpver < MINIMUM_XPLANE_VERSION) {
+		logMsg("FATAL ERROR: your X-Plane version is too old. "
+		    "This plugin requires at least X-Plane "
+		    MINIMUM_XPLANE_VERSION_READABLE);
+		return (false);
+	}
 
 	strcpy(name, PLUGIN_NAME);
 	strcpy(sig, PLUGIN_SIG);
