@@ -80,11 +80,11 @@ find_drs(void)
 	fdr_find(&drs.ias, "sim/cockpit2/gauges/indicators/airspeed_kts_pilot");
 	fdr_find(&drs.mach, "sim/cockpit2/gauges/indicators/mach_pilot");
 	fdr_find(&drs.spd_is_mach, "sim/cockpit2/autopilot/airspeed_is_mach");
-	fdr_find(&drs.gs, "sim/flightmodel2/position/groundspeed");
 	fdr_find(&drs.alt, "sim/cockpit2/gauges/indicators/altitude_ft_pilot");
 	fdr_find(&drs.gps_dme_time, "sim/cockpit/radios/gps_dme_time_secs");
 	fdr_find(&drs.lat, "sim/flightmodel/position/latitude");
 	fdr_find(&drs.lon, "sim/flightmodel/position/longitude");
+	fdr_find(&drs.gs, "sim/flightmodel/position/groundspeed");
 }
 
 static void
