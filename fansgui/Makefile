@@ -24,6 +24,8 @@
 
 include ../Makefile.com
 
+.PHONY : all clean xp-plugin
+
 DIST_RESOURCES = \
     sample-client.conf \
     fans_alert.wav \
@@ -111,7 +113,11 @@ else
 	OUTBIN=fansgui
 endif
 
-all : $(OUTBIN)
+all : xp-plugin $(OUTBIN)
+
+xp-plugin :
+	[ -f xp-plugin/CMakeCache.txt ] || ( cd xp-plugin && cmake . )
+	( cd xp-plugin && make )
 
 OUTDIR=fansgui-$(PLATFORM_NAME)
 
@@ -142,24 +148,14 @@ ifeq ($(PLATFORM_NAME),linux-64)
 	tar czf $(OUTDIR).tar.gz $(OUTDIR)
 endif
 
-ifeq ($(PLATFORM_NAME),mac-64)
-dmg : $(OUTDIR).dmg
-
-$(OUTDIR).dmg : $(OUTBIN)
-	rm -f $(OUTDIR).dmg
-	create-dmg \
-	    --no-internet-enable \
-	    --volname "FANSgui" \
-	    --volicon "fansgui-icon.icns" \
-	    --window-size 560 425 \
-	    --background "fansgui-dmg-background.png" \
-	    --icon fansgui.app 105 82 \
-	    --icon fans-xplane.plugin 105 290 \
-	    --app-drop-link 442 82 \
-	    $(OUTDIR).dmg $(OUTDIR)
-endif
-
 clean :
 	rm -f fansgui fansgui.exe $(OBJS)
+	[ -f xp-plugin/Makefile ] && ( cd xp-plugin && make clean )
+	rm -rf fansgui-mac-64
+
+# Apple-specific stuff for code signing, DMG creation and notarization
+ifeq ($(PLATFORM_NAME),mac-64)
+include Makefile.mac
+endif
 
 include ../Makefile.rules

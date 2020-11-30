@@ -32,6 +32,11 @@ fansgui/xp-plugin/Makefile
 fansgui/xp-plugin/cmake_install.cmake
 fansgui/xp-plugin/fans-xplane.plugin
 fansgui/xp-plugin/libfans-xplane.plugin.xpl.dll.a
+fansgui/AuditInfo.json
+fansgui/ExportOptions.plist
+fansgui/Makefile.user
+fansgui/RequestInfo.plist
+fansgui/UploadInfo.plist
 test/build/CMakeCache.txt
 test/build/CMakeFiles/
 test/build/Makefile
