@@ -17,6 +17,9 @@ fansgui/fansgui.exe
 fansgui/fansgui.res
 fansgui/fansgui-win-64.zip
 fansgui/fansgui-linux-64.tar.gz
+fansgui/fansgui-linux-64
+fansgui/fansgui-mac-64
+fansgui/fansgui-win-64
 fansgui/fansgui-mac-64.dmg
 fansgui/user.conf
 fansgui/zmq/zeromq-4.3.1
