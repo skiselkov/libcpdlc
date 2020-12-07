@@ -49,7 +49,8 @@ else
 		    -framework Security
 	else
 		# iphlpapi is needed for ZeroMQ
-		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows
+		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows \
+		    -fstack-protector
 		EXE_RESOURCES = fansgui.res
 	endif
 endif
