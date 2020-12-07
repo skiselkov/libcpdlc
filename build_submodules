@@ -6,8 +6,7 @@ GNUTLS=gnutls-3.6.11.1
 LWS=libwebsockets-3.1.0
 
 UBUNTU_PACKAGES="build-essential cmake git libglu1-mesa-dev libgmp-dev \
-    libssl-dev m4 pkg-config qt4-qmake qt4-dev-tools unzip libgnutls28-dev \
-    libunistring-dev"
+libssl-dev m4 pkg-config unzip libgnutls28-dev libunistring-dev"
 case $(uname) in
 Linux)
 	NCPUS=$(fgrep processor /proc/cpuinfo | wc -l)
@@ -47,14 +46,25 @@ if [[ "$do_clean" == 0 ]]; then
 	read
 	if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
 		BUILDGLFW=1
+		TARGETS="cpdlcd and FANSgui"
 		if [[ "$(uname)" = "Linux" ]]; then
 			BUILDWIN=1
 		else
 			BUILDWIN=0
 		fi
 	else
+		TARGETS="cpdlcd"
 		BUILDGLFW=0
 		BUILDWIN=0
+	fi
+
+	if [[ "$(uname)" = "Linux" ]]; then
+		if apt show qt4-dev-tools &> /dev/null ; then
+			UBUNTU_PACKAGES="$UBUNTU_PACKAGES qt4-qmake \
+qt4-dev-tools"
+		else
+			UBUNTU_PACKAGES="$UBUNTU_PACKAGES qt5-qmake qt5-default"
+		fi
 	fi
 
 	if [[ "$BUILDWIN" == 1 ]]; then
@@ -65,7 +75,7 @@ mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
 
 	if [[ "$(uname)" = "Linux" ]]; then
 		echo "---------------------------------------------------------------
-The following packages are required to build cpdlcd and fansgui:
+The following packages are required to build $TARGETS:
   $UBUNTU_PACKAGES"
 		echo -n "Would you like me to apt-get these for you now? [y/N] "
 		read
