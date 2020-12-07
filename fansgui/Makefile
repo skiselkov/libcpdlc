@@ -54,7 +54,8 @@ else
 	endif
 endif
 
-BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
+BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers \
+    -Wno-format-truncation -Wno-stringop-truncation
 PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib --static-openal
 ZEROMQ=zmq/zeromq-$(PLATFORM_NAME)/install
 
@@ -63,8 +64,7 @@ CFLAGS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
 LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
     --libs libzmq)
 
-CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
-    -Wno-format-truncation \
+CFLAGS += -std=c99 -W -Wall -Wextra $(BOGUS_WARNINGS) -Werror -O2 -g -DDEBUG \
     $(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --cflags)
