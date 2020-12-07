@@ -30,6 +30,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #if APL || LIN
 #include <pthread.h>
@@ -38,6 +39,8 @@
 #else	/* IBM */
 #include <windows.h>
 #endif	/* IBM */
+
+#include "cpdlc_alloc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,6 +118,11 @@ extern "C" {
  *		mutex_exit(&my_lock);			-- release the lock
  */
 
+typedef struct {
+	void	(*proc)(void *);
+	void	*arg;
+} cpdlc_thread_info_t;
+
 #if	APL || LIN
 
 #define	thread_t		pthread_t
@@ -134,8 +142,29 @@ extern "C" {
 #define	mutex_enter(mtx)	pthread_mutex_lock((mtx))
 #define	mutex_exit(mtx)		pthread_mutex_unlock((mtx))
 
-#define	thread_create(thrp, proc, arg) \
-	(pthread_create(thrp, NULL, (void *(*)(void *))(void *)proc, arg) == 0)
+static void *_cpdlc_thread_start_routine(void *arg) CPDLC_UNUSED_ATTR;
+static void *
+_cpdlc_thread_start_routine(void *arg)
+{
+	cpdlc_thread_info_t *ti = (cpdlc_thread_info_t *)arg;
+	ti->proc(ti->arg);
+	free(ti);
+	return (NULL);
+}
+
+static inline bool
+thread_create(thread_t *thrp, void (*proc)(void *), void *arg)
+{
+	cpdlc_thread_info_t *ti =
+	    (cpdlc_thread_info_t *)safe_calloc(1, sizeof (*ti));
+	ti->proc = proc;
+	ti->arg = arg;
+	if (pthread_create(thrp, NULL, _cpdlc_thread_start_routine, ti) == 0)
+		return (true);
+	free(ti);
+	return (false);
+}
+
 #define	thread_join(thrp)	pthread_join(*(thrp), NULL)
 
 #if	LIN
@@ -189,9 +218,31 @@ typedef struct {
 		LeaveCriticalSection(&(x)->cs); \
 	} while (0)
 
-#define	thread_create(thrp, proc, arg) \
-	((*(thrp) = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)proc, arg, \
-	    0, NULL)) != NULL)
+static DWORD _cpdlc_thread_start_routine(void *arg) CPDLC_UNUSED_ATTR;
+static DWORD
+_cpdlc_thread_start_routine(void *arg)
+{
+	cpdlc_thread_info_t *ti = (cpdlc_thread_info_t *)arg;
+	ti->proc(ti->arg);
+	free(ti);
+	return (0);
+}
+
+static inline bool
+thread_create(thread_t *thrp, void (*proc)(void *), void *arg)
+{
+	cpdlc_thread_info_t *ti =
+	    (cpdlc_thread_info_t *)safe_calloc(1, sizeof (*ti));
+	ti->proc = proc;
+	ti->arg = arg;
+	if ((*(thrp) = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)proc, arg,
+	    0, NULL)) != NULL) {
+		return (true);
+	}
+	free(ti);
+	return (false);
+}
+
 #define	thread_join(thrp) \
 	CPDLC_VERIFY3S(WaitForSingleObject(*(thrp), INFINITE), ==, \
 	    WAIT_OBJECT_0)

@@ -138,8 +138,9 @@ static const char *frag_shader410 =
  * making sure its output canvas looks right.
  */
 static void
-worker(mtcr_t *mtcr)
+worker(void *arg)
 {
+	mtcr_t *mtcr = arg;
 	char name[32];
 
 	snprintf(name, sizeof (name), "mtcr %dx%d", mtcr->w, mtcr->h);
