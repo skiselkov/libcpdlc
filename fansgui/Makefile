@@ -64,6 +64,7 @@ LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
     --libs libzmq)
 
 CFLAGS += -std=c99 -W -Wall -Wextra -Werror $(BOGUS_WARNINGS) -O2 -g -DDEBUG \
+    -Wno-format-truncation \
     $(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --cflags)

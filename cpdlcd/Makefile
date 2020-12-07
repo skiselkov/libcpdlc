@@ -26,6 +26,7 @@ include ../Makefile.com
 
 CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
 	-Wno-missing-field-initializers \
+	-Wno-format-truncation \
 	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE \
 	-I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
