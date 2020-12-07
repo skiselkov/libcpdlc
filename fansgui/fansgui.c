@@ -109,7 +109,7 @@ static cairo_surface_t *font_bitmaps[FMS_FONT_LARGE + 1][FMS_COLOR_MAGENTA + 1];
 #define	TEXT_CHAR_W	16	/* pixels */
 #define	TEXT_CHAR_H	24	/* pixels */
 
-#define	_(func)	((void (*)(fans_t *, int))(func))
+#define	_(func)	((void (*)(fans_t *, int))(void *)(func))
 static clickspot_t	clickspots[] = {
     { .013, .142, .068, .042, _(fans_push_key), FMS_KEY_LSK_L1 },
     { .013, .203, .068, .042, _(fans_push_key), FMS_KEY_LSK_L2 },
