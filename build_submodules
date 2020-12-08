@@ -28,7 +28,7 @@ if [[ "$(uname)" = Linux ]]; then
 else
 	ARCH="mac-64"
 fi
-while getopts "wc" opt; do
+while getopts "wcg:p:h" opt; do
 	case $opt in
 	w)
 		winbuild=1
@@ -38,12 +38,39 @@ while getopts "wc" opt; do
 	c)
 		do_clean=1
 		;;
+	g)
+		DO_GUI="$OPTARG"
+		;;
+	p)
+		INSTALL_PACKAGES="$OPTARG"
+		;;
+	h)
+		cat << EOF
+Usage: $0 [-wcgGpP]
+    -w : build the submodule dependencies for a build targeting Windows
+    -c : remove all and clean built dependencies to do a fresh rebuild later
+    -g <y|n> : enable or disable building GUI dependencies.
+	If this argument isn't provided, the script will prompt you.
+    -p <y|n> : enable or disable installing Ubuntu packages.
+	If this argument isn't provided, the script will prompt you.
+EOF
+		exit
+		;;
+	*)
+		echo "Unrecognized argument $opt. Try \"$0 -h\" for help" >&2
+		exit 1
+		;;
 	esac
 done
 
 if [[ "$do_clean" == 0 ]]; then
-	echo -n "Would you like to build the GUI portions as well? [y/N] "
-	read
+	if [ -n "$DO_GUI" ]; then
+		REPLY="$DO_GUI"
+	else
+		echo -n "Would you like to build the GUI portions as well?" \
+		    "[y/N] "
+		read
+	fi
 	if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
 		BUILDGLFW=1
 		TARGETS="cpdlcd and FANSgui"
@@ -74,11 +101,16 @@ mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64"
 	fi
 
 	if [[ "$(uname)" = "Linux" ]]; then
-		echo "---------------------------------------------------------------
+		if [ -n "$INSTALL_PACKAGES" ]; then
+			REPLY="$INSTALL_PACKAGES"
+		else
+			echo "---------------------------------------------------------------
 The following packages are required to build $TARGETS:
   $UBUNTU_PACKAGES"
-		echo -n "Would you like me to apt-get these for you now? [y/N] "
-		read
+			echo -n "Would you like me to apt-get these for" \
+			    "you now? [y/N] "
+			read
+		fi
 		if [[ "$REPLY" == "y" ]] || [[ "$REPLY" == "Y" ]]; then
 			sudo apt-get install $UBUNTU_PACKAGES
 		fi
