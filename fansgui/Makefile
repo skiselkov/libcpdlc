@@ -86,13 +86,14 @@ else
 		    pkg-config --cflags gnutls nettle hogweed)
 		ifeq ($(PLATFORM_NAME),linux-64)
 			LIBS += -Wl,-Bstatic \
-			    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-			    --libs --static gnutls libidn2) \
+			    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
+			    pkg-config --libs --static gnutls libidn2 gmp) \
+			    /home/diablos/NextDev/libcpdlc/gmp-6.2.0/install_tgt/lib/libgmp.a \
 			    -Wl,-Bdynamic
 			LIBS += -static-libgcc
 		else
 			LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
-			    pkg-config --libs --static gnutls)
+			    pkg-config --libs --static gnutls gmp)
 		endif
 	endif
 endif

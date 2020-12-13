@@ -224,7 +224,7 @@ if [[ "$do_clean" = 0 ]]; then
 	    (
 		cd "${NETTLE}" && \
 		LDFLAGS="$STATIC_LIB_OPTS" \
-		./configure --enable-mini-gmp \
+		./configure --disable-mini-gmp \
 		    --disable-shared --enable-static \
 		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
 		make -j ${NCPUS} && make install
