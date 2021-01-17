@@ -715,11 +715,40 @@ load_imgs(void)
 	return (true);
 }
 
+static GLFWimage *
+load_glfwimage(const char *path)
+{
+	GLFWimage *img;
+	ASSERT(path != NULL);
+
+	img = safe_calloc(1, sizeof (*img));
+	img->pixels = (unsigned char *)png_load_from_file_rgba(path,
+	    &img->width, &img->height);
+	if (img->pixels != NULL) {
+		return (img);
+	} else {
+		free(img);
+		return (NULL);
+	}
+}
+
+static void
+free_glfwimage(GLFWimage *image)
+{
+	if (image != NULL) {
+		lacf_free(image->pixels);
+		free(image);
+	}
+}
+
 static bool
 window_init(void)
 {
+	GLFWimage *icon;
+
 	if (!glfwInit())
 		return (false);
+
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
@@ -733,6 +762,14 @@ window_init(void)
 	glfwSetWindowSizeCallback(window, resize_cb);
 	glfwSetMouseButtonCallback(window, mouse_button_cb);
 	glfwSetCursorPosCallback(window, mouse_hover_cb);
+	/*
+	 * Try and set a window icon, if we could load it.
+	 */
+	icon = load_glfwimage("fansgui.png");
+	if (icon != NULL) {
+		glfwSetWindowIcon(window, 1, icon);
+		free_glfwimage(icon);
+	}
 
 	return (true);
 }
@@ -968,7 +1005,10 @@ main(int argc, char **argv)
 #if	APL || LIN
 	progname = safe_strdup(argv[0]);
 	dir = dirname(progname);
-	/* chdir into the Resources subdirectory */
+	/*
+	 * On MacOS chdir into the Resources subdirectory. On Linux, we just
+	 * chdir into our own install directory.
+	 */
 	appdir = strstr(dir, ".app/Contents/MacOS");
 	if (appdir != NULL) {
 		appdir[13] = '\0';
