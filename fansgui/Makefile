@@ -88,7 +88,6 @@ else
 			LIBS += -Wl,-Bstatic \
 			    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
 			    pkg-config --libs --static gnutls libidn2 gmp) \
-			    /home/diablos/NextDev/libcpdlc/gmp-6.2.0/install_tgt/lib/libgmp.a \
 			    -Wl,-Bdynamic
 			LIBS += -static-libgcc
 		else
