@@ -945,9 +945,6 @@ window_draw(void)
 {
 	mat4 pvm;
 	int win_w, win_h, opt_win_w;
-	float xscale, yscale;
-
-	glfwGetWindowContentScale(window, &xscale, &yscale);
 
 	glfwGetWindowSize(window, &win_w, &win_h);
 	opt_win_w = win_ratio * win_h;
@@ -958,7 +955,7 @@ window_draw(void)
 		glfwSetWindowSize(window, win_w, win_h);
 	}
 
-	glViewport(0, 0, win_w * xscale, win_h * yscale);
+	glViewport(0, 0, win_w, win_h);
 	glm_ortho(0, win_w, 0, win_h, 0, 1, pvm);
 
 	glClear(GL_COLOR_BUFFER_BIT);
