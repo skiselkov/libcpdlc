@@ -1,5 +1,5 @@
 #
-# Copyright 2019 Saso Kiselkov
+# Copyright 2021 Saso Kiselkov
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -110,3 +110,5 @@ MATH_DEFINES=\
     -DM_1_PI=0.318309886183790671538 \
     -DM_2_PI=0.636619772367581343076 \
     -DM_2_SQRTPI=1.12837916709551257390
+
+LIBCPDLC_VERSION := $(shell git rev-parse --short HEAD)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Saso Kiselkov
+ * Copyright 2021 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -753,7 +753,8 @@ window_init(void)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	window = glfwCreateWindow(bgimg_w, bgimg_h, "FANS GUI", NULL, NULL);
+	window = glfwCreateWindow(bgimg_w, bgimg_h, "FANS GUI (build "
+	    LIBCPDLC_VERSION ")", NULL, NULL);
 	VERIFY(window != NULL);
 	hand_cursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
 	VERIFY(hand_cursor != NULL);

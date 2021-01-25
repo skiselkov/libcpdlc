@@ -1,5 +1,5 @@
 #
-# Copyright 2020 Saso Kiselkov
+# Copyright 2021 Saso Kiselkov
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -66,7 +66,8 @@ LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
     --libs libzmq)
 
 CFLAGS += -std=c99 -W -Wall -Wextra $(BOGUS_WARNINGS) -Werror -O2 -g -DDEBUG \
-    $(PLATFORM_DEFS) -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
+    -DLIBCPDLC_VERSION='"$(LIBCPDLC_VERSION)"' $(PLATFORM_DEFS) \
+    -D_GNU_SOURCE -I$(SRCPREFIX) -I$(ACFUTILS)/src \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --cflags)
 
