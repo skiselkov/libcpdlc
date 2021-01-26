@@ -1,0 +1,11 @@
+--- libwebsockets-3.1.0/lib/plat/unix/private.h	2018-11-23 04:30:56.000000000 +0100
++++ libwebsockets-3.1.0-new/lib/plat/unix/private.h	2021-01-26 00:44:48.000000000 +0100
+@@ -156,7 +156,7 @@
+  * Mac OSX as well as iOS do not define the MSG_NOSIGNAL flag,
+  * but happily have something equivalent in the SO_NOSIGPIPE flag.
+  */
+-#ifdef __APPLE__
++#if	defined(__APPLE__) && !defined(MSG_NOSIGNAL)
+ #define MSG_NOSIGNAL SO_NOSIGPIPE
+ #endif
+ 

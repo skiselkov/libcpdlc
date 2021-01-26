@@ -180,7 +180,13 @@ if [[ "$BUILDGLFW" == 1 ]]; then
 fi
 
 if [[ "$do_clean" == 0 ]]; then
-	[ -d "${LWS}" ] || tar xJf "${LWS}.tar.xz"
+	if ! [ -d "${LWS}" ]; then
+		tar xJf "${LWS}.tar.xz" || exit 1
+		(
+		    cd "${LWS}"
+		    patch -p1 < ../libwebsockets-msg_nosignal.patch || exit 1
+		)
+	fi
 	if ! [ -f "${LWS}/lib/libwebsockets.a" ]; then
 	    (
 		cd "${LWS}" && \
