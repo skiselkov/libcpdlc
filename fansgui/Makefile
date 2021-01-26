@@ -27,6 +27,7 @@ include ../Makefile.com
 .PHONY : all clean xp-plugin
 
 DIST_RESOURCES = \
+    $(wildcard client.conf) \
     sample-client.conf \
     fans_alert.wav \
     fansgui.png \
@@ -55,8 +56,10 @@ else
 	endif
 endif
 
-BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers \
-    -Wno-format-truncation -Wno-stringop-truncation
+BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
+ifneq ($(PLATFORM_NAME),mac-64)
+	BOGUS_WARNINGS += -Wno-format-truncation -Wno-stringop-truncation
+endif
 PKG_CONFIG_DEPS_FLAGS = --glfw --no-tesseract --no-shapelib --static-openal
 ZEROMQ=zmq/zeromq-$(PLATFORM_NAME)/install
 
