@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -37,6 +37,8 @@ fms_data_draw_page1(fans_t *box)
 	float value_f32, dest_dist_NM;
 	fms_wpt_info_t wpt;
 	unsigned dest_time_sec;
+	int alt_ft;
+	bool is_fl;
 
 	CPDLC_ASSERT(box != NULL);
 
@@ -52,10 +54,14 @@ fms_data_draw_page1(fans_t *box)
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L2, "CUR ALT");
-	value_f32 = fans_get_cur_alt(box);
-	if (!isnan(value_f32)) {
-		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%5.0f FT", value_f32);
+	if (fans_get_cur_alt(box, &alt_ft, &is_fl)) {
+		if (is_fl) {
+			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "FL%d", (int)round(alt_ft / 100.0));
+		} else {
+			fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "%5d FT", alt_ft);
+		}
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "CUR VVI");
@@ -66,10 +72,14 @@ fms_data_draw_page1(fans_t *box)
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L4, "SEL ALT");
-	value_f32 = fans_get_sel_alt(box);
-	if (!isnan(value_f32)) {
-		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%5.0f FT", value_f32);
+	if (fans_get_sel_alt(box, &alt_ft, &is_fl)) {
+		if (is_fl) {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "FL%d", (int)round(alt_ft / 100.0));
+		} else {
+			fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "%5d FT", alt_ft);
+		}
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L5, "PREV WPT");
@@ -92,7 +102,7 @@ fms_data_draw_page1(fans_t *box)
 		fans_put_alt(box, LSK1_ROW, 0, true, NULL, &alt, false, false);
 	}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "NEXTNEXT WPT");
+	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "NEXT+1 WPT");
 	if (fans_get_next_next_wpt(box, &wpt)) {
 		cpdlc_arg_t alt = {
 		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
@@ -110,16 +120,25 @@ fms_data_draw_page1(fans_t *box)
 		fans_put_str(box, LSK3_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%s", wpt.wpt_name);
 
-		fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%.*fNM/%02d:%02d",
-		    dest_dist_NM < 99.5 ? 1 : 0, dest_dist_NM, hrs, mins);
+		if (!isnan(dest_dist_NM)) {
+			fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "%.*fNM/%02d:%02d",
+			    dest_dist_NM < 99.95 ? 1 : 0, dest_dist_NM,
+			    hrs, mins);
+		} else {
+			fans_put_str(box, LSK4_ROW, 0, true, FMS_COLOR_GREEN,
+			    FMS_FONT_SMALL, "----NM/%02d:%02d",
+			    hrs, mins);
+		}
 	}
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R5, "OFFSET");
 	value_f32 = fans_get_offset(box);
 	if (!isnan(value_f32)) {
 		fans_put_str(box, LSK5_ROW, 0, true, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "%.1f NM", value_f32);
+		    FMS_FONT_SMALL, "%c%.1f NM",
+		    isnan(value_f32) || fabs(value_f32) < 0.05 ? ' ' :
+		    (value_f32 < 0 ? 'L' : 'R'), fabs(value_f32));
 	}
 }
 
@@ -167,7 +186,7 @@ fans_fms_data_draw_cb(fans_t *box)
 
 	fans_put_page_title(box, "FANS  FMS DATA");
 	fans_set_num_subpages(box, 2);
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (fans_get_subpage(box) == 0)
 		fms_data_draw_page1(box);

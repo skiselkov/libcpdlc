@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -78,16 +78,46 @@ verify_pos_rep(fans_t *box)
 	fans_get_cur_spd(box, &spd);
 	fans_print_pos(&pos, pos_buf, sizeof (pos_buf), POS_PRINT_NORM_SPACE);
 	fans_print_alt(&cur_alt, alt_buf, sizeof (alt_buf), true);
-	fans_print_spd(&spd, spd_buf, sizeof (spd_buf), true);
+	fans_print_spd(&spd, spd_buf, sizeof (spd_buf), false, true);
 
-	APPEND_SNPRINTF(buf, l, "%02d%02dZ %s %s %s",
-	    tim.hrs, tim.mins, pos_buf, alt_buf, spd_buf);
+	APPEND_SNPRINTF(buf, l, "%02d%02dZ %s %s",
+	    tim.hrs, tim.mins, pos_buf, alt_buf);
 
-	if (box->pos_rep.rpt_wpt.name[0] != '\0')
+	if (box->pos_rep.clb_des.alt.alt != 0)
+		alt = box->pos_rep.clb_des;
+	else
+		alt = box->pos_rep.clb_des_auto;
+	if (alt.alt.alt != 0) {
+		float vvi = round(fans_get_cur_vvi(box) / 100) * 100;
+		const char *op;
+
+		if (vvi <= VVI_CLB_DES_THRESH && alt.alt.alt > cur_alt.alt.alt)
+			op = "CRZ CLB";
+		else if (alt.alt.alt > cur_alt.alt.alt)
+			op = "CLB";
+		else
+			op = "DES";
+		fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
+		APPEND_SNPRINTF(buf, l, " %s %s", op, alt_buf);
+	}
+
+	APPEND_SNPRINTF(buf, l, " %s", spd_buf);
+
+	if (fabs(box->pos_rep.off.nm) >= 0.1) {
+		APPEND_SNPRINTF(buf, l, " OFFSET %s%.1f",
+		    box->pos_rep.off.dir == CPDLC_DIR_LEFT ? "L" : "R",
+		    box->pos_rep.off.nm);
+	} else if (fabs(box->pos_rep.off_auto.nm) >= 0.1) {
+		APPEND_SNPRINTF(buf, l, " OFFSET %s%.1f",
+		    box->pos_rep.off_auto.dir == CPDLC_DIR_LEFT ? "L" : "R",
+		    box->pos_rep.off_auto.nm);
+	}
+
+	if (box->pos_rep.rpt_wpt.set)
 		pos = box->pos_rep.rpt_wpt;
 	else
 		pos = box->pos_rep.rpt_wpt_auto;
-	if (pos.name[0] != '\0') {
+	if (pos.set && pos.name[0] != '\0') {
 		APPEND_SNPRINTF(buf, l, " PREV %s", pos.name);
 
 		if (box->pos_rep.wpt_time.set)
@@ -112,15 +142,16 @@ verify_pos_rep(fans_t *box)
 		else
 			spd = box->pos_rep.wpt_spd_auto;
 		if (spd.spd.spd != 0) {
-			fans_print_spd(&spd, spd_buf, sizeof (spd_buf), true);
+			fans_print_spd(&spd, spd_buf, sizeof (spd_buf), false,
+			    true);
 			APPEND_SNPRINTF(buf, l, " %s", spd_buf);
 		}
 	}
-	if (box->pos_rep.nxt_fix.name[0] != '\0')
+	if (box->pos_rep.nxt_fix.set)
 		pos = box->pos_rep.nxt_fix;
 	else
 		pos = box->pos_rep.nxt_fix_auto;
-	if (pos.name[0] != '\0') {
+	if (pos.set && pos.name[0] != '\0') {
 		APPEND_SNPRINTF(buf, l, " NEXT %s", pos.name);
 
 		if (box->pos_rep.nxt_fix_time.set)
@@ -132,11 +163,11 @@ verify_pos_rep(fans_t *box)
 			    tim.hrs, tim.mins);
 		}
 	}
-	if (box->pos_rep.nxt_fix1.name[0] != '\0')
+	if (box->pos_rep.nxt_fix1.set)
 		pos = box->pos_rep.nxt_fix1;
 	else
 		pos = box->pos_rep.nxt_fix1_auto;
-	if (pos.name[0] != '\0')
+	if (pos.set && pos.name[0] != '\0')
 		APPEND_SNPRINTF(buf, l, " NEXT+1 %s", pos.name);
 
 	if (fans_get_dest_info(box, &wpt, &dist_NM, &flt_time_sec)) {
@@ -152,21 +183,6 @@ verify_pos_rep(fans_t *box)
 		}
 	}
 
-	if (box->pos_rep.clb_des.alt.alt != 0)
-		alt = box->pos_rep.clb_des;
-	else
-		alt = box->pos_rep.clb_des_auto;
-	if (alt.alt.alt != 0) {
-		fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
-		APPEND_SNPRINTF(buf, l, " %s %s",
-		    alt.alt.alt > cur_alt.alt.alt ? "CLB" : "DES", alt_buf);
-	}
-	if (fabs(box->pos_rep.off.nm) >= 0.5) {
-		APPEND_SNPRINTF(buf, l, " OFFSET %s%.0f",
-		    box->pos_rep.off.dir == CPDLC_DIR_LEFT ? "L" : "R",
-		    box->pos_rep.off.nm);
-	}
-
 	if (box->pos_rep.winds_aloft.set)
 		wind = box->pos_rep.winds_aloft;
 	else
@@ -178,10 +194,8 @@ verify_pos_rep(fans_t *box)
 		temp = box->pos_rep.temp;
 	else
 		temp = box->pos_rep.temp_auto;
-	if (temp.set) {
-		APPEND_SNPRINTF(buf, l, " OAT %s%02d", temp.temp < 0 ? "M" : "",
-		    temp.temp >= 0 ? temp.temp : -temp.temp);
-	}
+	if (temp.set)
+		APPEND_SNPRINTF(buf, l, " OAT %+d", temp.temp);
 
 	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM48_POS_REPORT_posreport, 0);
 	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
@@ -252,7 +266,7 @@ draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "SPEED");
 	fans_put_spd(box, LSK2_ROW, 0, true, &box->pos_rep.wpt_spd,
-	    &box->pos_rep.wpt_spd_auto, true, true);
+	    &box->pos_rep.wpt_spd_auto, true, true, true);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L3, "NXT FIX");
 	fans_put_pos(box, LSK3_ROW, 0, false, &box->pos_rep.nxt_fix,
@@ -301,7 +315,8 @@ draw_page2(fans_t *box)
 	    &box->pos_rep.time_at_dest_auto, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "OFFSET");
-	fans_put_off(box, LSK4_ROW, 0, true, &box->pos_rep.off, NULL, false);
+	fans_put_off(box, LSK4_ROW, 0, true, &box->pos_rep.off,
+	    &box->pos_rep.off_auto, false);
 }
 
 void
@@ -314,13 +329,26 @@ fans_pos_rep_init_cb(fans_t *box)
 	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
 }
 
+static bool
+box_is_clb_or_des(const fans_t *box, int dir)
+{
+	float vvi;
+
+	CPDLC_ASSERT(box != NULL);
+	vvi = round(fans_get_cur_vvi(box) / 100) * 100;
+	return ((!isnan(vvi) && vvi >= dir * VVI_CLB_DES_THRESH) ||
+	    !fans_get_alt_hold(box));
+}
+
 static void
 update_auto_data(fans_t *box)
 {
 	fms_wpt_info_t wptinfo;
 	time_t now = time(NULL);
 	struct tm t = *gmtime(&now);
-	float cur_alt, sel_alt, vvi, dest_dist_NM;
+	int cur_alt, sel_alt;
+	bool sel_alt_fl;
+	float dest_dist_NM, off_NM;
 	unsigned dest_time_sec;
 
 	CPDLC_ASSERT(box != NULL);
@@ -330,6 +358,8 @@ update_auto_data(fans_t *box)
 	fans_wptinfo2time(&wptinfo, &box->pos_rep.wpt_time_auto);
 	fans_wptinfo2alt(&wptinfo, &box->pos_rep.wpt_alt_auto);
 	fans_wptinfo2spd(&wptinfo, &box->pos_rep.wpt_spd_auto);
+	if (box->pos_rep.wpt_spd_auto.spd.spd == 0)
+		fans_get_cur_spd(box, &box->pos_rep.wpt_spd_auto);
 
 	(void)fans_get_next_wpt(box, &wptinfo);
 	fans_wptinfo2pos(&wptinfo, &box->pos_rep.nxt_fix_auto);
@@ -362,28 +392,34 @@ update_auto_data(fans_t *box)
 	} else {
 		memset(&box->pos_rep.cur_pos_auto, 0, sizeof (fms_pos_t));
 	}
-	cur_alt = fans_get_cur_alt(box);
-	if (!isnan(cur_alt)) {
-		box->pos_rep.alt_auto.alt.fl = false;
+	if (fans_get_cur_alt(box, &cur_alt, &box->pos_rep.alt_auto.alt.fl))
 		box->pos_rep.alt_auto.alt.alt = cur_alt;
-	} else {
+	else
 		memset(&box->pos_rep.alt_auto, 0, sizeof (cpdlc_arg_t));
-	}
 	box->pos_rep.pos_time_auto.set = true;
 	box->pos_rep.pos_time_auto.hrs = t.tm_hour;
 	box->pos_rep.pos_time_auto.mins = t.tm_min;
 
-	sel_alt = fans_get_sel_alt(box);
-	vvi = fans_get_cur_vvi(box);
-	if (!isnan(sel_alt) && !isnan(vvi) && !isnan(cur_alt) &&
-	    ((vvi >= VVI_CLB_DES_THRESH &&
+	fans_get_sel_alt(box, &sel_alt, &sel_alt_fl);
+	if (fans_is_valid_alt(sel_alt) &&
+	    fans_is_valid_alt(cur_alt) && ((box_is_clb_or_des(box, 1) &&
 	    sel_alt > cur_alt + SAME_ALT_THRESH) ||
-	    (vvi <= -VVI_CLB_DES_THRESH &&
+	    (box_is_clb_or_des(box, -1) &&
 	    sel_alt < cur_alt - SAME_ALT_THRESH))) {
-		box->pos_rep.clb_des_auto.alt.fl = false;
+		box->pos_rep.clb_des_auto.alt.fl = sel_alt_fl;
 		box->pos_rep.clb_des_auto.alt.alt = sel_alt;
 	} else {
 		memset(&box->pos_rep.clb_des_auto, 0, sizeof (cpdlc_arg_t));
+	}
+
+	off_NM = fans_get_offset(box);
+	if (!isnan(off_NM) && round(off_NM * 10) / 10 != 0) {
+		box->pos_rep.off_auto.dir = (off_NM > 0 ? CPDLC_DIR_RIGHT :
+		    CPDLC_DIR_LEFT);
+		box->pos_rep.off_auto.nm = fabs(round(off_NM * 10) / 10);
+	} else {
+		memset(&box->pos_rep.off_auto, 0,
+		    sizeof (box->pos_rep.off_auto));
 	}
 }
 
@@ -397,7 +433,7 @@ fans_pos_rep_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 3);
 
 	fans_put_page_title(box, "FANS  POS REPORT");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_page1(box);
@@ -416,51 +452,87 @@ fans_pos_rep_draw_cb(fans_t *box)
 bool
 fans_pos_rep_key_cb(fans_t *box, fms_key_t key)
 {
+	bool read_back;
+
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_pos(box, &box->pos_rep.rpt_wpt,
-		    FMS_PAGE_POS_REP, set_rpt_wpt);
+		if (fans_scratchpad_xfer_pos(box, &box->pos_rep.rpt_wpt,
+		    FMS_PAGE_POS_REP, set_rpt_wpt, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
-		fans_scratchpad_xfer_alt(box, &box->pos_rep.wpt_alt,
-		    &box->pos_rep.wpt_alt_auto);
+		if (fans_scratchpad_xfer_alt(box, &box->pos_rep.wpt_alt,
+		    &box->pos_rep.wpt_alt_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
-		fans_scratchpad_xfer_pos(box, &box->pos_rep.nxt_fix,
-		    FMS_PAGE_POS_REP, set_nxt_fix);
+		if (fans_scratchpad_xfer_pos(box, &box->pos_rep.nxt_fix,
+		    FMS_PAGE_POS_REP, set_nxt_fix, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer_pos(box, &box->pos_rep.nxt_fix1,
-		    FMS_PAGE_POS_REP, set_nxt_fix1);
+		if (fans_scratchpad_xfer_pos(box, &box->pos_rep.nxt_fix1,
+		    FMS_PAGE_POS_REP, set_nxt_fix1, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R1) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.wpt_time,
-		    &box->pos_rep.wpt_time_auto);
+		if (fans_scratchpad_xfer_time(box, &box->pos_rep.wpt_time,
+		    &box->pos_rep.wpt_time_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_spd(box, &box->pos_rep.wpt_spd,
-		    &box->pos_rep.wpt_spd_auto);
+		if (fans_scratchpad_xfer_spd(box, &box->pos_rep.wpt_spd,
+		    &box->pos_rep.wpt_spd_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R3) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.nxt_fix_time,
-		    &box->pos_rep.nxt_fix_time_auto);
+		if (fans_scratchpad_xfer_time(box, &box->pos_rep.nxt_fix_time,
+		    &box->pos_rep.nxt_fix_time_auto, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
-		fans_scratchpad_xfer_temp(box, &box->pos_rep.temp,
-		    &box->pos_rep.temp_auto);
+		if (fans_scratchpad_xfer_temp(box, &box->pos_rep.temp,
+		    &box->pos_rep.temp_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_wind(box, &box->pos_rep.winds_aloft);
+		if (fans_scratchpad_xfer_wind(box, &box->pos_rep.winds_aloft,
+		    &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2) {
-		fans_scratchpad_xfer_pos(box, &box->pos_rep.cur_pos,
-		    FMS_PAGE_POS_REP, set_cur_pos);
+		if (fans_scratchpad_xfer_pos(box, &box->pos_rep.cur_pos,
+		    FMS_PAGE_POS_REP, set_cur_pos, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3) {
-		fans_scratchpad_xfer_alt(box, &box->pos_rep.alt,
-		    &box->pos_rep.alt_auto);
+		if (fans_scratchpad_xfer_alt(box, &box->pos_rep.alt,
+		    &box->pos_rep.alt_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer_alt(box, &box->pos_rep.clb_des,
-		    &box->pos_rep.clb_des_auto);
+		if (fans_scratchpad_xfer_alt(box, &box->pos_rep.clb_des,
+		    &box->pos_rep.clb_des_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.pos_time,
-		    &box->pos_rep.pos_time_auto);
+		if (fans_scratchpad_xfer_time(box, &box->pos_rep.pos_time,
+		    &box->pos_rep.pos_time_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R3) {
-		fans_scratchpad_xfer_time(box, &box->pos_rep.time_at_dest,
-		    &box->pos_rep.time_at_dest_auto);
+		if (fans_scratchpad_xfer_time(box, &box->pos_rep.time_at_dest,
+		    &box->pos_rep.time_at_dest_auto, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R4) {
-		fans_scratchpad_xfer_offset(box, &box->pos_rep.off, NULL);
+		if (fans_scratchpad_xfer_offset(box, &box->pos_rep.off, NULL,
+		    &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (can_verify_pos_rep(box))
 			verify_pos_rep(box);

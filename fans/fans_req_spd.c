@@ -69,12 +69,12 @@ draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "SPD/SPD BLOCK");
 	fans_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0], NULL,
-	    true, false);
+	    true, false, false);
 
 	fans_put_str(box, LSK1_ROW, 3, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
 	fans_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1], NULL,
-	    false, false);
+	    false, false, false);
 
 	fans_req_draw_due(box, false);
 }
@@ -94,7 +94,7 @@ fans_req_spd_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  SPEED REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -114,11 +114,14 @@ fans_req_spd_key_cb(fans_t *box, fms_key_t key)
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_multi(box,
+		bool read_back;
+		if (fans_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fans_t, spd_req.spd),
 		    sizeof (cpdlc_arg_t), fans_parse_spd,
 		    fans_insert_spd_block, fans_delete_cpdlc_arg_block,
-		    fans_read_spd_block);
+		    fans_read_spd_block, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 &&
 	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {
 		fans_req_key_due(box, key);

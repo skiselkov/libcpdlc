@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -144,7 +144,7 @@ draw_main_page(fans_t *box)
 		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%d", box->emer.souls);
 	} else {
-		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_CYAN,
+		fans_put_str(box, LSK4_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "---");
 	}
 
@@ -189,19 +189,23 @@ void
 fans_emer_init_cb(fans_t *box)
 {
 	int cur_alt, sel_alt;
+	bool sel_alt_fl;
 
 	/* The EMER page can send freetext as well */
 	CPDLC_ASSERT(box != NULL);
 	memset(&box->emer, 0, sizeof (box->emer));
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
-	cur_alt = fans_get_cur_alt(box);
-	sel_alt = fans_get_sel_alt(box);
+	fans_get_cur_alt(box, &cur_alt, NULL);
+	fans_get_sel_alt(box, &sel_alt, &sel_alt_fl);
 
 	box->emer.fuel_auto.set = fans_get_fuel(box, &box->emer.fuel_auto.hrs,
 	    &box->emer.fuel_auto.mins);
-	if (cur_alt >= sel_alt + LVL_ALT_THRESH)
+	if (fans_is_valid_alt(cur_alt) && fans_is_valid_alt(sel_alt) &&
+	    cur_alt >= sel_alt + LVL_ALT_THRESH) {
+		box->emer.des_auto.alt.fl = sel_alt_fl;
 		box->emer.des_auto.alt.alt = sel_alt;
+	}
 	box->emer.souls_set = fans_get_souls(box, &box->emer.souls);
 }
 
@@ -213,7 +217,7 @@ fans_emer_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  EMERGENCY MSG");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -226,21 +230,32 @@ fans_emer_draw_cb(fans_t *box)
 bool
 fans_emer_key_cb(fans_t *box, fms_key_t key)
 {
+	bool read_back;
+
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->emer.pan = !box->emer.pan;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
-		fans_scratchpad_xfer_time(box, &box->emer.fuel,
-		    &box->emer.fuel_auto);
+		if (fans_scratchpad_xfer_time(box, &box->emer.fuel,
+		    &box->emer.fuel_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer_uint(box, &box->emer.souls,
-		    &box->emer.souls_set, 1, 999);
+		if (fans_scratchpad_xfer_uint(box, &box->emer.souls,
+		    &box->emer.souls_set, 1, 999, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_alt(box, &box->emer.des,
-		    &box->emer.des_auto);
+		if (fans_scratchpad_xfer_alt(box, &box->emer.des,
+		    &box->emer.des_auto, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R3) {
-		fans_scratchpad_xfer_offset(box, &box->emer.off, NULL);
+		if (fans_scratchpad_xfer_offset(box, &box->emer.off, NULL,
+		    &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		if (fans_scratchpad_is_delete(box)) {
 			fans_scratchpad_clear(box);

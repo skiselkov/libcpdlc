@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -78,7 +78,7 @@ fans_freetext_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  FREE TEXT");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	for (int row = 0; row < MAX_LINES; row++) {
 		int line = row + box->subpage * MAX_LINES;
@@ -108,8 +108,12 @@ fans_freetext_key_cb(fans_t *box, fms_key_t key)
 
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4) {
 		int line = key - FMS_KEY_LSK_L1 + box->subpage * MAX_LINES;
-		fans_scratchpad_xfer(box, box->freetext[line],
-		    sizeof (box->freetext[line]), true);
+		bool read_back;
+		if (fans_scratchpad_xfer(box, box->freetext[line],
+		    sizeof (box->freetext[line]), true, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (key == FMS_KEY_LSK_L5) {
 		if (freetext_msg_ready(box))
 			verify_freetext_msg(box);

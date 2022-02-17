@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -199,11 +199,15 @@ void
 fans_req_key_freetext(fans_t *box, fms_key_t key)
 {
 	int line;
+	bool read_back;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_L4);
 
 	line = key - FMS_KEY_LSK_L1;
-	fans_scratchpad_xfer(box, box->req_common.freetext[line],
-	    sizeof (box->req_common.freetext[line]), true);
+	if (fans_scratchpad_xfer(box, box->req_common.freetext[line],
+	    sizeof (box->req_common.freetext[line]), true, &read_back) &&
+	    !read_back) {
+		fans_scratchpad_clear(box);
+	}
 }

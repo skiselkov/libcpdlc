@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -102,7 +102,7 @@ fans_msg_log_draw_cb(fans_t *box)
 	}
 
 	fans_put_page_title(box, "CPDLC MESSAGE LOG");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 	for (unsigned i = 0; i < MSG_LOG_LINES; i++) {
 		unsigned thr_i = i + box->subpage * MSG_LOG_LINES;
 		if (thr_i >= num_thr_ids)
@@ -249,11 +249,39 @@ send_standby(fans_t *box)
 	send_quick_resp(box, CPDLC_DM2_STANDBY);
 }
 
+static bool
+can_insert_mod(const fans_t *box, bool block_mod_fpln)
+{
+	cpdlc_msg_thr_status_t st;
+
+	CPDLC_ASSERT(box != NULL);
+
+	st = cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL);
+	if (st != CPDLC_MSG_THR_CLOSED && st != CPDLC_MSG_THR_REJECTED &&
+	    st != CPDLC_MSG_THR_TIMEDOUT && st != CPDLC_MSG_THR_FAILED &&
+	    st != CPDLC_MSG_THR_DISREGARD && st != CPDLC_MSG_THR_ERROR &&
+	    st != CPDLC_MSG_THR_CONN_ENDED) {
+		const cpdlc_msg_t *uplink_msg;
+		bool is_sent;
+
+		cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, 0,
+		    &uplink_msg, NULL, NULL, NULL, &is_sent);
+		CPDLC_ASSERT(uplink_msg != NULL);
+		return (!is_sent &&
+		    !cpdlc_msglist_thr_is_mod_execd(box->msglist,
+		    box->thr_id) && box->funcs.can_insert_mod != NULL &&
+		    box->funcs.can_insert_mod(box->userinfo, box->thr_id,
+		    uplink_msg, block_mod_fpln));
+	} else {
+		return (false);
+	}
+}
+
 static void
 draw_response_section(fans_t *box)
 {
 	cpdlc_msg_thr_status_t st;
-	bool reviewed;
+	bool reviewed, show_acpt_stby;
 
 	CPDLC_ASSERT(box != NULL);
 
@@ -262,6 +290,8 @@ draw_response_section(fans_t *box)
 
 	st = cpdlc_msglist_get_thr_status(box->msglist, box->thr_id, NULL);
 	reviewed = cpdlc_msglist_thr_is_reviewed(box->msglist, box->thr_id);
+	show_acpt_stby = (!can_insert_mod(box, false) ||
+	    cpdlc_msglist_thr_is_mod_inserted(box->msglist, box->thr_id));
 	switch (st) {
 	case CPDLC_MSG_THR_OPEN:
 	case CPDLC_MSG_THR_STANDBY:
@@ -275,12 +305,14 @@ draw_response_section(fans_t *box)
 			    "--------RESPONSE--------");
 			if (msg_can_roger(box) || msg_can_wilco(box) ||
 			    msg_can_affirm(box)) {
-				fans_put_lsk_action(box, FMS_KEY_LSK_L4,
-				    FMS_COLOR_CYAN, "*ACPT");
+				if (show_acpt_stby) {
+					fans_put_lsk_action(box, FMS_KEY_LSK_L4,
+					    FMS_COLOR_CYAN, "*ACPT");
+				}
 				fans_put_lsk_action(box, FMS_KEY_LSK_R5,
 				    FMS_COLOR_WHITE, "REJ>");
 			}
-			if (msg_can_standby(box)) {
+			if (msg_can_standby(box) && show_acpt_stby) {
 				fans_put_lsk_action(box, FMS_KEY_LSK_L5,
 				    FMS_COLOR_CYAN, "*STBY");
 			}
@@ -300,6 +332,14 @@ draw_response_section(fans_t *box)
 		break;
 	default:
 		break;
+	}
+	if (can_insert_mod(box, true) && reviewed) {
+		fans_put_lsk_action(box, FMS_KEY_LSK_R4, FMS_COLOR_CYAN,
+		    "INSERT MOD*");
+	}
+	if (cpdlc_msglist_thr_is_mod_execd(box->msglist, box->thr_id)) {
+		fans_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 6, false,
+		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "MOD EXECUTED");
 	}
 }
 
@@ -325,7 +365,7 @@ fans_msg_thr_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
 	fans_put_page_title(box, "CPDLC MESSAGE");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 	draw_thr_hdr(box, 1, box->thr_id);
 	for (unsigned i = 0; i < MAX_LINES; i++) {
 		unsigned line = i + box->subpage * MAX_LINES;
@@ -342,11 +382,15 @@ fans_msg_thr_draw_cb(fans_t *box)
 bool
 fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 {
+	bool show_acpt_stby;
+
 	CPDLC_ASSERT(box != NULL);
 
+	show_acpt_stby = (!can_insert_mod(box, false) ||
+	    cpdlc_msglist_thr_is_mod_inserted(box->msglist, box->thr_id));
 	if (key == FMS_KEY_LSK_L6) {
 		fans_set_page(box, FMS_PAGE_MSG_LOG, false);
-	} else if (key == FMS_KEY_LSK_L4) {
+	} else if (key == FMS_KEY_LSK_L4 && show_acpt_stby) {
 		if (msg_can_roger(box)) {
 			fans_reports_generate(box, box->thr_id);
 			send_roger(box);
@@ -357,9 +401,18 @@ fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 			fans_reports_generate(box, box->thr_id);
 			send_affirm(box);
 		}
-	} else if (key == FMS_KEY_LSK_L5) {
+	} else if (key == FMS_KEY_LSK_L5 && show_acpt_stby) {
 		if (msg_can_standby(box))
 			send_standby(box);
+	} else if (key == FMS_KEY_LSK_R4) {
+		if (can_insert_mod(box, true)) {
+			const cpdlc_msg_t *msg;
+
+			cpdlc_msglist_get_thr_msg(box->msglist, box->thr_id, 0,
+			    &msg, NULL, NULL, NULL, NULL);
+			CPDLC_ASSERT(box->funcs.insert_mod != NULL);
+			box->funcs.insert_mod(box->userinfo, box->thr_id, msg);
+		}
 	} else if (key == FMS_KEY_LSK_R5) {
 		if (msg_can_roger(box) || msg_can_wilco(box))
 			fans_rej(box, true, FMS_PAGE_MSG_THR);

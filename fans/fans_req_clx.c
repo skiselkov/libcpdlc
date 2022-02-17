@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -134,7 +134,7 @@ fans_req_clx_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  CLX REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -151,6 +151,8 @@ fans_req_clx_draw_cb(fans_t *box)
 bool
 fans_req_clx_key_cb(fans_t *box, fms_key_t key)
 {
+	bool read_back;
+
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
@@ -160,12 +162,18 @@ fans_req_clx_key_cb(fans_t *box, fms_key_t key)
 		box->clx_req.clx = false;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2 &&
 	    box->clx_req.type != CLX_REQ_NONE) {
-		fans_scratchpad_xfer(box, box->clx_req.proc,
-		    sizeof (box->clx_req.proc), true);
+		if (fans_scratchpad_xfer(box, box->clx_req.proc,
+		    sizeof (box->clx_req.proc), true, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3 &&
 	    box->clx_req.type != CLX_REQ_NONE) {
-		fans_scratchpad_xfer(box, box->clx_req.trans,
-		    sizeof (box->clx_req.trans), true);
+		if (fans_scratchpad_xfer(box, box->clx_req.trans,
+		    sizeof (box->clx_req.trans), true, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R1) {
 		box->clx_req.clx = !box->clx_req.clx;
 		box->clx_req.type = CLX_REQ_NONE;

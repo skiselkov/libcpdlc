@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -40,7 +40,7 @@ extern "C" {
 #define	SCRATCHPAD_MAX		22
 #define	SCRATCHPAD_ROW		13
 #define	ERROR_MSG_MAX		24
-#define	ERROR_MSG_ROW		14
+#define	ERROR_MSG_ROW		13
 #define	LSK1_ROW		2
 #define	LSK2_ROW		4
 #define	LSK3_ROW		6
@@ -167,6 +167,15 @@ typedef enum {
 } emer_reason_t;
 
 typedef enum {
+	FANS_ERR_NONE,
+	FANS_ERR_LOGON_FAILED,
+	FANS_ERR_NO_ENTRY_ALLOWED,
+	FANS_ERR_INVALID_ENTRY,
+	FANS_ERR_INVALID_DELETE,
+	FANS_ERR_BUTTON_PUSH_IGNORED
+} fans_err_t;
+
+typedef enum {
 	LVL_FROM_BLW,
 	LVL_AT,
 	LVL_FROM_ABV
@@ -181,7 +190,7 @@ typedef struct {
 	const cpdlc_msg_t	*msg;
 	const cpdlc_msg_seg_t	*seg;
 	char			remarks[3][FMS_COLS];
-	list_node_t		node;
+	minilist_node_t		node;
 } fans_report_t;
 
 typedef void (*pos_pick_done_cb_t)(fans_t *box, const fms_pos_t *pos);
@@ -194,7 +203,15 @@ struct fans_s {
 	unsigned		subpage;
 	unsigned		num_subpages;
 	char			scratchpad[SCRATCHPAD_MAX + 1];
-	char			error_msg[128];
+	char			scratchpad_err[SCRATCHPAD_MAX + 1];
+
+	fans_err_t		error;
+	uint64_t		error_start;
+
+	time_t			logon_started;
+	bool			logon_rejected;
+	bool			logon_timed_out;
+	bool			logon_has_page2;
 
 	char			flt_id_auto[8];
 	char			flt_id[8];
@@ -204,7 +221,11 @@ struct fans_s {
 	cpdlc_msg_thr_id_t	thr_id;
 	bool			msg_log_open;
 
-	float			prev_alt;
+	int			prev_alt;
+	bool			prev_alt_fl;
+
+	bool			show_no_atc_comm;
+	bool			show_main_menu_return;
 
 	union {
 		char		freetext[MAX_FREETEXT_LINES][FMS_COLS + 1];
@@ -275,6 +296,7 @@ struct fans_s {
 			cpdlc_arg_t	clb_des;
 			cpdlc_arg_t	clb_des_auto;
 			fms_off_t	off;
+			fms_off_t	off_auto;
 		} pos_rep;
 	};
 	struct {
@@ -315,9 +337,10 @@ struct fans_s {
 		emer_reason_t		reason;
 	} emer;
 	fans_report_t		*report;
-	list_t			reports_due;
+	minilist_t		reports_due;
 
 	fans_network_t		net;
+	bool			net_select;
 	cpdlc_client_t		*cl;
 	cpdlc_msglist_t		*msglist;
 	char			hostname[128];
@@ -356,9 +379,9 @@ void fans_set_thr_id(fans_t *box, cpdlc_msg_thr_id_t thr_id);
 void fans_set_page(fans_t *box, unsigned page_nr, bool init);
 void fans_set_num_subpages(fans_t *box, unsigned num);
 unsigned fans_get_subpage(const fans_t *box);
-void fans_set_error(fans_t *box, const char *error);
+void fans_set_error(fans_t *box, fans_err_t err);
 
-void fans_put_page_ind(fans_t *box, fms_color_t color);
+void fans_put_page_ind(fans_t *box);
 void fans_put_atc_status(fans_t *box);
 
 int fans_put_str(fans_t *box, unsigned row, unsigned col,
@@ -379,7 +402,7 @@ void fans_put_alt(fans_t *box, int row, int col, bool align_right,
     bool req, bool units);
 void fans_put_spd(fans_t *box, int row, int col, bool align_right,
     const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
-    bool req, bool units);
+    bool req, bool pretty, bool units);
 void fans_put_hdg(fans_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req);
 void fans_put_time(fans_t *box, int row, int col, bool align_right,
@@ -403,9 +426,10 @@ bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
 bool fans_get_cur_pos(const fans_t *box, double *lat, double *lon);
 bool fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
-float fans_get_cur_alt(const fans_t *box);
+bool fans_get_cur_alt(const fans_t *box, int *alt_ft, bool *is_fl);
 float fans_get_cur_vvi(const fans_t *box);
-float fans_get_sel_alt(const fans_t *box);
+bool fans_get_sel_alt(const fans_t *box, int *alt_ft, bool *is_fl);
+bool fans_get_alt_hold(const fans_t *box);
 bool fans_get_prev_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_wpt(const fans_t *box, fms_wpt_info_t *info);
 bool fans_get_next_next_wpt(const fans_t *box, fms_wpt_info_t *info);
@@ -421,6 +445,9 @@ void fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos);
 void fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim);
 void fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt);
 void fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd);
+
+void fans_log_dbg_msg(fans_t *box, PRINTF_FORMAT(const char *fmt), ...)
+    PRINTF_ATTR(2);
 
 #ifdef	__cplusplus
 }

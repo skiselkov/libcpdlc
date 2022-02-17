@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -134,7 +134,7 @@ fans_req_rte_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  ROUTE REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -151,27 +151,41 @@ fans_req_rte_draw_cb(fans_t *box)
 bool
 fans_req_rte_key_cb(fans_t *box, fms_key_t key)
 {
+	bool read_back;
+
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_pos(box, &box->rte_req.dct,
-		    FMS_PAGE_REQ_RTE, set_dct);
+		if (fans_scratchpad_xfer_pos(box, &box->rte_req.dct,
+		    FMS_PAGE_REQ_RTE, set_dct, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
-		fans_scratchpad_xfer_pos(box, &box->rte_req.wx_dev,
-		    FMS_PAGE_REQ_RTE, set_wx_dev);
+		if (fans_scratchpad_xfer_pos(box, &box->rte_req.wx_dev,
+		    FMS_PAGE_REQ_RTE, set_wx_dev, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R1) {
-		fans_scratchpad_xfer_hdg(box, &box->rte_req.hdg);
-		if (box->rte_req.hdg.set) {
-			box->rte_req.dct.set = false;
-			box->rte_req.wx_dev.set = false;
-			box->rte_req.trk.set = false;
+		if (fans_scratchpad_xfer_hdg(box, &box->rte_req.hdg,
+		    &read_back)) {
+			if (box->rte_req.hdg.set) {
+				box->rte_req.dct.set = false;
+				box->rte_req.wx_dev.set = false;
+				box->rte_req.trk.set = false;
+			}
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
-		fans_scratchpad_xfer_hdg(box, &box->rte_req.trk);
-		if (box->rte_req.trk.set) {
-			box->rte_req.dct.set = false;
-			box->rte_req.wx_dev.set = false;
-			box->rte_req.hdg.set = false;
+		if (fans_scratchpad_xfer_hdg(box, &box->rte_req.trk,
+		    &read_back)) {
+			if (box->rte_req.trk.set) {
+				box->rte_req.dct.set = false;
+				box->rte_req.wx_dev.set = false;
+				box->rte_req.hdg.set = false;
+			}
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (key == FMS_KEY_LSK_L5) {
 	if (can_verify_rte_req(box))

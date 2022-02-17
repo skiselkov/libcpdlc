@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -42,44 +42,51 @@ typedef enum {
 } pos_print_style_t;
 
 #define	READ_FUNC_BUF_SZ	(FMS_COLS + 1)
-typedef const char *(*fans_parse_func_t)(const char *str, unsigned field_nr,
+typedef fans_err_t (*fans_parse_func_t)(const char *str, unsigned field_nr,
     void *data);
-typedef const char *(*fans_insert_func_t)(fans_t *box, unsigned field_nr,
+typedef fans_err_t (*fans_insert_func_t)(fans_t *box, unsigned field_nr,
     void *data, void *userinfo);
-typedef const char *(*fans_delete_func_t)(fans_t *box, void *userinfo);
+typedef fans_err_t (*fans_delete_func_t)(fans_t *box, void *userinfo);
 typedef void (*fans_read_func_t)(fans_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
 bool fans_parse_time(const char *buf, int *hrs_p, int *mins_p);
 
-const char *fans_parse_alt(const char *str, unsigned field_nr, void *data);
-const char *fans_insert_alt_block(fans_t *box, unsigned field_nr,
+fans_err_t fans_parse_alt(const char *str, unsigned field_nr, void *data);
+fans_err_t fans_insert_alt_block(fans_t *box, unsigned field_nr,
     void *data, void *userinfo);
 void fans_read_alt_block(fans_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
-const char *fans_parse_spd(const char *str, unsigned field_nr, void *data);
-const char *fans_insert_spd_block(fans_t *box, unsigned field_nr,
+fans_err_t fans_parse_spd(const char *str, unsigned field_nr, void *data);
+fans_err_t fans_insert_spd_block(fans_t *box, unsigned field_nr,
     void *data, void *userinfo);
 void fans_read_spd_block(fans_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 
-const char *fans_parse_wind(const char *str, unsigned field_nr, void *data);
-const char *fans_insert_wind_block(fans_t *box, unsigned field_nr,
+fans_err_t fans_parse_wind(const char *str, unsigned field_nr, void *data);
+fans_err_t fans_insert_wind_block(fans_t *box, unsigned field_nr,
     void *data, void *userinfo);
 void fans_read_wind_block(fans_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
-const char *fans_delete_wind(fans_t *box, void *userinfo);
+fans_err_t fans_delete_wind(fans_t *box, void *userinfo);
 
-const char *fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo);
+fans_err_t fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo);
 
 int fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units);
-int fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool units);
+int fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool pretty,
+    bool units);
 int fans_print_off(const fms_off_t *off, char *buf, size_t cap);
 
 void fans_print_pos(const fms_pos_t *pos, char *buf, size_t cap,
     pos_print_style_t style);
-const char *fans_parse_pos(const char *buf, fms_pos_t *pos);
+fans_err_t fans_parse_pos(const char *buf, fms_pos_t *pos);
+
+static inline bool
+fans_is_valid_alt(int alt_ft)
+{
+	return (alt_ft >= -2000 && alt_ft <= 60000);
+}
 
 #ifdef	__cplusplus
 }

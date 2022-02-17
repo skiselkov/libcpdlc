@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -53,6 +53,10 @@ fans_main_menu_draw_cb(fans_t *box)
 		fans_put_lsk_action(box, FMS_KEY_LSK_L4, FMS_COLOR_WHITE,
 		    "<FREE TEXT");
 	}
+	if (box->show_main_menu_return) {
+		fans_put_lsk_action(box, FMS_KEY_LSK_L6, FMS_COLOR_WHITE,
+		    "<RETURN");
+	}
 }
 
 bool
@@ -63,22 +67,26 @@ fans_main_menu_key_cb(fans_t *box, fms_key_t key)
 	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
-	if (key == FMS_KEY_LSK_L1)
+	if (key == FMS_KEY_LSK_L1) {
 		fans_set_page(box, FMS_PAGE_LOGON_STATUS, true);
-	else if (key == FMS_KEY_LSK_L2 && st == CPDLC_LOGON_COMPLETE)
+	} else if (key == FMS_KEY_LSK_L2 && st == CPDLC_LOGON_COMPLETE) {
 		fans_set_page(box, FMS_PAGE_REQUESTS, true);
-	else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE)
+	} else if (key == FMS_KEY_LSK_L3 && st == CPDLC_LOGON_COMPLETE) {
 		fans_set_page(box, FMS_PAGE_POS_REP, true);
-	else if (key == FMS_KEY_LSK_R1)
+	} else if (key == FMS_KEY_LSK_R1) {
 		fans_set_page(box, FMS_PAGE_MSG_LOG, true);
-	else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE)
+	} else if (key == FMS_KEY_LSK_R2 && st == CPDLC_LOGON_COMPLETE) {
 		fans_set_page(box, FMS_PAGE_EMER, true);
-	else if (key == FMS_KEY_LSK_R3 && st == CPDLC_LOGON_COMPLETE)
+	} else if (key == FMS_KEY_LSK_R3 && st == CPDLC_LOGON_COMPLETE) {
 		fans_set_page(box, FMS_PAGE_REPORTS_DUE, true);
-	else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE)
+	} else if (key == FMS_KEY_LSK_L4 && st == CPDLC_LOGON_COMPLETE) {
 		fans_set_page(box, FMS_PAGE_FREETEXT, true);
-	else
+	} else if (key == FMS_KEY_LSK_L6 && box->show_main_menu_return) {
+		CPDLC_ASSERT(box->funcs.main_menu_ret != NULL);
+		box->funcs.main_menu_ret(box->userinfo);
+	} else {
 		return (false);
+	}
 
 	return (true);
 }

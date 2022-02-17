@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -32,6 +32,8 @@
 
 #include "fans_impl.h"
 #include "fans_scratchpad.h"
+
+#define	LOGON_TIMEOUT	300
 
 static void
 fans_strtoupper(char *buf)
@@ -79,12 +81,9 @@ send_logon(fans_t *box)
 	}
 	cpdlc_client_logon(box->cl, secret, flt_id, box->to);
 	memset(secret, 0, sizeof (secret));
-}
-
-static void
-send_logoff(fans_t *box)
-{
-	cpdlc_client_logoff(box->cl, NULL);
+	box->logon_timed_out = false;
+	box->logon_rejected = false;
+	box->logon_started = time(NULL);
 }
 
 static void
@@ -147,9 +146,11 @@ draw_page2(fans_t *box)
 	fms_color_t cust_color, dfl_color;
 	cpdlc_logon_status_t st;
 	char mod_char;
+	fms_font_t font;
 
 	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
+	font = st == CPDLC_LOGON_NONE ? FMS_FONT_LARGE : FMS_FONT_SMALL;
 
 	if (st == CPDLC_LOGON_NONE) {
 		cust_color = FMS_COLOR_WHITE;
@@ -161,11 +162,14 @@ draw_page2(fans_t *box)
 		mod_char = ' ';
 	}
 
-	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "NETWORK");
+	if (box->net_select)
+		fans_put_lsk_title(box, FMS_KEY_LSK_L1, "NETWORK");
 	switch (box->net) {
 	case FANS_NETWORK_CUSTOM:
-		fans_put_str(box, LSK1_ROW, 0, false, cust_color,
-		    FMS_FONT_LARGE, "%cCUSTOM", mod_char);
+		if (box->net_select) {
+			fans_put_str(box, LSK1_ROW, 0, false, cust_color,
+			    font, "%cCUSTOM", mod_char);
+		}
 
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "HOSTNAME");
 		if (strcmp(box->hostname, "localhost") == 0) {
@@ -176,13 +180,13 @@ draw_page2(fans_t *box)
 			cpdlc_strlcpy(buf, box->hostname, sizeof (buf));
 			fans_strtoupper(buf);
 			fans_put_str(box, LSK2_ROW, 0, false, cust_color,
-			    FMS_FONT_LARGE, "%s", buf);
+			    font, "%s", buf);
 		}
 
 		fans_put_lsk_title(box, FMS_KEY_LSK_L3, "PORT");
 		if (box->port != 0) {
 			fans_put_str(box, LSK3_ROW, 0, false, cust_color,
-			    FMS_FONT_LARGE, "%d", box->port);
+			    font, "%d", box->port);
 		} else {
 			fans_put_str(box, LSK3_ROW, 0, false, dfl_color,
 			    FMS_FONT_SMALL, "DEFAULT");
@@ -198,8 +202,10 @@ draw_page2(fans_t *box)
 		}
 		break;
 	case FANS_NETWORK_PILOTEDGE:
-		fans_put_str(box, LSK1_ROW, 0, false, cust_color,
-		    FMS_FONT_LARGE, "vPILOTEDGE");
+		if (box->net_select) {
+			fans_put_str(box, LSK1_ROW, 0, false, cust_color,
+			    FMS_FONT_LARGE, "vPILOTEDGE");
+		}
 		break;
 	}
 	if (box->show_volume) {
@@ -221,44 +227,67 @@ fans_logon_status_init_cb(fans_t *box)
 void
 fans_logon_status_draw_cb(fans_t *box)
 {
-	char logon_failure[128];
+	char logon_failure[128], msg[32];
 	cpdlc_logon_status_t st;
 
 	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, logon_failure);
 
-	fans_set_num_subpages(box, 2);
+	fans_set_num_subpages(box, box->logon_has_page2 ? 2 : 0);
 
 	fans_put_page_title(box, "FANS  LOGON/STATUS");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
+	if ((st == CPDLC_LOGON_CONNECTING_LINK ||
+	    st == CPDLC_LOGON_HANDSHAKING_LINK || st == CPDLC_LOGON_IN_PROG) &&
+	    time(NULL) - box->logon_started > LOGON_TIMEOUT) {
+		box->logon_timed_out = true;
+		cpdlc_client_logoff(box->cl, NULL);
+		st = cpdlc_client_get_logon_status(box->cl, NULL);
+	}
 	if (logon_failure[0] != '\0') {
-		for (int i = 0, n = strlen(logon_failure); i < n; i++)
-			logon_failure[i] = toupper(logon_failure[i]);
-		fans_set_error(box, logon_failure);
+		fans_log_dbg_msg(box, "%s", logon_failure);
+		box->logon_timed_out = false;
+		box->logon_rejected = true;
 		cpdlc_client_reset_logon_failure(box->cl);
 	}
-
 	if (can_send_logon(box, st)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "SEND LOGON*");
 	} else if (st == CPDLC_LOGON_CONNECTING_LINK ||
 	    st == CPDLC_LOGON_HANDSHAKING_LINK || st == CPDLC_LOGON_IN_PROG) {
-		fans_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_WHITE,
-		    "IN PROGRESS");
+		fans_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
+		    "CANCEL*");
 	} else if (st == CPDLC_LOGON_COMPLETE) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "LOG OFF*");
 	}
-	if (st == CPDLC_LOGON_COMPLETE) {
-		char cda[8];
-		cpdlc_client_get_cda(box->cl, cda, sizeof (cda));
-		fans_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 3, false,
-		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "LOGGED ON TO %s", cda);
-	} else {
-		fans_put_str(box, LSK_HEADER_ROW(LSK5_ROW), 5, false,
-		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "LOGON REQUIRED");
+	switch (st) {
+	case CPDLC_LOGON_NONE:
+		if (box->logon_timed_out)
+			cpdlc_strlcpy(msg, "TIMED OUT", sizeof (msg));
+		else if (box->logon_rejected)
+			snprintf(msg, sizeof (msg), "REJECTED BY %s", box->to);
+		else
+			cpdlc_strlcpy(msg, "LOGON REQUIRED", sizeof (msg));
+		break;
+	case CPDLC_LOGON_LINK_AVAIL:
+		cpdlc_strlcpy(msg, "LOGON REQUIRED", sizeof (msg));
+		break;
+	case CPDLC_LOGON_CONNECTING_LINK:
+	case CPDLC_LOGON_HANDSHAKING_LINK:
+	case CPDLC_LOGON_IN_PROG:
+		snprintf(msg, sizeof (msg), "CONTACTING %s", box->to);
+		break;
+	case CPDLC_LOGON_COMPLETE:
+		snprintf(msg, sizeof (msg), "LOGGED ON TO %s", box->to);
+		break;
+	default:
+		CPDLC_VERIFY(0);
 	}
+	fans_put_str(box, LSK_HEADER_ROW(LSK5_ROW),
+	    (FMS_COLS - strlen(msg)) / 2, false, FMS_COLOR_GREEN,
+	    FMS_FONT_SMALL, "%s", msg);
 
 	if (box->subpage == 0)
 		draw_page1(box, st);
@@ -270,22 +299,31 @@ bool
 fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 {
 	cpdlc_logon_status_t st = cpdlc_client_get_logon_status(box->cl, NULL);
+	bool read_back;
 
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer_auto(box, box->flt_id, box->flt_id_auto,
-		    sizeof (box->flt_id), st <= CPDLC_LOGON_LINK_AVAIL);
+		if (fans_scratchpad_xfer_auto(box, box->flt_id,
+		    box->flt_id_auto, sizeof (box->flt_id),
+		    st <= CPDLC_LOGON_LINK_AVAIL, &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
-		fans_scratchpad_xfer(box, box->to, sizeof (box->to),
-		    st <= CPDLC_LOGON_LINK_AVAIL);
-	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1) {
+		if (fans_scratchpad_xfer(box, box->to, sizeof (box->to),
+		    st <= CPDLC_LOGON_LINK_AVAIL, &read_back) && !read_back) {
+			box->logon_rejected = false;
+			box->logon_timed_out = false;
+			fans_scratchpad_clear(box);
+		}
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L1 &&
+	    box->net_select) {
 		if (st == CPDLC_LOGON_NONE) {
 			box->net++;
 			if (box->net > FANS_NETWORK_PILOTEDGE)
 				box->net = FANS_NETWORK_CUSTOM;
 		} else {
-			fans_set_error(box, "MOD NOT ALLOWED");
+			fans_set_error(box, FANS_ERR_BUTTON_PUSH_IGNORED);
 		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L2 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
@@ -295,16 +333,19 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 		cpdlc_strlcpy(buf, host, sizeof (buf));
 		for (int i = 0, n = strlen(buf); i < n; i++)
 			buf[i] = toupper(buf[i]);
-		fans_scratchpad_xfer(box, buf, sizeof (buf),
-		    st == CPDLC_LOGON_NONE);
-		if (strlen(buf) != 0) {
-			for (int i = 0, n = strlen(buf); i < n; i++)
-				buf[i] = tolower(buf[i]);
-			cpdlc_strlcpy(box->hostname, buf,
-			    sizeof (box->hostname));
-		} else {
-			cpdlc_strlcpy(box->hostname, "localhost",
-			    sizeof (box->hostname));
+		if (fans_scratchpad_xfer(box, buf, sizeof (buf),
+		    st == CPDLC_LOGON_NONE, &read_back)) {
+			if (strlen(buf) != 0) {
+				for (int i = 0, n = strlen(buf); i < n; i++)
+					buf[i] = tolower(buf[i]);
+				cpdlc_strlcpy(box->hostname, buf,
+				    sizeof (box->hostname));
+			} else {
+				cpdlc_strlcpy(box->hostname, "localhost",
+				    sizeof (box->hostname));
+			}
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L3 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
@@ -312,14 +353,17 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 			bool set = true;
 			unsigned port = cpdlc_client_get_port(box->cl);
 
-			fans_scratchpad_xfer_uint(box, &port, &set, 0,
-			    UINT16_MAX);
-			if (set)
-				box->port = port;
-			else
-				box->port = 0;
+			if (fans_scratchpad_xfer_uint(box, &port, &set, 0,
+			    UINT16_MAX, &read_back)) {
+				if (set)
+					box->port = port;
+				else
+					box->port = 0;
+				if (!read_back)
+					fans_scratchpad_clear(box);
+			}
 		} else {
-			fans_set_error(box, "MOD NOT ALLOWED");
+			fans_set_error(box, FANS_ERR_NO_ENTRY_ALLOWED);
 		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_L4 &&
 	    box->net == FANS_NETWORK_CUSTOM) {
@@ -333,24 +377,29 @@ fans_logon_status_key_cb(fans_t *box, fms_key_t key)
 			}
 			fans_scratchpad_clear(box);
 		} else {
-			fans_set_error(box, "MOD NOT ALLOWED");
+			fans_set_error(box, FANS_ERR_NO_ENTRY_ALLOWED);
 		}
 	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R1 &&
 	    box->show_volume) {
 		unsigned vol = box->volume * 100;
 		bool set;
 
-		fans_scratchpad_xfer_uint(box, &vol, &set, 0, 100);
-		if (set)
-			box->volume = vol / 100.0;
-	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R3) {
-		fans_set_page(box, FMS_PAGE_FMS_DATA, true);
-	} else if (key == FMS_KEY_LSK_R5) {
-		if (can_send_logon(box, st)) {
-			send_logon(box);
-		} else if (st == CPDLC_LOGON_COMPLETE) {
-			send_logoff(box);
+		if (fans_scratchpad_xfer_uint(box, &vol, &set, 0, 100,
+		    &read_back)) {
+			if (set)
+				box->volume = vol / 100.0;
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
+	} else if (box->subpage == 1 && key == FMS_KEY_LSK_R3 &&
+	    strcmp(fans_scratchpad_get(box), "DEBUG") == 0) {
+		fans_set_page(box, FMS_PAGE_FMS_DATA, true);
+		fans_scratchpad_clear(box);
+	} else if (key == FMS_KEY_LSK_R5) {
+		if (can_send_logon(box, st))
+			send_logon(box);
+		else if (st != CPDLC_LOGON_NONE)
+			cpdlc_client_logoff(box->cl, NULL);
 	} else {
 		return (false);
 	}

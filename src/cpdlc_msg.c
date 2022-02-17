@@ -346,11 +346,25 @@ encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_FREQUENCY:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%.03f MHZ", arg->freq);
+			if (arg->freq <= 21) {
+				/* HF */
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.04f MHZ", arg->freq);
+			} else {
+				/* VHF/UHF */
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%.03f MHZ", arg->freq);
+			}
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    " %.03f", arg->freq);
+			if (arg->freq <= 21) {
+				/* HF */
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %.04f", arg->freq);
+			} else {
+				/* VHF/UHF */
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %.03f", arg->freq);
+			}
 		}
 		break;
 	case CPDLC_ARG_DEGREES:

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -62,13 +62,21 @@ draw_main_page(fans_t *box)
 		char buf[8];
 		int l;
 
-		l = snprintf(buf, sizeof (buf), "%.03f", box->voice_req.freq);
+		if (box->voice_req.freq <= 21) {
+			/* HF */
+			l = snprintf(buf, sizeof (buf), "%.04f",
+			    box->voice_req.freq);
+		} else {
+			/* VHF/UHF */
+			l = snprintf(buf, sizeof (buf), "%.03f",
+			    box->voice_req.freq);
+		}
 		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s", buf);
 		fans_put_str(box, LSK2_ROW, l + 1, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "MHZ");
 	} else {
-		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_CYAN,
+		fans_put_str(box, LSK2_ROW, 0, false, FMS_COLOR_WHITE,
 		    FMS_FONT_SMALL, "------------");
 	}
 
@@ -97,7 +105,7 @@ fans_req_voice_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  VOICE REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -115,25 +123,41 @@ fans_req_voice_key_cb(fans_t *box, fms_key_t key)
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		char buf[8] = { 0 };
+		bool read_back;
 
 		if (box->voice_req.freq_set) {
-			snprintf(buf, sizeof (buf), "%.03f",
-			    box->voice_req.freq);
+			if (box->voice_req.freq <= 21) {
+				/* HF */
+				snprintf(buf, sizeof (buf), "%.04f",
+				    box->voice_req.freq);
+			} else {
+				/* VHF/UHF */
+				snprintf(buf, sizeof (buf), "%.03f",
+				    box->voice_req.freq);
+			}
 		}
-		fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+		if (!fans_scratchpad_xfer(box, buf, sizeof (buf), true,
+		    &read_back)) {
+			return (true);
+		}
 		if (buf[0] != '\0') {
 			double freq;
 			if (sscanf(buf, "%lf", &freq) != 1 || freq < 1 ||
-			    (freq >= 500 && freq < 1000) || freq >= 500000) {
-				fans_set_error(box, "FORMAT ERROR");
+			    (freq >= 500 && freq < 1000) || freq >= 500000 ||
+			    (freq >= 21 && freq < 118)) {
+				fans_set_error(box, FANS_ERR_INVALID_ENTRY);
 			} else {
 				if (freq >= 1000)
 					freq /= 1000;
 				box->voice_req.freq_set = true;
 				box->voice_req.freq = freq;
+				if (!read_back)
+					fans_scratchpad_clear(box);
 			}
 		} else {
 			box->voice_req.freq_set = false;
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
 		box->req_common.due_wx = !box->req_common.due_wx;

@@ -35,7 +35,7 @@ extern "C" {
 typedef struct {
 	void	*next;
 	void	*prev;
-} list_node_t;
+} minilist_node_t;
 
 typedef struct {
 	void	*head;
@@ -43,25 +43,25 @@ typedef struct {
 	size_t	size;
 	size_t	offset;
 	size_t	count;
-} list_t;
+} minilist_t;
 
-void list_create(list_t *list, size_t size, size_t offset);
-void list_destroy(list_t *list);
-void *list_head(const list_t *list);
-void *list_tail(const list_t *list);
-void *list_next(const list_t *list, const void *elem);
-void *list_prev(const list_t *list, const void *elem);
-void *list_get_i(const list_t *list, unsigned idx);
-size_t list_count(const list_t *list);
+void minilist_create(minilist_t *list, size_t size, size_t offset);
+void minilist_destroy(minilist_t *list);
+void *minilist_head(const minilist_t *list);
+void *minilist_tail(const minilist_t *list);
+void *minilist_next(const minilist_t *list, const void *elem);
+void *minilist_prev(const minilist_t *list, const void *elem);
+void *minilist_get_i(const minilist_t *list, unsigned idx);
+size_t minilist_count(const minilist_t *list);
 
-void list_insert_head(list_t *list, void *elem);
-void list_insert_tail(list_t *list, void *elem);
-void list_remove(list_t *list, void *elem);
-void list_insert_before(list_t *list, void *new_elem, void *old_elem);
-void list_insert_after(list_t *list, void *new_elem, void *old_elem);
+void minilist_insert_head(minilist_t *list, void *elem);
+void minilist_insert_tail(minilist_t *list, void *elem);
+void minilist_remove(minilist_t *list, void *elem);
+void minilist_insert_before(minilist_t *list, void *new_elem, void *old_elem);
+void minilist_insert_after(minilist_t *list, void *new_elem, void *old_elem);
 
-void *list_remove_head(list_t *list);
-void *list_remove_tail(list_t *list);
+void *minilist_remove_head(minilist_t *list);
+void *minilist_remove_tail(minilist_t *list);
 
 #ifdef	__cplusplus
 }

@@ -121,6 +121,14 @@ CPDLC_API void cpdlc_client_set_msg_sent_cb(cpdlc_client_t *cl,
 CPDLC_API void cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl,
     cpdlc_msg_recv_cb_t cb);
 
+CPDLC_API void cpdlc_client_set_bitrate_rx(cpdlc_client_t *cl, int64_t bitrate);
+CPDLC_API int64_t cpdlc_client_get_bitrate_rx(cpdlc_client_t *cl);
+CPDLC_API bool cpdlc_client_get_rx_in_prog(const cpdlc_client_t *cl);
+
+CPDLC_API void cpdlc_client_set_bitrate_tx(cpdlc_client_t *cl, int64_t bitrate);
+CPDLC_API int64_t cpdlc_client_get_bitrate_tx(cpdlc_client_t *cl);
+CPDLC_API bool cpdlc_client_get_tx_in_prog(const cpdlc_client_t *cl);
+
 #ifdef	__cplusplus
 }
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -53,9 +53,10 @@ verify_wcw_req(fans_t *box)
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt, 0);
 		} else {
-			int cur_alt = fans_get_cur_alt(box);
+			int cur_alt;
 
-			if (box->wcw_req.alt.alt.alt >= cur_alt) {
+			if (!fans_get_cur_alt(box, &cur_alt, NULL) ||
+			    box->wcw_req.alt.alt.alt >= cur_alt) {
 				seg = cpdlc_msg_add_seg(msg, true, 67,
 				    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
 			} else {
@@ -117,11 +118,11 @@ draw_main_page(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "SPD/SPD BLOCK");
 	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0],
-	    false, false, false);
-	fans_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_CYAN,
+	    false, false, false, false);
+	fans_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_WHITE,
 	    FMS_FONT_LARGE, "/");
 	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1],
-	    false, false, false);
+	    false, false, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
 	fans_put_altn_selector(box, LSK2_ROW, true,
@@ -143,7 +144,7 @@ fans_req_wcw_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  WHEN CAN WE");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -165,20 +166,27 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
 		char buf[8];
 		cpdlc_arg_t arg;
-		const char *error;
+		fans_err_t err;
+		bool read_back;
 
 		memset(&arg, 0, sizeof (arg));
 		fans_print_alt(&box->wcw_req.alt, buf, sizeof (buf), false);
-		fans_scratchpad_xfer(box, buf, sizeof (buf), true);
+		if (!fans_scratchpad_xfer(box, buf, sizeof (buf), true,
+		    &read_back)) {
+			return (true);
+		}
 		if (strlen(buf) == 0) {
 			memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
-		} else if ((error = fans_parse_alt(buf, 0, &arg)) != NULL) {
-			fans_set_error(box, error);
+		} else if ((err = fans_parse_alt(buf, 0, &arg)) !=
+		    FANS_ERR_NONE) {
+			fans_set_error(box, err);
 		} else {
 			box->wcw_req.alt = arg;
 			memset(box->wcw_req.spd, 0, sizeof (box->wcw_req.spd));
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->wcw_req.crz_clb = !box->wcw_req.crz_clb;
@@ -189,14 +197,17 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		box->wcw_req.alt_chg = (box->wcw_req.alt_chg + 1) %
 		    (ALT_CHG_LOWER + 1);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R1) {
+		bool read_back;
 		if (fans_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fans_t, wcw_req.spd),
 		    sizeof (cpdlc_arg_t), fans_parse_spd,
 		    fans_insert_spd_block, fans_delete_cpdlc_arg_block,
-		    fans_read_spd_block)) {
+		    fans_read_spd_block, &read_back)) {
 			memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
+			if (!read_back)
+				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
 		memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));

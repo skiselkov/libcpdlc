@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -106,7 +106,8 @@ typedef struct {
 typedef bool (*fans_get_flt_id_t)(void *userinfo, char flt_id[8]);
 typedef bool (*fans_get_geo_pos_t)(void *userinfo, double *lat, double *lon);
 typedef bool (*fans_get_spd_t)(void *userinfo, bool *mach, unsigned *spd_KIAS);
-typedef float (*fans_get_alt_t)(void *userinfo);
+typedef bool (*fans_get_alt_t)(void *userinfo, int *alt_ft, bool *is_fl);
+typedef bool (*fans_get_alt_hold_t)(void *userinfo);
 typedef float (*fans_get_vvi_t)(void *userinfo);
 typedef bool (*fans_get_wpt_info_t)(void *userinfo, fms_wpt_info_t *info);
 typedef bool (*fans_get_dest_info_t)(void *userinfo, fms_wpt_info_t *info,
@@ -119,6 +120,12 @@ typedef bool (*fans_get_wind_t)(void *userinfo, unsigned *deg_true,
 typedef void (*fans_msgs_updated_cb_t)(void *userinfo,
     cpdlc_msg_thr_id_t *updated_threads, unsigned num_updated_threads);
 typedef bool (*fans_get_souls_t)(void *userinfo, unsigned *souls);
+typedef void (*fans_log_debug_msg_t)(void *userinfo, const char *str);
+typedef void (*fans_main_menu_ret_t)(void *userinfo);
+typedef bool (*fans_can_insert_mod_t)(void *userinfo,
+    cpdlc_msg_thr_id_t thr_id, const cpdlc_msg_t *msg, bool block_mod_fpln);
+typedef void (*fans_insert_mod_t)(void *userinfo,
+    cpdlc_msg_thr_id_t thr_id, const cpdlc_msg_t *msg);
 
 typedef struct {
 	fans_get_flt_id_t	get_flt_id;
@@ -128,6 +135,7 @@ typedef struct {
 	fans_get_alt_t		get_cur_alt;
 	fans_get_vvi_t		get_cur_vvi;
 	fans_get_alt_t		get_sel_alt;
+	fans_get_alt_hold_t	get_alt_hold;
 	fans_get_wpt_info_t	get_prev_wpt;
 	fans_get_wpt_info_t	get_next_wpt;
 	fans_get_wpt_info_t	get_next_next_wpt;
@@ -138,6 +146,10 @@ typedef struct {
 	fans_get_wind_t		get_wind;
 	fans_get_souls_t	get_souls;
 	fans_msgs_updated_cb_t	msgs_updated;
+	fans_log_debug_msg_t	log_dbg_msg;
+	fans_main_menu_ret_t	main_menu_ret;
+	fans_can_insert_mod_t	can_insert_mod;
+	fans_insert_mod_t	insert_mod;
 } fans_funcs_t;
 
 /*
@@ -161,6 +173,15 @@ const char *fans_get_flt_id(const fans_t *box);
 const char *fans_get_logon_to(const fans_t *box);
 void fans_set_logon_to(fans_t *box, const char *to);
 
+void fans_show_main_menu(fans_t *box);
+bool fans_has_new_msg(fans_t *box);
+void fans_show_new_msg(fans_t *box);
+
+void fans_set_logon_has_page2(fans_t *box, bool flag);
+bool fans_get_logon_has_page2(const fans_t *box);
+
+void fans_set_has_network_selector(fans_t *box, bool flag);
+bool fans_get_has_network_selector(const fans_t *box);
 fans_network_t fans_get_network(const fans_t *box);
 void fans_set_network(fans_t *box, fans_network_t net);
 
@@ -168,6 +189,13 @@ void fans_set_shows_volume(fans_t *box, bool flag);
 bool fans_get_shows_volume(const fans_t *box);
 void fans_set_volume(fans_t *box, double volume);
 double fans_get_volume(const fans_t *box);
+
+void fans_set_shows_comm_status(fans_t *box, bool flag);
+bool fans_get_shows_comm_status(const fans_t *box);
+
+void fans_set_shows_main_menu_return(fans_t *box, bool flag);
+bool fans_get_shows_main_menu_return(const fans_t *box);
+
 /*
  * Only used by FANS_NETWORK_CUSTOM
  */
@@ -182,6 +210,8 @@ const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);
 
 void fans_push_key(fans_t *box, fms_key_t key);
 void fans_push_char(fans_t *box, char c);
+void fans_set_scratchpad(fans_t *box, const char *spad);
+const char *fans_get_scratchpad(fans_t *box);
 void fans_update(fans_t *box);
 
 #ifdef	__cplusplus

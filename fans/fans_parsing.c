@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -79,7 +79,7 @@ fans_parse_time(const char *buf, int *hrs_p, int *mins_p)
 	return (true);
 }
 
-const char *
+fans_err_t
 fans_parse_alt(const char *str, unsigned field_nr, void *data)
 {
 	cpdlc_arg_t arg;
@@ -91,20 +91,20 @@ fans_parse_alt(const char *str, unsigned field_nr, void *data)
 	memset(&arg, 0, sizeof (arg));
 
 	if (strlen(str) < 2)
-		goto errout;
+		return (FANS_ERR_INVALID_ENTRY);
 	if (str[0] == 'F' && str[1] == 'L') {
 		if (sscanf(&str[2], "%d", &arg.alt.alt) != 1)
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		arg.alt.fl = true;
 		arg.alt.alt *= 100;
 	} else if (str[0] == 'F') {
 		if (sscanf(&str[1], "%d", &arg.alt.alt) != 1)
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		arg.alt.fl = true;
 		arg.alt.alt *= 100;
 	} else {
 		if (sscanf(str, "%d", &arg.alt.alt) != 1)
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		if (arg.alt.alt < 1000) {
 			arg.alt.fl = true;
 			arg.alt.alt *= 100;
@@ -115,16 +115,14 @@ fans_parse_alt(const char *str, unsigned field_nr, void *data)
 		}
 	}
 	if (arg.alt.alt < 1000 || arg.alt.alt > 60000)
-		goto errout;
+		return (FANS_ERR_INVALID_ENTRY);
 
 	memcpy(data, &arg, sizeof (arg));
 
-	return (NULL);
-errout:
-	return ("FORMAT ERROR");
+	return (FANS_ERR_NONE);
 }
 
-const char *
+fans_err_t
 fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
     void *userinfo)
 {
@@ -139,7 +137,7 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 	outarg = ((void *)box) + offset;
 
 	if (field_nr >= 2)
-		goto errout;
+		return (FANS_ERR_INVALID_ENTRY);
 	if (field_nr == 0) {
 		memcpy(outarg, inarg, sizeof (*inarg));
 		memset(&outarg[1], 0, sizeof (*inarg));
@@ -150,14 +148,12 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 		    outarg[0].alt.alt >= inarg->alt.alt ||
 		    /* if lower alt is FL, higher must as well */
 		    (outarg[0].alt.fl && !inarg->alt.fl)) {
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		}
 		memcpy(&outarg[1], inarg, sizeof (*inarg));
 	}
 
-	return (NULL);
-errout:
-	return ("INVALID INSERT");
+	return (FANS_ERR_NONE);
 }
 
 void
@@ -182,7 +178,7 @@ fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	}
 }
 
-const char *
+fans_err_t
 fans_parse_spd(const char *str, unsigned field_nr, void *data)
 {
 	cpdlc_arg_t *arg;
@@ -193,29 +189,27 @@ fans_parse_spd(const char *str, unsigned field_nr, void *data)
 	arg = data;
 
 	if (strlen(str) < 2)
-		goto errout;
+		return (FANS_ERR_INVALID_ENTRY);
 	if (str[0] == 'M' || str[0] == '.') {
 		if (sscanf(&str[1], "%d", &arg->spd.spd) != 1 ||
 		    arg->spd.spd < 10 || arg->spd.spd > 99)
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		arg->spd.mach = true;
 		arg->spd.spd *= 10;
 	} else {
 		if (sscanf(str, "%d", &arg->spd.spd) != 1 ||
 		    arg->spd.spd < 10 || arg->spd.spd > 999)
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		if (arg->spd.spd < 100) {
 			arg->spd.mach = true;
 			arg->spd.spd *= 10;
 		}
 	}
 
-	return (NULL);
-errout:
-	return ("FORMAT ERROR");
+	return (FANS_ERR_NONE);
 }
 
-const char *
+fans_err_t
 fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
     void *userinfo)
 {
@@ -230,7 +224,7 @@ fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
 	outarg = ((void *)box) + offset;
 
 	if (field_nr >= 2)
-		goto errout;
+		return (FANS_ERR_INVALID_ENTRY);
 	if (field_nr == 0) {
 		memcpy(outarg, inarg, sizeof (*inarg));
 		memset(&outarg[1], 0, sizeof (*inarg));
@@ -241,14 +235,12 @@ fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
 		    outarg[0].spd.spd == 0 ||
 		    /* lower speed must really be lower */
 		    (outarg[0].spd.spd >= inarg->spd.spd)) {
-			goto errout;
+			return (FANS_ERR_INVALID_ENTRY);
 		}
 		memcpy(&outarg[1], inarg, sizeof (*inarg));
 	}
 
-	return (NULL);
-errout:
-	return ("INVALID INSERT");
+	return (FANS_ERR_NONE);
 }
 
 void
@@ -263,17 +255,18 @@ fans_read_spd_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
-		int l = fans_print_spd(outarg, str, READ_FUNC_BUF_SZ, false);
+		int l = fans_print_spd(outarg, str, READ_FUNC_BUF_SZ, false,
+		    false);
 		if (outarg[1].spd.spd != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
 			fans_print_spd(&outarg[1], &str[l],
-			    READ_FUNC_BUF_SZ - l, false);
+			    READ_FUNC_BUF_SZ - l, false, false);
 		}
 	}
 }
 
-const char *
+fans_err_t
 fans_parse_wind(const char *str, unsigned field_nr, void *data)
 {
 	fms_wind_t *out_wind;
@@ -286,20 +279,20 @@ fans_parse_wind(const char *str, unsigned field_nr, void *data)
 	if (field_nr == 0) {
 		if (sscanf(str, "%d", &out_wind->deg) != 1 ||
 		    out_wind->deg > 360) {
-			return ("FORMAT ERROR");
+			return (FANS_ERR_INVALID_ENTRY);
 		}
 		out_wind->deg %= 360;
 	} else {
 		if (sscanf(str, "%d", &out_wind->spd) != 1 ||
 		    out_wind->spd > MAX_WIND) {
-			return ("FORMAT ERROR");
+			return (FANS_ERR_INVALID_ENTRY);
 		}
 	}
 
-	return (NULL);
+	return (FANS_ERR_NONE);
 }
 
-const char *
+fans_err_t
 fans_insert_wind_block(fans_t *box, unsigned field_nr, void *data,
     void *userinfo)
 {
@@ -322,7 +315,7 @@ fans_insert_wind_block(fans_t *box, unsigned field_nr, void *data,
 		out_wind->set = true;
 	}
 
-	return (NULL);
+	return (FANS_ERR_NONE);
 }
 
 void
@@ -340,16 +333,16 @@ fans_read_wind_block(fans_t *box, void *userinfo,
 	}
 }
 
-const char *
+fans_err_t
 fans_delete_wind(fans_t *box, void *userinfo)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(userinfo != NULL);
 	memset(userinfo, 0, sizeof (fms_wind_t));
-	return (NULL);
+	return (FANS_ERR_NONE);
 }
 
-const char *
+fans_err_t
 fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 {
 	cpdlc_arg_t *outarg;
@@ -361,30 +354,42 @@ fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 	outarg = ((void *)box) + offset;
 	memset(outarg, 0, 2 * sizeof (cpdlc_arg_t));
 
-	return (NULL);
+	return (FANS_ERR_NONE);
 }
 
 int
 fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units)
 {
 	CPDLC_ASSERT(arg != NULL);
-	if (arg->alt.fl)
-		return (snprintf(str, cap, "FL%d", arg->alt.alt / 100));
+	if (arg->alt.fl) {
+		return (snprintf(str, cap, "FL%d",
+		    (int)round(arg->alt.alt / 100.0)));
+	}
 	return (snprintf(str, cap, "%d%s", arg->alt.alt, units ? "FT" : ""));
 }
 
 int
-fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool units)
+fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool pretty,
+    bool units)
 {
 	CPDLC_ASSERT(arg != NULL);
 	if (arg->spd.mach) {
-		if (units)
-			return (snprintf(str, cap, "M%03d", arg->spd.spd / 10));
-		else
-			return (snprintf(str, cap, "M%02d", arg->spd.spd / 10));
+		if (pretty) {
+			return (snprintf(str, cap, ".%02d MACH",
+			    arg->spd.spd / 10));
+		} else if (units) {
+			return (snprintf(str, cap, "M.%02d",
+			    arg->spd.spd / 10));
+		} else {
+			return (snprintf(str, cap, ".%02d", arg->spd.spd / 10));
+		}
 	} else {
-		return (snprintf(str, cap, "%03d%s", arg->spd.spd,
-		    units ? "KT" : ""));
+		if (pretty && units)
+			return (snprintf(str, cap, "%03d KT", arg->spd.spd));
+		else if (units)
+			return (snprintf(str, cap, "%03dKT", arg->spd.spd));
+		else
+			return (snprintf(str, cap, "%03d", arg->spd.spd));
 	}
 }
 
@@ -393,7 +398,7 @@ fans_print_off(const fms_off_t *off, char *buf, size_t cap)
 {
 	CPDLC_ASSERT(off != NULL);
 	if (off->nm != 0) {
-		return (snprintf(buf, cap, "%c%.0f",
+		return (snprintf(buf, cap, "%c%.1f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm));
 	}
 	cpdlc_strlcpy(buf, "", cap);
@@ -527,7 +532,7 @@ strip_spaces(char *buf)
 	}
 }
 
-const char *
+fans_err_t
 fans_parse_pos(const char *buf, fms_pos_t *pos)
 {
 	CPDLC_ASSERT(buf != NULL);
@@ -535,33 +540,27 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 
 	if (strlen(buf) == 0) {
 		pos->set = false;
-		return (NULL);
+		return (FANS_ERR_NONE);
 	}
 
 	switch (pos->type) {
 	case FMS_POS_NAVAID:
-		if (strlen(buf) > 4) {
-			return ("FORMAT ERROR");
-		} else {
-			cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-			pos->set = true;
-		}
+		if (strlen(buf) > 4)
+			return (FANS_ERR_INVALID_ENTRY);
+		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
+		pos->set = true;
 		break;
 	case FMS_POS_ARPT:
-		if (!is_valid_icao_code(buf)) {
-			return ("FORMAT ERROR");
-		} else {
-			cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-			pos->set = true;
-		}
+		if (!is_valid_icao_code(buf))
+			return (FANS_ERR_INVALID_ENTRY);
+		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
+		pos->set = true;
 		break;
 	case FMS_POS_FIX:
-		if (strlen(buf) > 5) {
-			return ("FORMAT ERROR");
-		} else {
-			cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-			pos->set = true;
-		}
+		if (strlen(buf) > 5)
+			return (FANS_ERR_INVALID_ENTRY);
+		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
+		pos->set = true;
 		break;
 	case FMS_POS_LAT_LON: {
 		char inbuf[32], lat_buf[16], lon_buf[16];
@@ -583,16 +582,17 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 			lon_sign = -1;
 		}
 		if (lat_str == NULL || lon_str == NULL || lat_str > lon_str ||
-		    lon_str - lat_str > (intptr_t)sizeof (lat_buf))
-			return ("FORMAT ERROR");
+		    lon_str - lat_str > (intptr_t)sizeof (lat_buf)) {
+			return (FANS_ERR_INVALID_ENTRY);
+		}
 
 		cpdlc_strlcpy(lat_buf, &lat_str[1], lon_str - lat_str);
 		cpdlc_strlcpy(lon_buf, &lon_str[1], sizeof (lon_buf));
 		if (!parse_deg_mins(lat_buf, 2, &degs, &mins))
-			return ("FORMAT ERROR");
+			return (FANS_ERR_INVALID_ENTRY);
 		pos->lat = lat_sign * (degs + (mins / 60));
 		if (!parse_deg_mins(lon_buf, 3, &degs, &mins))
-			return ("FORMAT ERROR");
+			return (FANS_ERR_INVALID_ENTRY);
 		pos->lon = lon_sign * (degs + (mins / 60));
 		pos->set = true;
 
@@ -605,12 +605,13 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 		s1 = strchr(buf, '/');
 		s2 = strrchr(buf, '/');
 		if (s1 == NULL || s2 == NULL || s1 - buf > 5 ||
-		    s2 - s1 > (intptr_t)sizeof (3) || strlen(s2) > 4)
-			return ("FORMAT ERROR");
+		    s2 - s1 > (intptr_t)sizeof (3) || strlen(s2) > 4) {
+			return (FANS_ERR_INVALID_ENTRY);
+		}
 		if (sscanf(&s1[1], "%d", &brg) != 1 ||
 		    sscanf(&s2[1], "%d", &dist) != 1 ||
-		    brg < 0 || brg >= 360 || dist < 1 || dist > 999) {
-			return ("FORMAT ERROR");
+		    brg < 0 || brg > 360 || dist < 1 || dist > 999) {
+			return (FANS_ERR_INVALID_ENTRY);
 		}
 
 		cpdlc_strlcpy(pos->name, buf, (s1 - buf) + 1);
@@ -621,5 +622,5 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 	}
 	}
 
-	return (NULL);
+	return (FANS_ERR_NONE);
 }

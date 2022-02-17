@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -78,6 +78,7 @@
 
 #define	CONNECTION_TIMEOUT	30	/* seconds */
 #define	KEEPALIVE_TIMEOUT	300	/* seconds */
+#define	KEEPALIVE_TIMEOUT_LIM	1800	/* seconds */
 
 #ifdef	CPDLC_CLIENT_LWS
 #define	SENDBUF_PRE_PAD		LWS_PRE
@@ -89,6 +90,8 @@
 #define	PATH_MAX		256	/* chars */
 #endif
 
+#define	BITRATE_DELAY		40000	/* us */
+
 typedef struct outmsgbuf_s {
 	cpdlc_msg_token_t	token;
 	cpdlc_msg_status_t	status;
@@ -96,12 +99,12 @@ typedef struct outmsgbuf_s {
 	size_t			bufsz;
 	size_t			bytes_sent;
 	bool			track_sent;
-	list_node_t		node;
+	minilist_node_t		node;
 } outmsgbuf_t;
 
 typedef struct inmsgbuf_s {
 	cpdlc_msg_t		*msg;
-	list_node_t		node;
+	minilist_node_t		node;
 } inmsgbuf_t;
 
 /*
@@ -161,6 +164,12 @@ struct cpdlc_client_s {
 	gnutls_certificate_credentials_t xcred;
 #endif	/* !CPDLC_CLIENT_LWS */
 
+	int64_t				bitrate_rx;	/* bit/s */
+	bool				rx_in_prog;
+	int64_t				bitrate_tx;	/* bit/s */
+	bool				tx_in_prog;
+	uint64_t			rtt;		/* us */
+
 	cpdlc_msg_sent_cb_t		msg_sent_cb;
 	cpdlc_msg_recv_cb_t		msg_recv_cb;
 	void				*cb_userinfo;
@@ -168,14 +177,17 @@ struct cpdlc_client_s {
 	struct {
 		/* protected by `lock' */
 		cpdlc_msg_token_t	next_tok;
-		list_t			sending;
-		list_t			sent;
+		minilist_t		sending;
+		minilist_t		sent;
 	} outmsgbufs;
+
+	/* only accessed from worker */
+	cpdlc_msg_token_t	keepalive_token;
 
 	/* protected by `lock' */
 	char		*inbuf;
 	unsigned	inbuf_sz;
-	list_t		inmsgbufs;
+	minilist_t	inmsgbufs;
 
 	/*
 	 * When any last data was sent or received. Used for keepalive.
@@ -244,19 +256,48 @@ set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 	}
 }
 
-static void
+static bool
 check_keepalive(cpdlc_client_t *cl)
 {
+	cpdlc_msg_t *ping;
+	time_t now = time(NULL);
+
 	CPDLC_ASSERT(cl != NULL);
 
+	if (cl->keepalive_token != CPDLC_INVALID_MSG_TOKEN) {
+		switch (cpdlc_client_get_msg_status(cl, cl->keepalive_token)) {
+		case CPDLC_MSG_STATUS_SENDING:
+			/* Send in progress */
+			if (now - cl->last_data_rdwr < KEEPALIVE_TIMEOUT_LIM)
+				return (true);
+			else
+				return (false);
+		case CPDLC_MSG_STATUS_SEND_FAILED:
+			/*
+			 * Send failed completely, clear the token and
+			 * try another send if we haven't reached the retry
+			 * limit.
+			 */
+			cl->keepalive_token = CPDLC_INVALID_MSG_TOKEN;
+			if (now - cl->last_data_rdwr > KEEPALIVE_TIMEOUT_LIM)
+				return (false);
+			break;
+		case CPDLC_MSG_STATUS_SENT:
+		case CPDLC_MSG_STATUS_INVALID_TOKEN:
+			/* Reset the keepalive timer */
+			cl->last_data_rdwr = time(NULL);
+			cl->keepalive_token = CPDLC_INVALID_MSG_TOKEN;
+			break;
+		}
+	}
 	if (time(NULL) - cl->last_data_rdwr < KEEPALIVE_TIMEOUT)
-		return;
+		return (true);
 
-	cpdlc_msg_t *ping = cpdlc_msg_alloc(CPDLC_PKT_PING);
-	send_msg_impl(cl, ping, false);
+	ping = cpdlc_msg_alloc(CPDLC_PKT_PING);
+	cl->keepalive_token = send_msg_impl(cl, ping, false);
 	cpdlc_msg_free(ping);
-	/* Reset the keepalive timer */
-	cl->last_data_rdwr = time(NULL);
+
+	return (true);
 }
 
 static void
@@ -317,9 +358,10 @@ logon_worker(void *userinfo)
 			    "logon_status = %x", cl->logon_status);
 		}
 		/* Schedules a keepalive message if necessary */
-		if (cl->logon_status == CPDLC_LOGON_COMPLETE)
-			check_keepalive(cl);
-
+		if (cl->logon_status == CPDLC_LOGON_COMPLETE &&
+		    !check_keepalive(cl)) {
+			break;
+		}
 		if (new_msgs && cl->msg_recv_cb != NULL) {
 			/*
 			 * To prevent locking inversions, we need to drop
@@ -355,16 +397,22 @@ cpdlc_client_alloc(bool is_atc)
 	mutex_init(&cl->lock);
 
 	cl->is_atc = is_atc;
+	/*
+	 * Bitrate simulation configuration
+	 */
+	cl->bitrate_rx = -1;
+	cl->bitrate_tx = -1;
+	cl->keepalive_token = CPDLC_INVALID_MSG_TOKEN;
 
 #ifndef	CPDLC_CLIENT_LWS
 	cl->sock = -1;
 #endif
 
-	list_create(&cl->outmsgbufs.sending, sizeof (outmsgbuf_t),
+	minilist_create(&cl->outmsgbufs.sending, sizeof (outmsgbuf_t),
 	    offsetof(outmsgbuf_t, node));
-	list_create(&cl->outmsgbufs.sent, sizeof (outmsgbuf_t),
+	minilist_create(&cl->outmsgbufs.sent, sizeof (outmsgbuf_t),
 	    offsetof(outmsgbuf_t, node));
-	list_create(&cl->inmsgbufs, sizeof (inmsgbuf_t),
+	minilist_create(&cl->inmsgbufs, sizeof (inmsgbuf_t),
 	    offsetof(inmsgbuf_t, node));
 
 	return (cl);
@@ -407,9 +455,9 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	CPDLC_ASSERT3P(cl->inbuf, ==, NULL);
 	CPDLC_ASSERT0(cl->inbuf_sz);
 
-	list_destroy(&cl->outmsgbufs.sending);
-	list_destroy(&cl->outmsgbufs.sent);
-	list_destroy(&cl->inmsgbufs);
+	minilist_destroy(&cl->outmsgbufs.sending);
+	minilist_destroy(&cl->outmsgbufs.sent);
+	minilist_destroy(&cl->inmsgbufs);
 
 	free(cl->cafile);
 	clear_key_data(cl);
@@ -584,20 +632,23 @@ reset_link_state(cpdlc_client_t *cl)
 	}
 #endif	/* !CPDLC_CLIENT_LWS */
 
-	while ((outbuf = list_remove_head(&cl->outmsgbufs.sending)) != NULL) {
+	while ((outbuf = minilist_remove_head(&cl->outmsgbufs.sending)) !=
+	    NULL) {
 		free(outbuf->buf);
 		free(outbuf);
 	}
-	while ((outbuf = list_remove_head(&cl->outmsgbufs.sent)) != NULL) {
+	while ((outbuf = minilist_remove_head(&cl->outmsgbufs.sent)) != NULL) {
 		CPDLC_ASSERT3P(outbuf->buf, ==, NULL);
 		free(outbuf);
 	}
+	cl->rx_in_prog = false;
+	cl->tx_in_prog = false;
 
 	free(cl->inbuf);
 	cl->inbuf = NULL;
 	cl->inbuf_sz = 0;
 
-	while ((inbuf = list_remove_head(&cl->inmsgbufs)) != NULL) {
+	while ((inbuf = minilist_remove_head(&cl->inmsgbufs)) != NULL) {
 		cpdlc_msg_free(inbuf->msg);
 		free(inbuf);
 	}
@@ -1020,7 +1071,7 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 
 	inmsgbuf = safe_calloc(1, sizeof (*inmsgbuf));
 	inmsgbuf->msg = msg;
-	list_insert_tail(&cl->inmsgbufs, inmsgbuf);
+	minilist_insert_tail(&cl->inmsgbufs, inmsgbuf);
 
 	return (true);
 }
@@ -1117,6 +1168,8 @@ process_input(cpdlc_client_t *cl)
 		    cl->inbuf_sz + 1);
 		cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz);
 	}
+	if (new_msgs)
+		cl->rx_in_prog = false;
 
 	return (new_msgs);
 }
@@ -1161,24 +1214,40 @@ do_msg_input(cpdlc_client_t *cl)
 	CPDLC_ASSERT(cl != NULL);
 
 	for (;;) {
+		uint32_t recvsz = 0, max_recv = UINT32_MAX;
 		uint8_t buf[READBUF_SZ];
-		int bytes = gnutls_record_recv(cl->session, buf, sizeof (buf));
+		int bytes;
 
+		if (cl->bitrate_rx >= 0) {
+			mutex_exit(&cl->lock);
+			cpdlc_usleep(BITRATE_DELAY);
+			mutex_enter(&cl->lock);
+			if (cl->bitrate_rx == 0)
+				break;
+			cl->rx_in_prog = true;
+			max_recv = (cl->bitrate_rx * BITRATE_DELAY) / 8000000;
+			max_recv = MAX(max_recv, 1);
+		}
+		recvsz = MIN(max_recv, sizeof (buf));
+		bytes = gnutls_record_recv(cl->session, buf, recvsz);
 		if (bytes < 0) {
 			if (bytes != GNUTLS_E_AGAIN &&
 			    gnutls_error_is_fatal(bytes)) {
 				cl->logon_status = CPDLC_LOGON_NONE;
 			}
+			cl->rx_in_prog = false;
 			break;
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
 			cl->logon_status = CPDLC_LOGON_NONE;
+			cl->rx_in_prog = false;
 			break;
 		}
 		/* Input sanitization, don't allow control chars */
 		if (!sanitize_input(buf, bytes)) {
 			cl->logon_status = CPDLC_LOGON_NONE;
+			cl->rx_in_prog = false;
 			break;
 		}
 		cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz + bytes + 1);
@@ -1209,21 +1278,41 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(num_tokens_p != NULL);
+	CPDLC_ASSERT_MUTEX_HELD(&cl->lock);
 
-	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
-	    outmsgbuf != NULL; outmsgbuf = list_head(&cl->outmsgbufs.sending)) {
+	for (outmsgbuf_t *outmsgbuf = minilist_remove_head(
+	    &cl->outmsgbufs.sending); outmsgbuf != NULL;
+	    outmsgbuf = minilist_head(&cl->outmsgbufs.sending)) {
+		uint32_t max_send = UINT32_MAX;
 		int bytes;
 
+		cl->tx_in_prog = true;
+		if (cl->bitrate_tx >= 0) {
+			mutex_exit(&cl->lock);
+			cpdlc_usleep(BITRATE_DELAY);
+			mutex_enter(&cl->lock);
+			if (cl->bitrate_tx == 0) {
+				minilist_insert_head(&cl->outmsgbufs.sending,
+				    outmsgbuf);
+				break;
+			}
+			max_send = (cl->bitrate_tx * BITRATE_DELAY) / 8000000;
+			max_send = MAX(max_send, 1);
+		}
 #ifdef	CPDLC_CLIENT_LWS
 		bytes = lws_write(wsi, (void *)&outmsgbuf->buf[SENDBUF_PRE_PAD],
 		    outmsgbuf->bufsz, LWS_WRITE_TEXT);
 		if (bytes == -1) {
 			/* Fatal send error */
 			cl->logon_status = CPDLC_LOGON_NONE;
+			minilist_insert_head(&cl->outmsgbufs.sending,
+			    outmsgbuf);
 			break;
 		}
 		if (bytes == 0) {
 			lws_callback_on_writable(wsi);
+			minilist_insert_head(&cl->outmsgbufs.sending,
+			    outmsgbuf);
 			break;
 		}
 		/*
@@ -1234,18 +1323,22 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 #else	/* !CPDLC_CLIENT_LWS */
 		bytes = gnutls_record_send(cl->session,
 		    &outmsgbuf->buf[outmsgbuf->bytes_sent],
-		    outmsgbuf->bufsz - outmsgbuf->bytes_sent);
+		    MIN(max_send, outmsgbuf->bufsz - outmsgbuf->bytes_sent));
 
 		if (bytes < 0) {
 			if (bytes != GNUTLS_E_AGAIN &&
 			    gnutls_error_is_fatal(bytes)) {
 				cl->logon_status = CPDLC_LOGON_NONE;
 			}
+			minilist_insert_head(&cl->outmsgbufs.sending,
+			    outmsgbuf);
 			break;
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
 			cl->logon_status = CPDLC_LOGON_NONE;
+			minilist_insert_head(&cl->outmsgbufs.sending,
+			    outmsgbuf);
 			break;
 		}
 #endif	/* !CPDLC_CLIENT_LWS */
@@ -1254,15 +1347,18 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 		/* Reset the keepalive timer */
 		cl->last_data_rdwr = time(NULL);
 		/* short byte count sent, need to wait for more writing */
-		if (outmsgbuf->bytes_sent < outmsgbuf->bufsz)
+		if (outmsgbuf->bytes_sent < outmsgbuf->bufsz) {
+			minilist_insert_head(&cl->outmsgbufs.sending,
+			    outmsgbuf);
 			break;
-		list_remove(&cl->outmsgbufs.sending, outmsgbuf);
+		}
+		cl->tx_in_prog = false;
 		/* Don't need the buffer inside anymore */
 		free(outmsgbuf->buf);
 		outmsgbuf->buf = NULL;
 		outmsgbuf->bufsz = 0;
 		if (outmsgbuf->track_sent) {
-			list_insert_tail(&cl->outmsgbufs.sent, outmsgbuf);
+			minilist_insert_tail(&cl->outmsgbufs.sent, outmsgbuf);
 			tokens = safe_realloc(tokens, (num_tokens + 1) *
 			    sizeof (*tokens));
 			tokens[num_tokens] = outmsgbuf->token;
@@ -1289,7 +1385,7 @@ poll_lws(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	cl->pollinfo.num_out_tokens = num_out_tokens;
 	cl->pollinfo.new_msgs = false;
 
-	if (list_count(&cl->outmsgbufs.sending) != 0)
+	if (minilist_count(&cl->outmsgbufs.sending) != 0)
 		lws_callback_on_writable(cl->lws_sock);
 
 	mutex_exit(&cl->lock);
@@ -1392,13 +1488,14 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 	CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT(out_tokens != NULL);
 	CPDLC_ASSERT(num_out_tokens != NULL);
+	CPDLC_ASSERT_MUTEX_HELD(&cl->lock);
 
 #if	USE_SELECT
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
 
 	FD_SET(cl->sock, &rfds);
-	do_send = (list_head(&cl->outmsgbufs.sending) != NULL);
+	do_send = (minilist_head(&cl->outmsgbufs.sending) != NULL);
 	if (do_send)
 		FD_SET(cl->sock, &wfds);
 
@@ -1409,7 +1506,7 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 #else	/* !defined(_WIN32) */
 	pfd.fd = cl->sock;
 	pfd.events = POLLIN;
-	if (list_head(&cl->outmsgbufs.sending) != NULL)
+	if (minilist_head(&cl->outmsgbufs.sending) != NULL)
 		pfd.events |= POLLOUT;
 
 	/* Release the lock to allow for state updates while running */
@@ -1580,7 +1677,7 @@ send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
 	    outmsgbuf->bufsz + 1);
 	outmsgbuf->track_sent = track_sent;
 
-	list_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);
+	minilist_insert_tail(&cl->outmsgbufs.sending, outmsgbuf);
 
 	return (outmsgbuf->token);
 }
@@ -1614,20 +1711,20 @@ cpdlc_client_get_msg_status(cpdlc_client_t *cl, cpdlc_msg_token_t token)
 
 	mutex_enter(&cl->lock);
 
-	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sent);
+	for (outmsgbuf_t *outmsgbuf = minilist_head(&cl->outmsgbufs.sent);
 	    outmsgbuf != NULL;
-	    outmsgbuf = list_next(&cl->outmsgbufs.sent, outmsgbuf)) {
+	    outmsgbuf = minilist_next(&cl->outmsgbufs.sent, outmsgbuf)) {
 		if (outmsgbuf->token == token) {
 			status = outmsgbuf->status;
-			list_remove(&cl->outmsgbufs.sent, outmsgbuf);
+			minilist_remove(&cl->outmsgbufs.sent, outmsgbuf);
 			free(outmsgbuf->buf);
 			free(outmsgbuf);
 			goto out;
 		}
 	}
-	for (outmsgbuf_t *outmsgbuf = list_head(&cl->outmsgbufs.sending);
+	for (outmsgbuf_t *outmsgbuf = minilist_head(&cl->outmsgbufs.sending);
 	    outmsgbuf != NULL;
-	    outmsgbuf = list_next(&cl->outmsgbufs.sending, outmsgbuf)) {
+	    outmsgbuf = minilist_next(&cl->outmsgbufs.sending, outmsgbuf)) {
 		if (outmsgbuf->token == token) {
 			status = outmsgbuf->status;
 			goto out;
@@ -1649,7 +1746,7 @@ cpdlc_client_recv_msg(cpdlc_client_t *cl)
 
 	inmsgbuf = cl->inmsgbufs.head;
 	if (inmsgbuf != NULL) {
-		list_remove(&cl->inmsgbufs, inmsgbuf);
+		minilist_remove(&cl->inmsgbufs, inmsgbuf);
 		CPDLC_ASSERT(inmsgbuf->msg != NULL);
 		msg = inmsgbuf->msg;
 		free(inmsgbuf);
@@ -1698,4 +1795,50 @@ cpdlc_client_set_msg_recv_cb(cpdlc_client_t *cl, cpdlc_msg_recv_cb_t cb)
 	mutex_enter(&cl->lock);
 	cl->msg_recv_cb = cb;
 	mutex_exit(&cl->lock);
+}
+
+void
+cpdlc_client_set_bitrate_rx(cpdlc_client_t *cl, int64_t bitrate)
+{
+	CPDLC_ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->bitrate_rx = bitrate;
+	mutex_exit(&cl->lock);
+}
+
+int64_t
+cpdlc_client_get_bitrate_rx(cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->bitrate_rx);
+}
+
+bool
+cpdlc_client_get_rx_in_prog(const cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->rx_in_prog);
+}
+
+void
+cpdlc_client_set_bitrate_tx(cpdlc_client_t *cl, int64_t bitrate)
+{
+	CPDLC_ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->bitrate_tx = bitrate;
+	mutex_exit(&cl->lock);
+}
+
+int64_t
+cpdlc_client_get_bitrate_tx(cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->bitrate_tx);
+}
+
+bool
+cpdlc_client_get_tx_in_prog(const cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->tx_in_prog);
 }

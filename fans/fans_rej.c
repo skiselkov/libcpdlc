@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -95,9 +95,13 @@ fans_rej_key_cb(fans_t *box, fms_key_t key)
 		box->rej.due = (box->rej.due + 1) %
 		    (REJ_DUE_UNLOADABLE + 1);
 	} else if (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4) {
-		fans_scratchpad_xfer(box,
+		bool read_back;
+		if (fans_scratchpad_xfer(box,
 		    box->rej.freetext[key - FMS_KEY_LSK_L2],
-		    sizeof (box->rej.freetext[key - FMS_KEY_LSK_L2]), true);
+		    sizeof (box->rej.freetext[key - FMS_KEY_LSK_L2]), true,
+		    &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (key == FMS_KEY_LSK_R5) {
 		cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		unsigned seg;

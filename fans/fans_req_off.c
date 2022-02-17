@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -104,7 +104,7 @@ fans_req_off_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  OFFSET REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -125,7 +125,11 @@ fans_req_off_key_cb(fans_t *box, fms_key_t key)
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_offset(box, &box->off_req.off, NULL);
+		bool read_back;
+		if (fans_scratchpad_xfer_offset(box, &box->off_req.off, NULL,
+		    &read_back) && !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (box->subpage == 0 &&
 	    (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4)) {
 		fans_req_key_due(box, key);

@@ -27,14 +27,14 @@
 #include "minilist.h"
 
 #define	P2N(list, ptr) \
-	((list_node_t *)((ptr) + ((list)->offset)))
+	((minilist_node_t *)((ptr) + ((list)->offset)))
 
 void
-list_create(list_t *list, size_t size, size_t offset)
+minilist_create(minilist_t *list, size_t size, size_t offset)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(size != 0);
-	CPDLC_ASSERT3U(size, >=, offset + sizeof (list_node_t));
+	CPDLC_ASSERT3U(size, >=, offset + sizeof (minilist_node_t));
 
 	list->head = list->tail = NULL;
 	list->size = size;
@@ -43,7 +43,7 @@ list_create(list_t *list, size_t size, size_t offset)
 }
 
 void
-list_destroy(list_t *list)
+minilist_destroy(minilist_t *list)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT0(list->count);
@@ -53,21 +53,21 @@ list_destroy(list_t *list)
 }
 
 void *
-list_head(const list_t *list)
+minilist_head(const minilist_t *list)
 {
 	CPDLC_ASSERT(list != NULL);
 	return (list->head);
 }
 
 void *
-list_tail(const list_t *list)
+minilist_tail(const minilist_t *list)
 {
 	CPDLC_ASSERT(list != NULL);
 	return (list->tail);
 }
 
 void *
-list_next(const list_t *list, const void *elem)
+minilist_next(const minilist_t *list, const void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
@@ -75,7 +75,7 @@ list_next(const list_t *list, const void *elem)
 }
 
 void *
-list_prev(const list_t *list, const void *elem)
+minilist_prev(const minilist_t *list, const void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
@@ -83,28 +83,28 @@ list_prev(const list_t *list, const void *elem)
 }
 
 void *
-list_get_i(const list_t *list, unsigned idx)
+minilist_get_i(const minilist_t *list, unsigned idx)
 {
 	void *p;
 
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(idx < list->count);
-	p = list_head(list);
+	p = minilist_head(list);
 	for (; idx != 0; idx--)
-		p = list_next(list, p);
+		p = minilist_next(list, p);
 
 	return (p);
 }
 
 size_t
-list_count(const list_t *list)
+minilist_count(const minilist_t *list)
 {
 	CPDLC_ASSERT(list != NULL);
 	return (list->count);
 }
 
 void
-list_insert_head(list_t *list, void *elem)
+minilist_insert_head(minilist_t *list, void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
@@ -124,7 +124,7 @@ list_insert_head(list_t *list, void *elem)
 }
 
 void
-list_insert_tail(list_t *list, void *elem)
+minilist_insert_tail(minilist_t *list, void *elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(elem != NULL);
@@ -144,7 +144,7 @@ list_insert_tail(list_t *list, void *elem)
 }
 
 void
-list_remove(list_t *list, void *elem)
+minilist_remove(minilist_t *list, void *elem)
 {
 	void *next_elem, *prev_elem;
 
@@ -170,7 +170,7 @@ list_remove(list_t *list, void *elem)
 }
 
 static inline void
-list_insert_between(list_t *list, void *elem, void *before, void *after)
+minilist_insert_between(minilist_t *list, void *elem, void *before, void *after)
 {
 	CPDLC_ASSERT(before != NULL);
 	CPDLC_ASSERT(after != NULL);
@@ -181,57 +181,57 @@ list_insert_between(list_t *list, void *elem, void *before, void *after)
 }
 
 void
-list_insert_before(list_t *list, void *new_elem, void *old_elem)
+minilist_insert_before(minilist_t *list, void *new_elem, void *old_elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(new_elem != NULL);
 	CPDLC_ASSERT(old_elem != NULL);
 
 	if (list->head == old_elem) {
-		list_insert_head(list, new_elem);
+		minilist_insert_head(list, new_elem);
 	} else {
-		list_insert_between(list, new_elem,
+		minilist_insert_between(list, new_elem,
 		    P2N(list, old_elem)->prev, old_elem);
 		list->count++;
 	}
 }
 
 void
-list_insert_after(list_t *list, void *new_elem, void *old_elem)
+minilist_insert_after(minilist_t *list, void *new_elem, void *old_elem)
 {
 	CPDLC_ASSERT(list != NULL);
 	CPDLC_ASSERT(new_elem != NULL);
 	CPDLC_ASSERT(old_elem != NULL);
 
 	if (list->tail == old_elem) {
-		list_insert_tail(list, new_elem);
+		minilist_insert_tail(list, new_elem);
 	} else {
-		list_insert_between(list, new_elem,
+		minilist_insert_between(list, new_elem,
 		    old_elem, P2N(list, old_elem)->next);
 		list->count++;
 	}
 }
 
 void *
-list_remove_head(list_t *list)
+minilist_remove_head(minilist_t *list)
 {
 	void *p;
 
 	CPDLC_ASSERT(list != NULL);
 	p = list->head;
 	if (p != NULL)
-		list_remove(list, p);
+		minilist_remove(list, p);
 	return (p);
 }
 
 void *
-list_remove_tail(list_t *list)
+minilist_remove_tail(minilist_t *list)
 {
 	void *p;
 
 	CPDLC_ASSERT(list != NULL);
 	p = list->tail;
 	if (p != NULL)
-		list_remove(list, p);
+		minilist_remove(list, p);
 	return (p);
 }

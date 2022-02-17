@@ -40,6 +40,11 @@
 #include <windows.h>
 #endif	/* IBM */
 
+#if	LIN
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif	/* LIN */
+
 #include "cpdlc_alloc.h"
 
 #ifdef __cplusplus
@@ -185,6 +190,26 @@ cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 #define	cv_destroy(cv)		pthread_cond_destroy((cv))
 #define	cv_broadcast(cv)	pthread_cond_broadcast((cv))
 
+static inline uint64_t
+cpdlc_thread_microclock(void)
+{
+	struct timespec ts;
+	CPDLC_VERIFY(clock_gettime(CLOCK_REALTIME, &ts) == 0);
+	return ((ts.tv_sec * 1000000llu) + (ts.tv_nsec / 1000llu));
+}
+
+#define	cpdlc_usleep(x)	usleep(x)
+
+#if	LIN
+#define	CPDLC_VERIFY_MUTEX_HELD(mtx)	\
+	CPDLC_VERIFY((mtx)->__data.__owner == syscall(SYS_gettid))
+#define	CPDLC_VERIFY_MUTEX_NOT_HELD(mtx) \
+	CPDLC_VERIFY((mtx)->__data.__owner != syscall(SYS_gettid))
+#else	/* APL */
+#define	CPDLC_VERIFY_MUTEX_HELD(mtx)		(void)1
+#define	CPDLC_VERIFY_MUTEX_NOT_HELD(mtx)	(void)1
+#endif	/* APL */
+
 #else	/* IBM */
 
 #define	thread_t	HANDLE
@@ -283,7 +308,20 @@ cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 #define	cv_destroy(cv)	/* no-op */
 #define	cv_broadcast	WakeAllConditionVariable
 
+#define	cpdlc_usleep(x)	SleepEx((x) / 1000, FALSE)
+
+#define	CPDLC_VERIFY_MUTEX_HELD(mtx)		(void)1
+#define	CPDLC_VERIFY_MUTEX_NOT_HELD(mtx)	(void)1
+
 #endif	/* IBM */
+
+#ifdef	DEBUG
+#define	CPDLC_ASSERT_MUTEX_HELD(mtx)		CPDLC_VERIFY_MUTEX_HELD(mtx)
+#define	CPDLC_ASSERT_MUTEX_NOT_HELD(mtx)	CPDLC_VERIFY_MUTEX_NOT_HELD(mtx)
+#else	/* !DEBUG */
+#define	CPDLC_ASSERT_MUTEX_HELD(mtx)
+#define	CPDLC_ASSERT_MUTEX_NOT_HELD(mtx)
+#endif	/* !DEBUG */
 
 #ifdef __cplusplus
 }

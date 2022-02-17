@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -35,6 +35,7 @@
 #include "../src/cpdlc_core.h"
 #include "../src/cpdlc_msglist.h"
 #include "../src/cpdlc_string.h"
+#include "../src/cpdlc_thread.h"
 
 #include "fans.h"
 #include "fans_emer.h"
@@ -176,6 +177,7 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 static void draw_atc_msg_lsk(fans_t *box);
 static void handle_atc_msg_lsk(fans_t *box);
 static void put_cur_time(fans_t *box);
+static cpdlc_msg_thr_id_t get_new_thr_id(fans_t *box);
 
 static void
 msglist_update_cb(cpdlc_msglist_t *msglist,
@@ -225,7 +227,10 @@ fans_set_num_subpages(fans_t *box, unsigned num)
 {
 	CPDLC_ASSERT(box != NULL);
 	box->num_subpages = num;
-	box->subpage %= num;
+	if (num != 0)
+		box->subpage %= num;
+	else
+		box->subpage = 0;
 }
 
 unsigned
@@ -235,15 +240,35 @@ fans_get_subpage(const fans_t *box)
 	return (box->subpage);
 }
 
+static const char *
+fans_err2str(fans_err_t err)
+{
+	switch (err) {
+	case FANS_ERR_NONE:
+		return ("");
+	case FANS_ERR_LOGON_FAILED:
+		return ("LOGON FAILED");
+	case FANS_ERR_NO_ENTRY_ALLOWED:
+		return ("NO ENTRY ALLOWED");
+	case FANS_ERR_INVALID_ENTRY:
+		return ("INVALID ENTRY");
+	case FANS_ERR_INVALID_DELETE:
+		return ("INVALID DELETE");
+	case FANS_ERR_BUTTON_PUSH_IGNORED:
+		return ("BUTTON PUSH IGNORED");
+	default:
+		CPDLC_VERIFY(0);
+	}
+}
+
 void
-fans_set_error(fans_t *box, const char *error)
+fans_set_error(fans_t *box, fans_err_t err)
 {
 	CPDLC_ASSERT(box != NULL);
-
-	if (error != NULL)
-		cpdlc_strlcpy(box->error_msg, error, sizeof (box->error_msg));
-	else
-		memset(box->error_msg, 0, sizeof (box->error_msg));
+	if (err != FANS_ERR_NONE) {
+		box->error = err;
+		box->error_start = cpdlc_thread_microclock();
+	}
 }
 
 static int
@@ -305,7 +330,7 @@ fans_put_page_title(fans_t *box, const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	put_str_v(box, 0, 0, false, FMS_COLOR_WHITE, FMS_FONT_LARGE, fmt, ap);
+	put_str_v(box, 0, 0, false, FMS_COLOR_CYAN, FMS_FONT_LARGE, fmt, ap);
 	va_end(ap);
 }
 
@@ -439,7 +464,7 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
 			    color, font, "%s", buf);
 		}
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "_____" : "-----");
 	}
 }
@@ -447,20 +472,20 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
 void
 fans_put_spd(fans_t *box, int row, int col, bool align_right,
     const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
-    bool req, bool units)
+    bool req, bool pretty, bool units)
 {
-	char buf[8];
+	char buf[12];
 
 	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const cpdlc_arg_t *, spd, userspd->spd.spd != 0,
 	    userspd, autospd);
 
 	if (spd != NULL && spd->spd.spd != 0) {
-		fans_print_spd(spd, buf, sizeof (buf), units);
+		fans_print_spd(spd, buf, sizeof (buf), pretty, units);
 		fans_put_str(box, row, col, align_right, color, font,
 		    "%s", buf);
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___" : "---");
 	}
 }
@@ -478,7 +503,7 @@ fans_put_hdg(fans_t *box, int row, int col, bool align_right,
 		fans_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "`%c", hdg->tru ? 'T' : 'M');
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___" : "---");
 	}
 }
@@ -497,10 +522,10 @@ fans_put_time(fans_t *box, int row, int col, bool align_right,
 			    "%02d:%02d", t->hrs, t->mins);
 		} else {
 			fans_put_str(box, row, col, align_right, color, font,
-			    "%02d%02dZ", t->hrs, t->mins);
+			    "%02d%02d", t->hrs, t->mins);
 		}
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, "%s%s%s", req ? "__" : "--",
 		    colon ? ":" : "", req ? "__" : "--");
 	}
@@ -513,12 +538,10 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 	CPDLC_ASSERT(box != NULL);
 	DATA_PICK(const fms_temp_t *, temp, usertemp->set, usertemp, autotemp);
 	if (temp != NULL && temp->set) {
-		fans_put_str(box, row, col + 2, align_right, color,
+		fans_put_str(box, row, col, align_right, color,
 		    font, "%+d", temp->temp);
-		fans_put_str(box, row, col, align_right, FMS_COLOR_GREEN,
-		    FMS_FONT_SMALL, "`C");
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___" : "---");
 	}
 }
@@ -560,11 +583,11 @@ fans_put_off(fans_t *box, int row, int col, bool align_right,
 	if (off != NULL && off->nm != 0) {
 		CPDLC_ASSERT(off->dir == CPDLC_DIR_LEFT ||
 		    off->dir == CPDLC_DIR_RIGHT);
-		fans_put_str(box, row, col, align_right, color, font, "%c%.0f",
+		fans_put_str(box, row, col, align_right, color, font, "%c%.1f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
 	} else {
 		fans_put_str(box, row, col, align_right,
-		    FMS_COLOR_CYAN, FMS_FONT_LARGE, req ? "____" : "----");
+		    FMS_COLOR_WHITE, FMS_FONT_LARGE, req ? "____" : "----");
 	}
 }
 
@@ -578,10 +601,10 @@ fans_put_wind(fans_t *box, int row, int col, bool align_right,
 	if (wind != NULL && wind->set) {
 		fans_put_str(box, row, col, align_right, color, font,
 		    "%03d %d", wind->deg, wind->spd);
-		fans_put_str(box, row, col + 3, align_right, FMS_COLOR_CYAN,
-		    font, "/");
+		fans_put_str(box, row, col + 3, align_right, FMS_COLOR_WHITE,
+		    FMS_FONT_LARGE, "/");
 	} else {
-		fans_put_str(box, row, col, align_right, FMS_COLOR_CYAN,
+		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___/___" : "---/---");
 	}
 }
@@ -604,8 +627,19 @@ static void
 update_error_msg(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
-	fans_put_str(box, ERROR_MSG_ROW, 0, false, FMS_COLOR_AMBER,
-	    FMS_FONT_LARGE, "%s", box->error_msg);
+
+	if (box->error != FANS_ERR_NONE) {
+		if (cpdlc_thread_microclock() - box->error_start < 1000000) {
+			const char *msg = fans_err2str(box->error);
+			int col = MAX(1, (FMS_COLS - (int)strlen(msg)) / 2);
+
+			fans_put_str(box, ERROR_MSG_ROW, col, false,
+			    FMS_COLOR_WHITE, FMS_FONT_LARGE, "%s", msg);
+		} else {
+			box->error = FANS_ERR_NONE;
+			box->error_start = 0;
+		}
+	}
 }
 
 fans_t *
@@ -623,14 +657,22 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
 	box->thr_id = CPDLC_NO_MSG_THR_ID;
 	box->volume = 1;
+	box->net_select = true;
+	box->show_no_atc_comm = true;
+	box->logon_has_page2 = true;
 
-	list_create(&box->reports_due, sizeof (fans_report_t),
+	minilist_create(&box->reports_due, sizeof (fans_report_t),
 	    offsetof(fans_report_t, node));
 
 	cpdlc_msglist_set_update_cb(box->msglist, msglist_update_cb);
 	cpdlc_msglist_set_userinfo(box->msglist, box);
 
 	fans_update(box);
+	/*
+	 * Basic checks for proper API usage.
+	 */
+	if (box->funcs.can_insert_mod != NULL)
+		CPDLC_ASSERT(box->funcs.insert_mod != NULL);
 
 	return (box);
 }
@@ -644,9 +686,9 @@ fans_free(fans_t *box)
 	CPDLC_ASSERT(box->msglist != NULL);
 	CPDLC_ASSERT(box->cl != NULL);
 
-	while ((report = list_remove_head(&box->reports_due)) != NULL)
+	while ((report = minilist_remove_head(&box->reports_due)) != NULL)
 		free(report);
-	list_destroy(&box->reports_due);
+	minilist_destroy(&box->reports_due);
 
 	if (box->verify.msg != NULL)
 		cpdlc_msg_free(box->verify.msg);
@@ -699,6 +741,58 @@ fans_set_logon_to(fans_t *box, const char *to)
 		cpdlc_strlcpy(box->to, to, sizeof (box->to));
 }
 
+void
+fans_show_main_menu(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
+}
+
+bool
+fans_has_new_msg(fans_t *box)
+{
+	cpdlc_msg_thr_id_t thr_id;
+
+	CPDLC_ASSERT(box != NULL);
+	thr_id = get_new_thr_id(box);
+	return (thr_id != CPDLC_NO_MSG_THR_ID);
+}
+
+void
+fans_show_new_msg(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	handle_atc_msg_lsk(box);
+}
+
+void
+fans_set_logon_has_page2(fans_t *box, bool flag)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->logon_has_page2 = flag;
+}
+
+bool
+fans_get_logon_has_page2(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->logon_has_page2);
+}
+
+void
+fans_set_has_network_selector(fans_t *box, bool flag)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->net_select = flag;
+}
+
+bool
+fans_get_has_network_selector(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->net_select);
+}
+
 fans_network_t
 fans_get_network(const fans_t *box)
 {
@@ -729,16 +823,6 @@ del_key(fans_t *box)
 
 	CPDLC_ASSERT(box != NULL);
 
-	if (box->error_msg[0] != '\0') {
-		if (strlen(box->error_msg) > ERROR_MSG_MAX) {
-			memmove(box->error_msg,
-			    &box->error_msg[ERROR_MSG_MAX],
-			    strlen(&box->error_msg[ERROR_MSG_MAX]) + 1);
-		} else {
-			box->error_msg[0] = '\0';
-		}
-		return;
-	}
 	l = strlen(box->scratchpad);
 	if (l == 0) {
 		cpdlc_strlcpy(box->scratchpad, "DELETE",
@@ -760,7 +844,7 @@ fans_push_key(fans_t *box, fms_key_t key)
 	/* Clear any errors on a new LSK entry */
 	if (key >= FMS_KEY_LSK_L1 && key <= FMS_KEY_LSK_R6 &&
 	    strlen(box->scratchpad) != 0)
-		fans_set_error(box, NULL);
+		fans_set_error(box, FANS_ERR_NONE);
 	if (!box->page->key_cb(box, key)) {
 		if (key == FMS_KEY_CLR_DEL) {
 			del_key(box);
@@ -804,6 +888,32 @@ fans_push_char(fans_t *box, char c)
 	fans_update(box);
 }
 
+void
+fans_set_scratchpad(fans_t *box, const char *spad)
+{
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(spad != NULL);
+	cpdlc_strlcpy(box->scratchpad, spad, sizeof (box->scratchpad));
+}
+
+const char *
+fans_get_scratchpad(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (box->error != FANS_ERR_NONE) {
+		const char *msg = fans_err2str(box->error);
+		int col = MAX(0, (SCRATCHPAD_MAX - (int)strlen(msg)) / 2);
+
+		for (int i = 0; i < col; i++)
+			box->scratchpad_err[i] = ' ';
+		cpdlc_strlcpy(&box->scratchpad_err[col], msg,
+		    sizeof (box->scratchpad_err) - col);
+		return (box->scratchpad_err);
+	} else {
+		return (box->scratchpad);
+	}
+}
+
 static void
 update_cda(fans_t *box)
 {
@@ -840,15 +950,17 @@ fans_update(fans_t *box)
 	update_cda(box);
 	fans_reports_update(box);
 
-	box->prev_alt = fans_get_cur_alt(box);
+	fans_get_cur_alt(box, &box->prev_alt, &box->prev_alt_fl);
 }
 
 void
-fans_put_page_ind(fans_t *box, fms_color_t color)
+fans_put_page_ind(fans_t *box)
 {
-	CPDLC_ASSERT(box->num_subpages != 0);
-	fans_put_str(box, 0, 0, true, color, FMS_FONT_LARGE, "%2d/%-2d",
-	    box->subpage + 1, box->num_subpages);
+	CPDLC_ASSERT(box != NULL);
+	if (box->num_subpages != 0) {
+		fans_put_str(box, 0, 0, true, FMS_COLOR_CYAN, FMS_FONT_LARGE,
+		    "%2d/%-2d", box->subpage + 1, box->num_subpages);
+	}
 }
 
 void
@@ -859,9 +971,9 @@ fans_put_atc_status(fans_t *box)
 	CPDLC_ASSERT(box != NULL);
 	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
-	if (st != CPDLC_LOGON_COMPLETE) {
+	if (st != CPDLC_LOGON_COMPLETE && box->show_no_atc_comm) {
 		fans_put_str(box, LSK_HEADER_ROW(LSK6_ROW), 6, false,
-		    FMS_COLOR_WHITE, FMS_FONT_SMALL, "NO ATC COMM");
+		    FMS_COLOR_GREEN, FMS_FONT_SMALL, "NO ATC COMM");
 	}
 }
 
@@ -1014,7 +1126,7 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "%s", step_at->pos);
 		} else {
-			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_CYAN,
+			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "_____");
 		}
 		break;
@@ -1032,14 +1144,23 @@ fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 	if (key == FMS_KEY_LSK_R1) {
 		step_at->type = (step_at->type + 1) % NUM_STEP_AT_TYPES;
 	} else if (step_at->type != STEP_AT_NONE) {
+		bool read_back;
+
 		CPDLC_ASSERT3U(key, ==, FMS_KEY_LSK_R2);
 
 		if (step_at->type == STEP_AT_TIME) {
-			fans_scratchpad_xfer_time(box, &step_at->tim, NULL);
+			if (!fans_scratchpad_xfer_time(box, &step_at->tim,
+			    NULL, &read_back)) {
+				return;
+			}
 		} else {
-			fans_scratchpad_xfer(box, step_at->pos,
-			    sizeof (step_at->pos), true);
+			if (!fans_scratchpad_xfer(box, step_at->pos,
+			    sizeof (step_at->pos), true, &read_back)) {
+				return;
+			}
 		}
+		if (!read_back)
+			fans_scratchpad_clear(box);
 	}
 }
 
@@ -1082,13 +1203,22 @@ fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
 	return (false);
 }
 
-float
-fans_get_cur_alt(const fans_t *box)
+bool
+fans_get_cur_alt(const fans_t *box, int *alt_ft, bool *is_fl)
 {
+	bool is_fl_tmp;
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_cur_alt != NULL)
-		return (box->funcs.get_cur_alt(box->userinfo));
-	return (NAN);
+	CPDLC_ASSERT(alt_ft != NULL);
+	if (box->funcs.get_cur_alt != NULL) {
+		if (box->funcs.get_cur_alt(box->userinfo, alt_ft,
+		    is_fl != NULL ? is_fl : &is_fl_tmp)) {
+			return (true);
+		} else {
+			*alt_ft = -99999;
+			return (false);
+		}
+	}
+	return (false);
 }
 
 float
@@ -1100,13 +1230,31 @@ fans_get_cur_vvi(const fans_t *box)
 	return (NAN);
 }
 
-float
-fans_get_sel_alt(const fans_t *box)
+bool
+fans_get_sel_alt(const fans_t *box, int *alt_ft, bool *is_fl)
+{
+	bool is_fl_tmp;
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(alt_ft != NULL);
+	if (box->funcs.get_sel_alt != NULL) {
+		if (box->funcs.get_sel_alt(box->userinfo, alt_ft,
+		    is_fl != NULL ? is_fl : &is_fl_tmp)) {
+			return (true);
+		} else {
+			*alt_ft = -99999;
+			return (false);
+		}
+	}
+	return (false);
+}
+
+bool
+fans_get_alt_hold(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
-	if (box->funcs.get_sel_alt != NULL)
-		return (box->funcs.get_sel_alt(box->userinfo));
-	return (NAN);
+	if (box->funcs.get_alt_hold != NULL)
+		return (box->funcs.get_alt_hold(box->userinfo));
+	return (true);
 }
 
 bool
@@ -1364,4 +1512,57 @@ fans_get_volume(const fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	return (box->volume);
+}
+
+void
+fans_set_shows_comm_status(fans_t *box, bool flag)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->show_no_atc_comm = flag;
+}
+
+bool
+fans_get_shows_comm_status(const fans_t *box)
+{
+	return (box->show_no_atc_comm);
+}
+
+void
+fans_set_shows_main_menu_return(fans_t *box, bool flag)
+{
+	CPDLC_ASSERT(box != NULL);
+	if (flag)
+		CPDLC_ASSERT(box->funcs.main_menu_ret != NULL);
+	box->show_main_menu_return = flag;
+}
+
+bool
+fans_get_shows_main_menu_return(const fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	return (box->show_main_menu_return);
+}
+
+void
+fans_log_dbg_msg(fans_t *box, const char *fmt, ...)
+{
+	va_list ap;
+	char *text;
+	int l;
+
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(fmt != NULL);
+
+	if (box->funcs.log_dbg_msg == NULL)
+		return;
+
+	va_start(ap, fmt);
+	l = vsnprintf(NULL, 0, fmt, ap);
+	va_end(ap);
+	text = safe_malloc(l + 1);
+	va_start(ap, fmt);
+	vsnprintf(text, l + 1, fmt, ap);
+	va_end(ap);
+	box->funcs.log_dbg_msg(box->userinfo, text);
+	free(text);
 }

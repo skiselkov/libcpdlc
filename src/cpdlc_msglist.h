@@ -87,6 +87,14 @@ CPDLC_API bool cpdlc_msglist_thr_is_reviewed(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_thr_mark_reviewed(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
+CPDLC_API bool cpdlc_msglist_thr_is_mod_inserted(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_thr_mark_mod_inserted(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
+CPDLC_API bool cpdlc_msglist_thr_is_mod_execd(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
+CPDLC_API void cpdlc_msglist_thr_mark_mod_execd(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id);
 CPDLC_API unsigned cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id);
 CPDLC_API void cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist,

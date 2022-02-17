@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -23,6 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <math.h>
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"
@@ -33,6 +34,12 @@
 #include "fans_scratchpad.h"
 #include "fans_vrfy.h"
 
+typedef enum {
+    CLB_CLASS_CLB = 1,
+    CLB_CLASS_LVL = 0,
+    CLB_CLASS_DES = -1
+} clb_class_t;
+
 static bool
 can_verify_alt_req(fans_t *box)
 {
@@ -41,30 +48,50 @@ can_verify_alt_req(fans_t *box)
 	    fans_step_at_can_send(&box->alt_req.step_at));
 }
 
+static clb_class_t
+get_clb_class(fans_t *box)
+{
+	int cur_alt;
+
+	CPDLC_ASSERT(box != NULL);
+
+	fans_get_cur_alt(box, &cur_alt, NULL);
+	if (fans_is_valid_alt(cur_alt) &&
+	    box->alt_req.alt[0].alt.alt >= cur_alt + LVL_ALT_THRESH) {
+		return (CLB_CLASS_CLB);
+	} else if (fans_is_valid_alt(cur_alt) &&
+	    box->alt_req.alt[0].alt.alt <= cur_alt - LVL_ALT_THRESH) {
+		return (CLB_CLASS_DES);
+	} else {
+		return (CLB_CLASS_LVL);
+	}
+}
+
 static void
 verify_alt_req(fans_t *box)
 {
 	int seg = 0;
-	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	int clb = 0, cur_alt = fans_get_cur_alt(box);
+	cpdlc_msg_t *msg;
+	clb_class_t clb;
 
-	if (box->alt_req.alt[0].alt.alt >= cur_alt + LVL_ALT_THRESH)
-		clb = 1;
-	else if (box->alt_req.alt[0].alt.alt <= cur_alt - LVL_ALT_THRESH)
-		clb = -1;
+	CPDLC_ASSERT(box != NULL);
 
+	msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
+	clb = get_clb_class(box);
 	if (box->alt_req.step_at.type != STEP_AT_NONE) {
 		if (box->alt_req.step_at.type == STEP_AT_TIME) {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    clb >= 0 ? CPDLC_DM13_AT_time_REQ_CLB_TO_alt :
-			    CPDLC_DM12_AT_pos_REQ_DES_TO_alt, 0);
+			    clb >= CLB_CLASS_LVL ?
+			    CPDLC_DM13_AT_time_REQ_CLB_TO_alt :
+			    CPDLC_DM14_AT_time_REQ_DES_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    &box->alt_req.step_at.tim.hrs,
 			    &box->alt_req.step_at.tim.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    clb >= 0 ? CPDLC_DM11_AT_pos_REQ_CLB_TO_alt :
-			    CPDLC_DM14_AT_time_REQ_DES_TO_alt, 0);
+			    clb >= CLB_CLASS_LVL ?
+			    CPDLC_DM11_AT_pos_REQ_CLB_TO_alt :
+			    CPDLC_DM12_AT_pos_REQ_DES_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    box->alt_req.step_at.pos, NULL);
 		}
@@ -82,10 +109,10 @@ verify_alt_req(fans_t *box)
 		if (box->alt_req.crz_clb) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM8_REQ_CRZ_CLB_TO_alt, 0);
-		} else if (clb == 1) {
+		} else if (clb == CLB_CLASS_CLB) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM9_REQ_CLB_TO_alt, 0);
-		} else if (clb == -1) {
+		} else if (clb == CLB_CLASS_DES) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM10_REQ_DES_TO_alt, 0);
 		} else {
@@ -111,11 +138,13 @@ verify_alt_req(fans_t *box)
 static void
 draw_main_page(fans_t *box)
 {
+	CPDLC_ASSERT(box != NULL);
+
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
 	fans_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0], NULL,
 	    true, false);
-	fans_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_CYAN,
-	    FMS_FONT_SMALL, "/");
+	fans_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_WHITE,
+	    FMS_FONT_LARGE, "/");
 	fans_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1], NULL,
 	    false, false);
 
@@ -123,7 +152,8 @@ draw_main_page(fans_t *box)
 
 	fans_put_step_at(box, &box->alt_req.step_at);
 
-	if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH) {
+	if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH &&
+	    get_clb_class(box) == CLB_CLASS_CLB) {
 		fans_put_lsk_title(box, FMS_KEY_LSK_L4, "CRZ CLB");
 		fans_put_altn_selector(box, LSK4_ROW, false,
 		    box->alt_req.crz_clb, "NO", "YES", NULL);
@@ -153,7 +183,7 @@ fans_req_alt_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, 2);
 
 	fans_put_page_title(box, "FANS  ALTITUDE REQ");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	if (box->subpage == 0)
 		draw_main_page(box);
@@ -170,14 +200,18 @@ fans_req_alt_draw_cb(fans_t *box)
 bool
 fans_req_alt_key_cb(fans_t *box, fms_key_t key)
 {
+	bool read_back;
+
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		fans_scratchpad_xfer_multi(box,
+		if (!fans_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fans_t, alt_req.alt),
 		    sizeof (cpdlc_arg_t), fans_parse_alt,
 		    fans_insert_alt_block, fans_delete_cpdlc_arg_block,
-		    fans_read_alt_block);
+		    fans_read_alt_block, &read_back)) {
+			return (true);
+		}
 		if (box->alt_req.alt[1].alt.alt != 0) {
 			/* Block altitude requests cannot include a STEP AT */
 			box->alt_req.step_at.type = STEP_AT_NONE;
@@ -191,11 +225,14 @@ fans_req_alt_key_cb(fans_t *box, fms_key_t key)
 			 */
 			box->alt_req.crz_clb = false;
 		}
+		if (!read_back)
+			fans_scratchpad_clear(box);
 	} else if (box->subpage == 0 &&
 	    (key == FMS_KEY_LSK_L2 || key == FMS_KEY_LSK_L3)) {
 		fans_req_key_due(box, key);
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L4) {
-		if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH) {
+		if (box->alt_req.alt[0].alt.alt >= CRZ_CLB_THRESH &&
+		    get_clb_class(box) == CLB_CLASS_CLB) {
 			box->alt_req.crz_clb = !box->alt_req.crz_clb;
 			/* cruise climbs cannot be block or STEP AT requests */
 			memset(&box->alt_req.alt[1], 0,

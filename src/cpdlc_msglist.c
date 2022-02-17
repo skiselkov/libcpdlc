@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -36,7 +36,7 @@ typedef struct msg_bucket_s {
 	cpdlc_msg_t		*msg;
 	cpdlc_msg_token_t	tok;
 	bool			sent;
-	list_node_t		node;
+	minilist_node_t		node;
 	unsigned		hours;
 	unsigned		mins;
 	time_t			time;
@@ -45,17 +45,19 @@ typedef struct msg_bucket_s {
 typedef struct msg_thr_s {
 	cpdlc_msg_thr_id_t	thr_id;
 	cpdlc_msg_thr_status_t	status;
-	list_t			buckets;
-	list_node_t		node;
+	minilist_t		buckets;
+	minilist_node_t		node;
 	bool			dirty;
 	bool			reviewed;
+	bool			mod_inserted;
+	bool			mod_execd;
 } msg_thr_t;
 
 struct cpdlc_msglist_s {
 	cpdlc_client_t			*cl;
 	mutex_t				lock;
 
-	list_t				thr;
+	minilist_t			thr;
 
 	unsigned			min;
 	unsigned			mrn;
@@ -195,8 +197,8 @@ thr_get_timeout(msg_thr_t *thr)
 	unsigned timeout = UINT32_MAX;
 
 	CPDLC_ASSERT(thr != NULL);
-	for (msg_bucket_t *bucket = list_head(&thr->buckets); bucket != NULL;
-	    bucket = list_next(&thr->buckets, bucket)) {
+	for (msg_bucket_t *bucket = minilist_head(&thr->buckets);
+	    bucket != NULL; bucket = minilist_next(&thr->buckets, bucket)) {
 		const cpdlc_msg_t *msg = bucket->msg;
 
 		CPDLC_ASSERT(msg != NULL);
@@ -216,8 +218,8 @@ thr_get_timeout(msg_thr_t *thr)
 static void
 thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 {
-	msg_bucket_t *first = list_head(&thr->buckets);
-	msg_bucket_t *last = list_tail(&thr->buckets);
+	msg_bucket_t *first = minilist_head(&thr->buckets);
+	msg_bucket_t *last = minilist_tail(&thr->buckets);
 	time_t now = time(NULL);
 	unsigned timeout;
 	bool is_atc;
@@ -293,8 +295,8 @@ find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	CPDLC_ASSERT(msglist != NULL);
 
 	if (thr_id != CPDLC_NO_MSG_THR_ID) {
-		for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
-		    thr = list_next(&msglist->thr, thr)) {
+		for (msg_thr_t *thr = minilist_head(&msglist->thr);
+		    thr != NULL; thr = minilist_next(&msglist->thr, thr)) {
 			if (thr->thr_id == thr_id)
 				return (thr);
 		}
@@ -304,9 +306,9 @@ find_msg_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	} else {
 		msg_thr_t *thr = safe_calloc(1, sizeof (*thr));
 		thr->thr_id = msglist->next_thr_id++;
-		list_create(&thr->buckets, sizeof (msg_bucket_t),
+		minilist_create(&thr->buckets, sizeof (msg_bucket_t),
 		    offsetof(msg_bucket_t, node));
-		list_insert_head(&msglist->thr, thr);
+		minilist_insert_head(&msglist->thr, thr);
 		return (thr);
 	}
 }
@@ -318,12 +320,12 @@ free_msg_thr(msg_thr_t *thr)
 
 	CPDLC_ASSERT(thr != NULL);
 
-	while ((bucket = list_remove_head(&thr->buckets)) != NULL) {
+	while ((bucket = minilist_remove_head(&thr->buckets)) != NULL) {
 		CPDLC_ASSERT(bucket->msg != NULL);
 		cpdlc_msg_free(bucket->msg);
 		free(bucket);
 	}
-	list_destroy(&thr->buckets);
+	minilist_destroy(&thr->buckets);
 	free(thr);
 }
 
@@ -354,8 +356,8 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 
 	if (cpdlc_msg_get_mrn(msg) == CPDLC_INVALID_MSG_SEQ_NR)
 		return (NULL);
-	for (msg_thr_t *thr = list_tail(&msglist->thr); thr != NULL;
-	    thr = list_prev(&msglist->thr, thr)) {
+	for (msg_thr_t *thr = minilist_tail(&msglist->thr); thr != NULL;
+	    thr = minilist_prev(&msglist->thr, thr)) {
 		/*
 		 * Skip manually closed threads. This allows the FMS
 		 * to force the message list to receive all uplink
@@ -363,8 +365,9 @@ msg_thr_find_by_mrn(cpdlc_msglist_t *msglist, const cpdlc_msg_t *msg)
 		 */
 		if (thr->status == CPDLC_MSG_THR_CLOSED)
 			continue;
-		for (msg_bucket_t *bucket = list_tail(&thr->buckets);
-		    bucket != NULL; bucket = list_prev(&thr->buckets, bucket)) {
+		for (msg_bucket_t *bucket = minilist_tail(&thr->buckets);
+		    bucket != NULL;
+		    bucket = minilist_prev(&thr->buckets, bucket)) {
 			CPDLC_ASSERT(bucket->msg != NULL);
 			if (msg_matches_bucket(msg, bucket))
 				return (thr);
@@ -406,7 +409,7 @@ msg_recv_cb(cpdlc_client_t *cl)
 		thr->dirty = true;
 		thr->reviewed = false;
 
-		list_insert_tail(&thr->buckets, bucket);
+		minilist_insert_tail(&thr->buckets, bucket);
 		thr_status_upd(msglist, thr);
 
 		if (update_cb != NULL) {
@@ -437,7 +440,7 @@ cpdlc_msglist_alloc(cpdlc_client_t *cl)
 	cpdlc_client_set_cb_userinfo(cl, msglist);
 
 	mutex_init(&msglist->lock);
-	list_create(&msglist->thr, sizeof (msg_thr_t),
+	minilist_create(&msglist->thr, sizeof (msg_thr_t),
 	    offsetof(msg_thr_t, node));
 	msglist->cl = cl;
 	msglist->get_time_func = dfl_get_time_func;
@@ -452,7 +455,7 @@ cpdlc_msglist_free(cpdlc_msglist_t *msglist)
 
 	CPDLC_ASSERT(msglist != NULL);
 
-	while ((thr = list_remove_head(&msglist->thr)) != NULL)
+	while ((thr = minilist_remove_head(&msglist->thr)) != NULL)
 		free_msg_thr(thr);
 	mutex_destroy(&msglist->lock);
 	free(msglist);
@@ -465,8 +468,8 @@ cpdlc_msglist_update(cpdlc_msglist_t *msglist)
 
 	mutex_enter(&msglist->lock);
 
-	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
-	    thr = list_next(&msglist->thr, thr))
+	for (msg_thr_t *thr = minilist_head(&msglist->thr); thr != NULL;
+	    thr = minilist_next(&msglist->thr, thr))
 		thr_status_upd(msglist, thr);
 
 	mutex_exit(&msglist->lock);
@@ -490,8 +493,8 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	thr_id = thr->thr_id;
 
 	/* Assign the appropriate MIN and MRN flags */
-	for (msg_bucket_t *bucket = list_tail(&thr->buckets); bucket != NULL;
-	    bucket = list_prev(&thr->buckets, bucket)) {
+	for (msg_bucket_t *bucket = minilist_tail(&thr->buckets);
+	    bucket != NULL; bucket = minilist_prev(&thr->buckets, bucket)) {
 		if (cpdlc_msg_get_dl(bucket->msg) != cpdlc_msg_get_dl(msg)) {
 			cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(bucket->msg));
 			break;
@@ -507,7 +510,7 @@ msglist_send_impl(cpdlc_msglist_t *msglist, cpdlc_msg_t *msg,
 	msglist->get_time_func(msglist->userinfo, &bucket->hours,
 	    &bucket->mins);
 	bucket->time = time(NULL);
-	list_insert_tail(&thr->buckets, bucket);
+	minilist_insert_tail(&thr->buckets, bucket);
 
 	return (thr);
 }
@@ -541,9 +544,9 @@ cpdlc_msglist_get_thr_ids(cpdlc_msglist_t *msglist, bool ignore_closed,
 	CPDLC_ASSERT(cap != NULL);
 
 	mutex_enter(&msglist->lock);
-	for (msg_thr_t *thr = list_head(&msglist->thr); thr != NULL;
-	    thr = list_next(&msglist->thr, thr)) {
-		const msg_bucket_t *buck = list_tail(&thr->buckets);
+	for (msg_thr_t *thr = minilist_head(&msglist->thr); thr != NULL;
+	    thr = minilist_next(&msglist->thr, thr)) {
+		const msg_bucket_t *buck = minilist_tail(&thr->buckets);
 
 		if ((ignore_closed || (timeout != 0 &&
 		    now - timeout > buck->time)) && !thr->dirty &&
@@ -616,37 +619,70 @@ cpdlc_msglist_thr_mark_seen(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 	mutex_exit(&msglist->lock);
 }
 
+#define	MSG_THREAD_GET_FLAG_LOCKED(field) \
+	do { \
+		const msg_thr_t *thr; \
+		bool field; \
+		CPDLC_ASSERT(msglist != NULL); \
+		CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID); \
+		mutex_enter(&msglist->lock); \
+		thr = find_msg_thr(msglist, thr_id, false); \
+		field = thr->field; \
+		mutex_exit(&msglist->lock); \
+		return (field); \
+	} while (0)
+
+#define	MSG_THREAD_RAISE_FLAG_LOCKED(field) \
+	do { \
+		msg_thr_t *thr; \
+		CPDLC_ASSERT(msglist != NULL); \
+		CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID); \
+		mutex_enter(&msglist->lock); \
+		thr = find_msg_thr(msglist, thr_id, false); \
+		thr->field = true; \
+		mutex_exit(&msglist->lock); \
+	} while (0)
+
 bool
 cpdlc_msglist_thr_is_reviewed(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id)
 {
-	const msg_thr_t *thr;
-	bool reviewed;
-
-	CPDLC_ASSERT(msglist != NULL);
-	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
-
-	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id, false);
-	reviewed = thr->reviewed;
-	mutex_exit(&msglist->lock);
-
-	return (reviewed);
+	MSG_THREAD_GET_FLAG_LOCKED(reviewed);
 }
 
 void
 cpdlc_msglist_thr_mark_reviewed(cpdlc_msglist_t *msglist,
     cpdlc_msg_thr_id_t thr_id)
 {
-	msg_thr_t *thr;
+	MSG_THREAD_RAISE_FLAG_LOCKED(reviewed);
+}
 
-	CPDLC_ASSERT(msglist != NULL);
-	CPDLC_ASSERT(thr_id != CPDLC_NO_MSG_THR_ID);
+bool
+cpdlc_msglist_thr_is_mod_inserted(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	MSG_THREAD_GET_FLAG_LOCKED(mod_inserted);
+}
 
-	mutex_enter(&msglist->lock);
-	thr = find_msg_thr(msglist, thr_id, false);
-	thr->reviewed = true;
-	mutex_exit(&msglist->lock);
+void
+cpdlc_msglist_thr_mark_mod_inserted(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	MSG_THREAD_RAISE_FLAG_LOCKED(mod_inserted);
+}
+
+bool
+cpdlc_msglist_thr_is_mod_execd(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	MSG_THREAD_GET_FLAG_LOCKED(mod_execd);
+}
+
+void
+cpdlc_msglist_thr_mark_mod_execd(cpdlc_msglist_t *msglist,
+    cpdlc_msg_thr_id_t thr_id)
+{
+	MSG_THREAD_RAISE_FLAG_LOCKED(mod_execd);
 }
 
 unsigned
@@ -661,7 +697,7 @@ cpdlc_msglist_get_thr_msg_count(cpdlc_msglist_t *msglist,
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id, false);
-	count = list_count(&thr->buckets);
+	count = minilist_count(&thr->buckets);
 	mutex_exit(&msglist->lock);
 
 	return (count);
@@ -681,10 +717,10 @@ cpdlc_msglist_get_thr_msg(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id,
 	mutex_enter(&msglist->lock);
 
 	thr = find_msg_thr(msglist, thr_id, false);
-	CPDLC_ASSERT3U(msg_nr, <, list_count(&thr->buckets));
-	bucket = list_head(&thr->buckets);
+	CPDLC_ASSERT3U(msg_nr, <, minilist_count(&thr->buckets));
+	bucket = minilist_head(&thr->buckets);
 	for (unsigned i = 0; i < msg_nr; i++)
-		bucket = list_next(&thr->buckets, bucket);
+		bucket = minilist_next(&thr->buckets, bucket);
 	CPDLC_ASSERT(bucket != NULL);
 	if (msg_p != NULL)
 		*msg_p = bucket->msg;
@@ -734,7 +770,7 @@ cpdlc_msglist_remove_thr(cpdlc_msglist_t *msglist, cpdlc_msg_thr_id_t thr_id)
 
 	mutex_enter(&msglist->lock);
 	thr = find_msg_thr(msglist, thr_id, false);
-	list_remove(&msglist->thr, thr);
+	minilist_remove(&msglist->thr, thr);
 	mutex_exit(&msglist->lock);
 
 	free_msg_thr(thr);

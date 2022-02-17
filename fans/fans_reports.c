@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -208,19 +208,19 @@ fans_reports_due_draw_cb(fans_t *box)
 
 	CPDLC_ASSERT(box != NULL);
 
-	n = ceil(list_count(&box->reports_due) / (double)REPORTS_PER_PAGE);
+	n = ceil(minilist_count(&box->reports_due) / (double)REPORTS_PER_PAGE);
 	fans_set_num_subpages(box, MAX(n, 1));
 
 	fans_put_page_title(box, "FANS  REPORTS DUE");
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
-	if (list_count(&box->reports_due) != 0) {
-		report = list_get_i(&box->reports_due,
+	if (minilist_count(&box->reports_due) != 0) {
+		report = minilist_get_i(&box->reports_due,
 		    fans_get_subpage(box) * REPORTS_PER_PAGE);
 	}
 	for (int i = 0; report != NULL && i < REPORTS_PER_PAGE; i++) {
 		put_report_info(box, report, LSKi_ROW(i), true);
-		report = list_next(&box->reports_due, report);
+		report = minilist_next(&box->reports_due, report);
 	}
 }
 
@@ -231,9 +231,9 @@ fans_reports_due_key_cb(fans_t *box, fms_key_t key)
 		unsigned nr = fans_get_subpage(box) * REPORTS_PER_PAGE +
 		    (key - FMS_KEY_LSK_L1);
 
-		if (nr >= list_count(&box->reports_due))
+		if (nr >= minilist_count(&box->reports_due))
 			return (false);
-		box->report = list_get_i(&box->reports_due, nr);
+		box->report = minilist_get_i(&box->reports_due, nr);
 		fans_set_page(box, FMS_PAGE_REPORT, true);
 	} else {
 		return (false);
@@ -283,13 +283,17 @@ fans_report_key_cb(fans_t *box, fms_key_t key)
 		fans_set_page(box, FMS_PAGE_REPORTS_DUE, true);
 	} else if (key >= FMS_KEY_LSK_L2 && key <= FMS_KEY_LSK_L4) {
 		int line = key - FMS_KEY_LSK_L2;
-		fans_scratchpad_xfer(box, box->report->remarks[line],
-		    sizeof (box->report->remarks[line]), true);
+		bool read_back;
+		if (fans_scratchpad_xfer(box, box->report->remarks[line],
+		    sizeof (box->report->remarks[line]), true, &read_back) &&
+		    !read_back) {
+			fans_scratchpad_clear(box);
+		}
 	} else if (key == FMS_KEY_LSK_R1) {
 		box->report->armed = !box->report->armed;
 	} else if (key == FMS_KEY_LSK_R5 && !box->report->armed) {
 		send_report(box, box->report);
-		list_remove(&box->reports_due, box->report);
+		minilist_remove(&box->reports_due, box->report);
 		free(box->report);
 		box->report = NULL;
 	} else {
@@ -316,15 +320,16 @@ report_generate_for_seg(fans_t *box, const cpdlc_msg_t *msg,
 	    seg->info->msg_type ==
 	    CPDLC_UM180_REPORT_REACHING_BLOCK_alt_TO_alt) {
 		fans_report_t *report = safe_calloc(1, sizeof (*report));
+		int cur_alt_ft;
 
 		report->msg = msg;
 		report->seg = seg;
 		report->armed = true;
-		if (seg->info->msg_type == CPDLC_UM128_REPORT_LEAVING_alt ||
+		if ((seg->info->msg_type == CPDLC_UM128_REPORT_LEAVING_alt ||
 		    seg->info->msg_type == CPDLC_UM175_REPORT_REACHING_alt ||
 		    seg->info->msg_type ==
-		    CPDLC_UM180_REPORT_REACHING_BLOCK_alt_TO_alt) {
-			float cur_alt_ft = fans_get_cur_alt(box);
+		    CPDLC_UM180_REPORT_REACHING_BLOCK_alt_TO_alt) &&
+		    fans_get_cur_alt(box, &cur_alt_ft, NULL)) {
 			float lvl_alt_ft = alt_get(seg, 0);
 			float d_alt_ft = lvl_alt_ft - cur_alt_ft;
 
@@ -335,7 +340,7 @@ report_generate_for_seg(fans_t *box, const cpdlc_msg_t *msg,
 			else
 				report->lvl_type = LVL_FROM_ABV;
 		}
-		list_insert_tail(&box->reports_due, report);
+		minilist_insert_tail(&box->reports_due, report);
 	}
 }
 
@@ -385,67 +390,89 @@ update_back_on_route(const fans_t *box, fans_report_t *report)
 static bool
 update_leaving_alt(const fans_t *box, fans_report_t *report)
 {
-	float cur_alt_ft, rpt_alt_ft;
+	int cur_alt_ft;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(report != NULL);
 
-	cur_alt_ft = fans_get_cur_alt(box);
-	rpt_alt_ft = alt_get(report->seg, 0);
+	if (fans_get_cur_alt(box, &cur_alt_ft, NULL)) {
+		float rpt_alt_ft = alt_get(report->seg, 0);
 
-	switch (report->lvl_type) {
-	case LVL_FROM_BLW:
-		return (cur_alt_ft > rpt_alt_ft);
-	case LVL_AT:
-		return (fabs(cur_alt_ft - rpt_alt_ft) > SAME_ALT_THRESH);
-	case LVL_FROM_ABV:
-		return (cur_alt_ft < rpt_alt_ft);
+		switch (report->lvl_type) {
+		case LVL_FROM_BLW:
+			return (cur_alt_ft > rpt_alt_ft);
+		case LVL_AT:
+			return (fabs(cur_alt_ft - rpt_alt_ft) >
+			    SAME_ALT_THRESH);
+		case LVL_FROM_ABV:
+			return (cur_alt_ft < rpt_alt_ft);
+		}
+		CPDLC_VERIFY(0);
+	} else {
+		return (false);
 	}
-	CPDLC_VERIFY(0);
 }
 
 static bool
 update_level_alt(const fans_t *box, const fans_report_t *report)
 {
-	float cur_alt_ft, rep_alt_ft, vvi_fpm;
+	float rep_alt_ft, vvi_fpm;
+	int cur_alt_ft;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(report != NULL);
 
 	rep_alt_ft = alt_get(report->seg, 0);
-	cur_alt_ft = fans_get_cur_alt(box);
 	vvi_fpm = fans_get_cur_vvi(box);
 
-	return (fabs(cur_alt_ft - rep_alt_ft) <= SAME_ALT_THRESH &&
+	return (fans_get_cur_alt(box, &cur_alt_ft, NULL) &&
+	    fabs(cur_alt_ft - rep_alt_ft) <= SAME_ALT_THRESH &&
 	    IS_LEVEL(vvi_fpm));
 }
 
 static bool
 update_reaching_alt(const fans_t *box, const fans_report_t *report, bool block)
 {
-	float cur_alt_ft;
+	int cur_alt_ft;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(report != NULL);
 
-	cur_alt_ft = fans_get_cur_alt(box);
-	if (block) {
-		if (report->lvl_type == LVL_FROM_BLW) {
-			return (cur_alt_ft >= alt_get(report->seg, 0) -
-			    SAME_ALT_THRESH);
+	if (fans_get_cur_alt(box, &cur_alt_ft, NULL)) {
+		if (block) {
+			if (report->lvl_type == LVL_FROM_BLW) {
+				return (cur_alt_ft >= alt_get(report->seg, 0) -
+				    SAME_ALT_THRESH);
+			} else {
+				return (cur_alt_ft <= alt_get(report->seg, 1) +
+				    SAME_ALT_THRESH);
+			}
 		} else {
-			return (cur_alt_ft <= alt_get(report->seg, 1) +
-			    SAME_ALT_THRESH);
+			if (report->lvl_type == LVL_FROM_BLW) {
+				return (cur_alt_ft >= alt_get(report->seg, 0) -
+				    SAME_ALT_THRESH);
+			} else {
+				return (cur_alt_ft <= alt_get(report->seg, 0) +
+				    SAME_ALT_THRESH);
+			}
 		}
 	} else {
-		if (report->lvl_type == LVL_FROM_BLW) {
-			return (cur_alt_ft >= alt_get(report->seg, 0) -
-			    SAME_ALT_THRESH);
-		} else {
-			return (cur_alt_ft <= alt_get(report->seg, 0) +
-			    SAME_ALT_THRESH);
-		}
+		return (false);
 	}
+}
+
+static bool
+update_passing_pos(const fans_t *box, fans_report_t *report)
+{
+	fms_wpt_info_t wpt;
+
+	CPDLC_ASSERT(box != NULL);
+	CPDLC_ASSERT(report != NULL);
+	/*
+	 * We've passed a waypoint once becomes our FROM waypoint.
+	 */
+	return (fans_get_prev_wpt(box, &wpt) &&
+	    strcmp(wpt.wpt_name, report->seg->args[0].pos) == 0);
 }
 
 static void
@@ -471,8 +498,7 @@ report_update(fans_t *box, fans_report_t *report)
 		send = update_level_alt(box, report);
 		break;
 	case CPDLC_UM130_REPORT_PASSING_pos:
-		/* FIXME: we need some reasonable way to do this */
-		report->armed = false;
+		send = update_passing_pos(box, report);
 		break;
 	case CPDLC_UM175_REPORT_REACHING_alt:
 		send = update_reaching_alt(box, report, false);
@@ -487,7 +513,7 @@ report_update(fans_t *box, fans_report_t *report)
 		if (box->report == report)
 			box->report = NULL;
 		send_report(box, report);
-		list_remove(&box->reports_due, report);
+		minilist_remove(&box->reports_due, report);
 		free(report);
 	}
 }
@@ -501,15 +527,17 @@ fans_reports_update(fans_t *box)
 	    CPDLC_LOGON_COMPLETE) {
 		fans_report_t *report;
 
-		while ((report = list_remove_head(&box->reports_due)) != NULL)
+		while ((report = minilist_remove_head(&box->reports_due)) !=
+		    NULL) {
 			free(report);
+		}
 		box->report = NULL;
 		return;
 	}
-	for (fans_report_t *report = list_head(&box->reports_due),
+	for (fans_report_t *report = minilist_head(&box->reports_due),
 	    *next_report = NULL; report != NULL; report = next_report) {
 		/* report_update might remove this report, so prep for that */
-		next_report = list_next(&box->reports_due, report);
+		next_report = minilist_next(&box->reports_due, report);
 		report_update(box, report);
 	}
 }

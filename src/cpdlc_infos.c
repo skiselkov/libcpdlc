@@ -636,7 +636,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.num_args = 2,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_ROUTE },
 	.resp = CPDLC_RESP_WU,
-	.timeout = SHORT_TIMEOUT
+	.timeout = MED_TIMEOUT
     },
     {
 	.msg_type = CPDLC_UM80_CLR_route,
@@ -644,7 +644,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.num_args = 1,
 	.args = { CPDLC_ARG_ROUTE },
 	.resp = CPDLC_RESP_WU,
-	.timeout = SHORT_TIMEOUT
+	.timeout = MED_TIMEOUT
     },
     {
 	.msg_type = CPDLC_UM81_CLR_proc,

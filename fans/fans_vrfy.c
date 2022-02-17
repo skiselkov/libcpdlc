@@ -64,7 +64,7 @@ fans_vrfy_draw_cb(fans_t *box)
 	fans_set_num_subpages(box, ceil(n_lines / (double)MAX_LINES));
 
 	fans_put_page_title(box, "FANS  VRFY %s", box->verify.title);
-	fans_put_page_ind(box, FMS_COLOR_WHITE);
+	fans_put_page_ind(box);
 
 	for (int i = 0; i < MAX_LINES; i++) {
 		int line = i + box->subpage * MAX_LINES;
