@@ -400,7 +400,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
     },
     {
 	.msg_type = CPDLC_UM50_CROSS_pos_BTWN_alt_AND_alt,
-	.text = "CROSS POSITION BETWEEN [altitude] AND [altitude]",
+	.text = "CROSS [position] BETWEEN [altitude] AND [altitude]",
 	.num_args = 3,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_ALTITUDE , CPDLC_ARG_ALTITUDE },
 	.resp = CPDLC_RESP_WU,
