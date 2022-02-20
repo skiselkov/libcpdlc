@@ -889,7 +889,11 @@ report_gnutls_verify_error(cpdlc_client_t *cl)
 	gnutls_certificate_verification_status_print(status, type, &out, 0);
 	set_logon_failure(cl, "TLS certificate verification error: %s",
 	    out.data);
+#ifdef	LIBCPDLC_GNUTLS_FREE_WORKAROUND
+	free(out.data);
+#else
 	gnutls_free(out.data);
+#endif
 }
 
 /*

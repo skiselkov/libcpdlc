@@ -419,7 +419,8 @@ fans_scratchpad_xfer_time(fans_t *box, fms_time_t *usertime,
 static bool
 parse_dir(char *buf, fms_off_t *useroff, cpdlc_dir_t *dir)
 {
-	char first, last, c;
+	char first, last;
+	char c = '\0';
 
 	CPDLC_ASSERT(buf != NULL);
 	CPDLC_ASSERT(strlen(buf) != 0);
@@ -434,8 +435,9 @@ parse_dir(char *buf, fms_off_t *useroff, cpdlc_dir_t *dir)
 	} else if (!isdigit(last)) {
 		c = last;
 		buf[strlen(buf) - 1] = '\0';
-	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_ANY)
+	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_ANY) {
 		return (false);
+	}
 	if (c == 'L')
 		*dir = CPDLC_DIR_LEFT;
 	else if (c == 'R')

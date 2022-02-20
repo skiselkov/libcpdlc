@@ -41,15 +41,23 @@ extern "C" {
 static inline void
 cpdlc_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
 {
+	size_t l;
+	CPDLC_ASSERT(cap != 0);
+	/*
+	 * We MUSTN'T use strlen here, because src may be SIGNIFICANTLY
+	 * larger than dest and we don't want to measure the ENTIRE body
+	 * of src. We only care for length UP TO the destination capacity.
+	 */
+	for (l = 0; l + 1 < cap && src[l] != '\0'; l++)
+		;
+	/*
+	 * Due to a bug in GCC, we can't use strncpy, as it sometimes throws
+	 * "call to __builtin___strncpy_chk will always overflow destination
+	 * buffer", even when it's absolutely NOT the case.
+	 */
+	memcpy(dest, src, MIN(cap - 1, l + 1));
+	/* Insure the string is ALWAYS terminated */
 	dest[cap - 1] = '\0';
-#ifdef	_MSC_VER
-#pragma	warning(push)
-#pragma	warning(disable: 4996)
-#endif	/* _MSC_VER */
-	strncpy(dest, src, cap - 1);
-#ifdef	_MSC_VER
-#pragma	warning(pop)
-#endif	/* _MSC_VER */
 }
 
 #ifdef	__cplusplus
