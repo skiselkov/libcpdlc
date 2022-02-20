@@ -46,6 +46,15 @@ test/build/msgtest
 gmp-6.2.0
 gnutls-3.6.11.1
 nettle-3.5
+gmp-linux-64
+gmp-mac-64
+gmp-win-64
+nettle-linux-64
+nettle-mac-64
+nettle-win-64
+gnutls-linux-64
+gnutls-mac-64
+gnutls-win-64
 libwebsockets-3.1.0
 cpdlc_atc/build/CMakeCache.txt
 cpdlc_atc/build/CMakeFiles
