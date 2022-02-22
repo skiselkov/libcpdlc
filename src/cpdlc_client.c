@@ -1270,7 +1270,7 @@ do_msg_input(cpdlc_client_t *cl)
 		}
 		recvsz = MIN(max_recv, sizeof (buf));
 		if (cl->unenc_local) {
-			bytes = recv(cl->sock, buf, recvsz, 0);
+			bytes = recv(cl->sock, (char *)buf, recvsz, 0);
 			if (bytes < 0) {
 				if (!cpdlc_conn_wouldblock()) {
 					fprintf(stderr, "Connection read "
