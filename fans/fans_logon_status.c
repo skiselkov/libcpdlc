@@ -33,8 +33,6 @@
 #include "fans_impl.h"
 #include "fans_scratchpad.h"
 
-#define	LOGON_TIMEOUT	300
-
 static void
 fans_strtoupper(char *buf)
 {
@@ -227,30 +225,17 @@ fans_logon_status_init_cb(fans_t *box)
 void
 fans_logon_status_draw_cb(fans_t *box)
 {
-	char logon_failure[128], msg[32];
+	char msg[32];
 	cpdlc_logon_status_t st;
 
 	CPDLC_ASSERT(box != NULL);
-	st = cpdlc_client_get_logon_status(box->cl, logon_failure);
+	st = cpdlc_client_get_logon_status(box->cl, NULL);
 
 	fans_set_num_subpages(box, box->logon_has_page2 ? 2 : 0);
 
 	fans_put_page_title(box, "FANS  LOGON/STATUS");
 	fans_put_page_ind(box);
 
-	if ((st == CPDLC_LOGON_CONNECTING_LINK ||
-	    st == CPDLC_LOGON_HANDSHAKING_LINK || st == CPDLC_LOGON_IN_PROG) &&
-	    time(NULL) - box->logon_started > LOGON_TIMEOUT) {
-		box->logon_timed_out = true;
-		cpdlc_client_logoff(box->cl, NULL);
-		st = cpdlc_client_get_logon_status(box->cl, NULL);
-	}
-	if (logon_failure[0] != '\0') {
-		fans_log_dbg_msg(box, "%s", logon_failure);
-		box->logon_timed_out = false;
-		box->logon_rejected = true;
-		cpdlc_client_reset_logon_failure(box->cl);
-	}
 	if (can_send_logon(box, st)) {
 		fans_put_lsk_action(box, FMS_KEY_LSK_R5, FMS_COLOR_CYAN,
 		    "SEND LOGON*");

@@ -140,6 +140,7 @@ struct cpdlc_client_s {
 	/* LWS doesn't support in-memory keys */
 	char				*key_pem_data;
 	char				*cert_pem_data;
+	bool				unenc_local;
 #endif	/* !CPDLC_CLIENT_LWS */
 
 	thread_t			worker;
@@ -264,6 +265,9 @@ check_keepalive(cpdlc_client_t *cl)
 
 	CPDLC_ASSERT(cl != NULL);
 
+	/* Don't send PING packets on local unencrypted connections */
+	if (cl->unenc_local)
+		return (true);
 	if (cl->keepalive_token != CPDLC_INVALID_MSG_TOKEN) {
 		switch (cpdlc_client_get_msg_status(cl, cl->keepalive_token)) {
 		case CPDLC_MSG_STATUS_SENDING:
@@ -489,10 +493,15 @@ cpdlc_client_set_host(cpdlc_client_t *cl, const char *host)
 {
 	CPDLC_ASSERT(cl != NULL);
 	mutex_enter(&cl->lock);
-	if (host != NULL)
+	if (host != NULL) {
 		cpdlc_strlcpy(cl->host, host, sizeof (cl->host));
-	else
+		if (strcmp(host, "localhost") != 0 &&
+		    strcmp(host, "LOCALHOST") != 0) {
+			cl->unenc_local = false;
+		}
+	} else {
 		memset(cl->host, 0, sizeof (cl->host));
+	}
 	mutex_exit(&cl->lock);
 }
 
@@ -586,6 +595,21 @@ cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
 
 	mutex_exit(&cl->lock);
 }
+
+void
+cpdlc_client_set_unencrypted_loopback(cpdlc_client_t *cl, bool flag)
+{
+	CPDLC_ASSERT(cl != NULL);
+	cl->unenc_local = flag;
+}
+
+bool
+cpdlc_client_get_unencrypted_loopback(const cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->unenc_local);
+}
+
 #endif	/* CPDLC_CLIENT_LWS */
 
 static void
@@ -725,11 +749,15 @@ resolve_host(cpdlc_client_t *cl)
 		freeaddrinfo(cl->ai);
 		cl->ai = cl->ai_cur = NULL;
 	}
-	if (cl->host[0] == '\0') {
-		set_logon_failure(cl, "no host specified");
-		return (false);
+	if (cl->unenc_local) {
+		cpdlc_strlcpy(host, "localhost", sizeof (host));
+	} else {
+		if (cl->host[0] == '\0') {
+			set_logon_failure(cl, "no host specified");
+			return (false);
+		}
+		cpdlc_strlcpy(host, cl->host, sizeof (host));
 	}
-	cpdlc_strlcpy(host, cl->host, sizeof (host));
 	snprintf(portbuf, sizeof (portbuf), "%d", port);
 
 	/*
@@ -799,7 +827,10 @@ init_conn(cpdlc_client_t *cl)
 		new_status = CPDLC_LOGON_CONNECTING_LINK;
 		cl->conn_begin_time = time(NULL);
 	} else {
-		new_status = CPDLC_LOGON_HANDSHAKING_LINK;
+		if (cl->unenc_local)
+			new_status = CPDLC_LOGON_LINK_AVAIL;
+		else
+			new_status = CPDLC_LOGON_HANDSHAKING_LINK;
 	}
 
 	cl->sock = sock;
@@ -860,7 +891,10 @@ complete_conn(cpdlc_client_t *cl)
 			goto errout;
 		}
 		/* Success! */
-		cl->logon_status = CPDLC_LOGON_HANDSHAKING_LINK;
+		if (cl->unenc_local)
+			cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
+		else
+			cl->logon_status = CPDLC_LOGON_HANDSHAKING_LINK;
 		return;
 	default:
 		set_logon_failure(cl, "select: %s", strerror(errno));
@@ -883,6 +917,7 @@ report_gnutls_verify_error(cpdlc_client_t *cl)
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(cl->session != NULL);
+	CPDLC_ASSERT(!cl->unenc_local);
 
 	type = gnutls_certificate_type_get(cl->session);
 	status = gnutls_session_get_verify_cert_status(cl->session);
@@ -906,6 +941,7 @@ tls_handshake(cpdlc_client_t *cl)
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_HANDSHAKING_LINK);
+	CPDLC_ASSERT(!cl->unenc_local);
 
 	if (cl->session == NULL) {
 		TLS_CHK(gnutls_certificate_allocate_credentials(&cl->xcred));
@@ -1233,14 +1269,29 @@ do_msg_input(cpdlc_client_t *cl)
 			max_recv = MAX(max_recv, 1);
 		}
 		recvsz = MIN(max_recv, sizeof (buf));
-		bytes = gnutls_record_recv(cl->session, buf, recvsz);
-		if (bytes < 0) {
-			if (bytes != GNUTLS_E_AGAIN &&
-			    gnutls_error_is_fatal(bytes)) {
-				cl->logon_status = CPDLC_LOGON_NONE;
+		if (cl->unenc_local) {
+			bytes = recv(cl->sock, buf, recvsz, 0);
+			if (bytes < 0) {
+				if (!cpdlc_conn_wouldblock()) {
+					fprintf(stderr, "Connection read "
+					    "error: %s\n",
+					    cpdlc_get_last_socket_error());
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				cl->rx_in_prog = false;
+				break;
 			}
-			cl->rx_in_prog = false;
-			break;
+		} else {
+			CPDLC_ASSERT(cl->session != NULL);
+			bytes = gnutls_record_recv(cl->session, buf, recvsz);
+			if (bytes < 0) {
+				if (bytes != GNUTLS_E_AGAIN &&
+				    gnutls_error_is_fatal(bytes)) {
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				cl->rx_in_prog = false;
+				break;
+			}
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
@@ -1254,7 +1305,7 @@ do_msg_input(cpdlc_client_t *cl)
 			cl->rx_in_prog = false;
 			break;
 		}
-		cl->inbuf = realloc(cl->inbuf, cl->inbuf_sz + bytes + 1);
+		cl->inbuf = safe_realloc(cl->inbuf, cl->inbuf_sz + bytes + 1);
 		cpdlc_strlcpy(&cl->inbuf[cl->inbuf_sz], (const char *)buf,
 		    bytes + 1);
 		cl->inbuf_sz += bytes;
@@ -1288,6 +1339,7 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 	    &cl->outmsgbufs.sending); outmsgbuf != NULL;
 	    outmsgbuf = minilist_head(&cl->outmsgbufs.sending)) {
 		uint32_t max_send = UINT32_MAX;
+		uint32_t send_sz;
 		int bytes;
 
 		cl->tx_in_prog = true;
@@ -1325,18 +1377,35 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 		 */
 		CPDLC_ASSERT3S(bytes, ==, outmsgbuf->bufsz);
 #else	/* !CPDLC_CLIENT_LWS */
-		bytes = gnutls_record_send(cl->session,
-		    &outmsgbuf->buf[outmsgbuf->bytes_sent],
-		    MIN(max_send, outmsgbuf->bufsz - outmsgbuf->bytes_sent));
-
-		if (bytes < 0) {
-			if (bytes != GNUTLS_E_AGAIN &&
-			    gnutls_error_is_fatal(bytes)) {
-				cl->logon_status = CPDLC_LOGON_NONE;
+		send_sz = MIN(max_send, outmsgbuf->bufsz -
+		    outmsgbuf->bytes_sent);
+		if (cl->unenc_local) {
+			bytes = send(cl->sock,
+			    &outmsgbuf->buf[outmsgbuf->bytes_sent], send_sz, 0);
+			if (bytes < 0) {
+				if (!cpdlc_conn_wouldblock()) {
+					fprintf(stderr, "Connection write "
+					    "error: %s\n",
+					    cpdlc_get_last_socket_error());
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				minilist_insert_head(&cl->outmsgbufs.sending,
+				    outmsgbuf);
+				break;
 			}
-			minilist_insert_head(&cl->outmsgbufs.sending,
-			    outmsgbuf);
-			break;
+		} else {
+			CPDLC_ASSERT(cl->session != NULL);
+			bytes = gnutls_record_send(cl->session,
+			    &outmsgbuf->buf[outmsgbuf->bytes_sent], send_sz);
+			if (bytes < 0) {
+				if (bytes != GNUTLS_E_AGAIN &&
+				    gnutls_error_is_fatal(bytes)) {
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				minilist_insert_head(&cl->outmsgbufs.sending,
+				    outmsgbuf);
+				break;
+			}
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
@@ -1488,7 +1557,7 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
-	CPDLC_ASSERT(cl->session != NULL);
+	CPDLC_ASSERT(cl->session != NULL || cl->unenc_local);
 	CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT(out_tokens != NULL);
 	CPDLC_ASSERT(num_out_tokens != NULL);

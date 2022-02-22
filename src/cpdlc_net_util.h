@@ -70,6 +70,13 @@ cpdlc_conn_in_prog(void)
 	return (err == WSAEINPROGRESS || err == WSAEWOULDBLOCK);
 }
 
+static inline bool
+cpdlc_conn_wouldblock(void)
+{
+	int err = WSAGetLastError();
+	return (err == WSAEWOULDBLOCK);
+}
+
 static inline const char *
 cpdlc_get_last_socket_error(void)
 {
@@ -96,6 +103,12 @@ static inline bool
 cpdlc_conn_in_prog(void)
 {
 	return (errno == EINPROGRESS);
+}
+
+static inline bool
+cpdlc_conn_wouldblock(void)
+{
+	return (errno == EAGAIN || errno == EWOULDBLOCK);
 }
 
 static inline const char *

@@ -178,7 +178,13 @@ msg_can_resp(fans_t *box, cpdlc_resp_type_t resp)
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(box->thr_id != CPDLC_NO_MSG_THR_ID);
 	msg = msg_get_last_uplink(box);
-	return (msg != NULL && msg->segs[0].info->resp == resp);
+	if (msg == NULL)
+		return (false);
+	for (unsigned i = 0; i < msg->num_segs; i++) {
+		if (msg->segs[i].info->resp == resp)
+			return (true);
+	}
+	return (false);
 }
 
 static bool
@@ -391,12 +397,12 @@ fans_msg_thr_key_cb(fans_t *box, fms_key_t key)
 	if (key == FMS_KEY_LSK_L6) {
 		fans_set_page(box, FMS_PAGE_MSG_LOG, false);
 	} else if (key == FMS_KEY_LSK_L4 && show_acpt_stby) {
-		if (msg_can_roger(box)) {
-			fans_reports_generate(box, box->thr_id);
-			send_roger(box);
-		} else if (msg_can_wilco(box)) {
+		if (msg_can_wilco(box)) {
 			fans_reports_generate(box, box->thr_id);
 			send_wilco(box);
+		} else if (msg_can_roger(box)) {
+			fans_reports_generate(box, box->thr_id);
+			send_roger(box);
 		} else if (msg_can_affirm(box)) {
 			fans_reports_generate(box, box->thr_id);
 			send_affirm(box);

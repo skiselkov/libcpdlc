@@ -450,6 +450,10 @@ CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
 CPDLC_API bool cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg,
     int *consumed, char *reason, unsigned reason_cap);
 
+void cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type,
+    const cpdlc_arg_t *arg, bool readable, unsigned *n_bytes_p,
+    char **buf_p, unsigned *cap_p);
+
 CPDLC_API void cpdlc_msg_set_to(cpdlc_msg_t *msg, const char *to);
 CPDLC_API const char *cpdlc_msg_get_to(const cpdlc_msg_t *msg);
 CPDLC_API void cpdlc_msg_set_from(cpdlc_msg_t *msg, const char *from);
@@ -478,7 +482,7 @@ CPDLC_API unsigned cpdlc_msg_seg_get_num_args(const cpdlc_msg_t *msg,
 CPDLC_API cpdlc_arg_type_t cpdlc_msg_seg_get_arg_type(const cpdlc_msg_t *msg,
     unsigned seg_nr, unsigned arg_nr);
 CPDLC_API void cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr,
-    unsigned arg_nr, void *arg_val1, void *arg_val2);
+    unsigned arg_nr, const void *arg_val1, const void *arg_val2);
 CPDLC_API unsigned cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg,
     unsigned seg_nr, unsigned arg_nr, void *arg_val1, unsigned str_cap,
     void *arg_val2);

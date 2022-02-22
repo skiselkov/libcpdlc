@@ -90,6 +90,9 @@ CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
 CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
     const char *key_pem_data, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_pem_data);
+CPDLC_API void cpdlc_client_set_unencrypted_loopback(cpdlc_client_t *cl,
+    bool flag);
+CPDLC_API bool cpdlc_client_get_unencrypted_loopback(const cpdlc_client_t *cl);
 #endif	/* !CPDLC_CLIENT_LWS */
 
 CPDLC_API size_t cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf,

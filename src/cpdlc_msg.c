@@ -172,8 +172,8 @@ cpdlc_unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 	return (j);
 }
 
-static void
-encode_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
+void
+cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
 {
 	char textbuf[1024];
@@ -427,8 +427,8 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 	}
 
 	for (unsigned i = 0; i < info->num_args; i++) {
-		encode_arg(info->args[i], &seg->args[i], false, n_bytes_p,
-		    buf_p, cap_p);
+		cpdlc_encode_msg_arg(info->args[i], &seg->args[i], false,
+		    n_bytes_p, buf_p, cap_p);
 	}
 }
 
@@ -575,8 +575,8 @@ readable_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 			break;
 		}
 
-		encode_arg(info->args[arg], &seg->args[arg], true, n_bytes_p,
-		    buf_p, cap_p);
+		cpdlc_encode_msg_arg(info->args[arg], &seg->args[arg], true,
+		    n_bytes_p, buf_p, cap_p);
 		/*
 		 * If the argument was at the end of the text line, `start'
 		 * can now be pointing past `end'. So we must NOT deref it
@@ -1026,7 +1026,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 		case CPDLC_ARG_DEGREES:
 			arg_end = find_arg_end(start, end);
 			arg->deg.deg = atoi(start);
-			if (arg->deg.deg >= 360) {
+			if (arg->deg.deg > 360) {
 				MALFORMED_MSG("invalid heading/track");
 				return (false);
 			}
@@ -1317,8 +1317,13 @@ cpdlc_msg_set_logon_data(cpdlc_msg_t *msg, const char *logon_data)
 {
 	CPDLC_ASSERT(msg != NULL);
 	free(msg->logon_data);
-	msg->logon_data = strdup(logon_data);
-	msg->is_logon = true;
+	if (logon_data != NULL) {
+		msg->logon_data = strdup(logon_data);
+		msg->is_logon = true;
+	} else {
+		msg->logon_data = NULL;
+		msg->is_logon = false;
+	}
 }
 
 void
@@ -1378,12 +1383,22 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 void
 cpdlc_msg_del_seg(cpdlc_msg_t *msg, unsigned seg_nr)
 {
+	cpdlc_msg_seg_t *seg;
+
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT3U(seg_nr, <, msg->num_segs);
 	/*
 	 * Simply shift all the message segments after this one,
 	 * forward by one step.
 	 */
+	seg = &msg->segs[seg_nr];
+	CPDLC_ASSERT(seg->info != NULL);
+	for (unsigned i = 0; i < msg->segs[seg_nr].info->num_args; i++) {
+		if (seg->info->args[i] == CPDLC_ARG_ROUTE)
+			free(seg->args[i].route);
+		else if (seg->info->args[i] == CPDLC_ARG_FREETEXT)
+			free(seg->args[i].freetext);
+	}
 	memmove(&msg->segs[seg_nr], &msg->segs[seg_nr + 1],
 	    (msg->num_segs - seg_nr - 1) * sizeof (cpdlc_msg_seg_t));
 	memset(&msg->segs[msg->num_segs], 0, sizeof (cpdlc_msg_seg_t));
@@ -1422,7 +1437,7 @@ cpdlc_msg_seg_get_arg_type(const cpdlc_msg_t *msg, unsigned seg_nr,
 
 void
 cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
-    void *arg_val1, void *arg_val2)
+    const void *arg_val1, const void *arg_val2)
 {
 	const cpdlc_msg_info_t *info;
 	cpdlc_msg_seg_t *seg;
@@ -1503,7 +1518,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->baro.val = *(double *)arg_val2;
 		break;
 	case CPDLC_ARG_FREETEXT:
-		if (arg->freetext)
+		if (arg->freetext != NULL)
 			free(arg->freetext);
 		arg->freetext = strdup(arg_val1);
 		break;

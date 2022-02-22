@@ -208,7 +208,7 @@ const char *fans_get_secret(const fans_t *box);
 
 const fms_char_t *fans_get_screen_row(const fans_t *box, unsigned row);
 
-void fans_push_key(fans_t *box, fms_key_t key);
+bool fans_push_key(fans_t *box, fms_key_t key);
 void fans_push_char(fans_t *box, char c);
 void fans_set_scratchpad(fans_t *box, const char *spad);
 const char *fans_get_scratchpad(fans_t *box);

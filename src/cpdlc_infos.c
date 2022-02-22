@@ -899,7 +899,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
     {
 	.msg_type = CPDLC_UM112_INCR_SPD_TO_spd_OR_GREATER,
 	.text = "INCREASE SPEED TO [speed] OR GREATER",
-	.num_args = 2,
+	.num_args = 1,
 	.args = { CPDLC_ARG_SPEED },
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT

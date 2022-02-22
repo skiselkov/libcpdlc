@@ -97,8 +97,10 @@ msg_req_resp(const cpdlc_msg_t *msg)
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(msg->segs[0].info != NULL);
 	for (unsigned i = 0; i < msg->num_segs; i++) {
-		if (msg->segs[i].info->resp != CPDLC_RESP_N)
+		if (msg->segs[i].info->resp != CPDLC_RESP_N &&
+		    msg->segs[i].info->resp != CPDLC_RESP_NE) {
 			return (true);
+		}
 	}
 	return (false);
 }

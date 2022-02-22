@@ -62,6 +62,8 @@
 #include "fans_rej.h"
 #include "fans_vrfy.h"
 
+#define	LOGON_TIMEOUT	300
+
 static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 	[FMS_PAGE_MAIN_MENU] = {
 		.draw_cb = fans_main_menu_draw_cb,
@@ -175,7 +177,7 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 };
 
 static void draw_atc_msg_lsk(fans_t *box);
-static void handle_atc_msg_lsk(fans_t *box);
+static bool handle_atc_msg_lsk(fans_t *box);
 static void put_cur_time(fans_t *box);
 static cpdlc_msg_thr_id_t get_new_thr_id(fans_t *box);
 
@@ -762,7 +764,7 @@ void
 fans_show_new_msg(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
-	handle_atc_msg_lsk(box);
+	(void)handle_atc_msg_lsk(box);
 }
 
 void
@@ -834,9 +836,11 @@ del_key(fans_t *box)
 	}
 }
 
-void
+bool
 fans_push_key(fans_t *box, fms_key_t key)
 {
+	bool consumed = true;
+
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(box->page != NULL);
 	CPDLC_ASSERT(box->page->key_cb != NULL);
@@ -861,13 +865,17 @@ fans_push_key(fans_t *box, fms_key_t key)
 				box->subpage--;
 			else
 				box->subpage = box->num_subpages - 1;
-		} else if (key == FMS_KEY_LSK_R6) {
-			handle_atc_msg_lsk(box);
+		} else if (key == FMS_KEY_LSK_R6 && handle_atc_msg_lsk(box)) {
+			/* no-op */
 		} else if (key == FMS_KEY_LSK_L6) {
 			fans_set_page(box, FMS_PAGE_MAIN_MENU, true);
+		} else {
+			consumed = false;
 		}
 	}
 	fans_update(box);
+
+	return (consumed);
 }
 
 void
@@ -915,6 +923,36 @@ fans_get_scratchpad(fans_t *box)
 }
 
 static void
+update_logon_timeout(fans_t *box)
+{
+	char logon_failure[128];
+	cpdlc_logon_status_t st;
+
+	CPDLC_ASSERT(box != NULL);
+
+	st = cpdlc_client_get_logon_status(box->cl, logon_failure);
+	if ((st == CPDLC_LOGON_CONNECTING_LINK ||
+	    st == CPDLC_LOGON_HANDSHAKING_LINK || st == CPDLC_LOGON_IN_PROG) &&
+	    time(NULL) - box->logon_started > LOGON_TIMEOUT) {
+		box->logon_timed_out = true;
+		cpdlc_client_logoff(box->cl, NULL);
+		st = cpdlc_client_get_logon_status(box->cl, NULL);
+	} else if (st == CPDLC_LOGON_COMPLETE) {
+		/*
+		 * Keep this timer up to date to avoid a subsequent
+		 * timeout disconnect on an NDA->CDA swap.
+		 */
+		box->logon_started = time(NULL);
+	}
+	if (logon_failure[0] != '\0') {
+		fans_log_dbg_msg(box, "%s", logon_failure);
+		box->logon_timed_out = false;
+		box->logon_rejected = true;
+		cpdlc_client_reset_logon_failure(box->cl);
+	}
+}
+
+static void
 update_cda(fans_t *box)
 {
 	cpdlc_logon_status_t st;
@@ -947,6 +985,7 @@ fans_update(fans_t *box)
 	put_cur_time(box);
 	fans_update_scratchpad(box);
 	update_error_msg(box);
+	update_logon_timeout(box);
 	update_cda(box);
 	fans_reports_update(box);
 
@@ -1086,7 +1125,7 @@ draw_atc_msg_lsk(fans_t *box)
 	}
 }
 
-static void
+static bool
 handle_atc_msg_lsk(fans_t *box)
 {
 	cpdlc_msg_thr_id_t thr_id;
@@ -1096,6 +1135,9 @@ handle_atc_msg_lsk(fans_t *box)
 	if (thr_id != CPDLC_NO_MSG_THR_ID) {
 		fans_set_thr_id(box, thr_id);
 		fans_set_page(box, FMS_PAGE_MSG_THR, true);
+		return (true);
+	} else {
+		return (false);
 	}
 }
 
