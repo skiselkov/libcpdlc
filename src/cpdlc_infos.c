@@ -1424,6 +1424,134 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.resp_msg_types = { CPDLC_DM79_ATIS_code },
 	.timeout = SHORT_TIMEOUT
     },
+    {
+	.msg_type = CPDLC_UM183_FREETEXT_NORM_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM187_FREETEXT_LOW_URG_NORM_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM194_FREETEXT_NORM_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_Y,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM195_FREETEXT_LOW_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_R,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM196_FREETEXT_NORM_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_WU,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM197_FREETEXT_HIGH_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_WU,
+	.timeout = SHORT_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM198_FREETEXT_DISTR_URG_HIGH_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_WU,
+	.timeout = SHORT_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM199_FREETEXT_NORM_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM201_FREETEXT_LOW_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM202_FREETEXT_LOW_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM203_FREETEXT_NORM_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_R,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM204_FREETEXT_NORM_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_Y,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM205_FREETEXT_NORM_URG_MED_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_AN,
+	.timeout = MED_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM206_FREETEXT_LOW_URG_NORM_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_Y,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM207_FREETEXT_LOW_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_Y,
+	.timeout = LONG_TIMEOUT
+    },
+    {
+	.msg_type = CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text,
+	.text = "[freetext]",
+	.num_args = 1,
+	.args = { CPDLC_ARG_FREETEXT },
+	.resp = CPDLC_RESP_N,
+	.timeout = LONG_TIMEOUT
+    },
     { .msg_type = -1 }	/* List terminator */
 };
 

@@ -90,7 +90,8 @@ msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 		CPDLC_ASSERT3S(msg_type, <=,
 		    CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
 	} else {
-		CPDLC_ASSERT3S(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
+		CPDLC_ASSERT3S(msg_type, <=,
+		    CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text);
 	}
 	if (is_dl && msg_type == 67) {
 		CPDLC_ASSERT(msg_subtype == 0 ||
@@ -752,7 +753,8 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	msg_type = atoi(start);
 	if (msg_type < 0 ||
 	    (is_dl && msg_type > CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE) ||
-	    (!is_dl && msg_type > CPDLC_UM182_CONFIRM_ATIS_CODE)) {
+	    (!is_dl && msg_type >
+	    CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text)) {
 		MALFORMED_MSG("invalid message type");
 		return (false);
 	}
@@ -1355,7 +1357,8 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 
 	CPDLC_ASSERT(msg != NULL);
 	if (!is_dl) {
-		CPDLC_ASSERT3U(msg_type, <=, CPDLC_UM182_CONFIRM_ATIS_CODE);
+		CPDLC_ASSERT3U(msg_type, <=,
+		    CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text);
 		CPDLC_ASSERT0(msg_subtype);
 	} else {
 		CPDLC_ASSERT3U(msg_type, <=,
