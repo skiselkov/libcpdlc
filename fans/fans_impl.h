@@ -84,6 +84,14 @@ typedef struct {
 	unsigned	mins;
 } fms_time_t;
 
+static inline cpdlc_time_t
+fms_time2cpdlc_time(fms_time_t tim)
+{
+	if (!tim.set)
+		return (CPDLC_NULL_TIME);
+	return ((cpdlc_time_t){tim.hrs, tim.mins});
+}
+
 typedef enum {
 	STEP_AT_NONE,
 	STEP_AT_TIME,
@@ -93,33 +101,25 @@ typedef enum {
 
 typedef struct {
 	step_at_type_t	type;
-	char		pos[8];
+	cpdlc_pos_t	pos;
 	fms_time_t	tim;
 } fms_step_at_t;
-
-typedef enum {
-	FMS_POS_NAVAID,		/* 1-4 letter navaid ID */
-	FMS_POS_ARPT,		/* 4 letter ICAO */
-	FMS_POS_FIX,		/* 1-5 letter fix */
-	FMS_POS_LAT_LON,	/* latitude-longitude */
-	FMS_POS_PBD		/* place-bearing-distance */
-} fms_pos_type_t;
-
-typedef struct {
-	fms_pos_type_t	type;
-	bool		set;
-	char		name[8];
-	unsigned	brg;
-	unsigned	dist;
-	double		lat;
-	double		lon;
-} fms_pos_t;
 
 typedef struct {
 	bool		set;
 	unsigned	deg;
 	unsigned	spd;
 } fms_wind_t;
+
+static inline cpdlc_wind_t
+fms_wind2cpdlc_wind(fms_wind_t wind)
+{
+	if (!wind.set)
+		return (CPDLC_NULL_WIND);
+	if (wind.deg == 0)
+		wind.deg = 360;
+	return ((cpdlc_wind_t){wind.deg, wind.spd});
+}
 
 typedef struct {
 	bool		set;
@@ -193,7 +193,7 @@ typedef struct {
 	minilist_node_t		node;
 } fans_report_t;
 
-typedef void (*pos_pick_done_cb_t)(fans_t *box, const fms_pos_t *pos);
+typedef void (*pos_pick_done_cb_t)(fans_t *box, const cpdlc_pos_t *pos);
 
 struct fans_s {
 	fms_char_t		scr[FMS_ROWS][FMS_COLS];
@@ -230,7 +230,7 @@ struct fans_s {
 	union {
 		char		freetext[MAX_FREETEXT_LINES][FMS_COLS + 1];
 		struct {
-			cpdlc_arg_t	alt[2];
+			cpdlc_alt_t	alt[2];
 			bool		crz_clb;
 			fms_step_at_t	step_at;
 			bool		plt_discret;
@@ -241,11 +241,11 @@ struct fans_s {
 			fms_step_at_t	step_at;
 		} off_req;
 		struct {
-			cpdlc_arg_t	spd[2];
+			cpdlc_spd_t	spd[2];
 		} spd_req;
 		struct {
-			fms_pos_t	dct;
-			fms_pos_t	wx_dev;
+			cpdlc_pos_t	dct;
+			cpdlc_pos_t	wx_dev;
 			fms_hdg_t	hdg;
 			fms_hdg_t	trk;
 		} rte_req;
@@ -256,8 +256,8 @@ struct fans_s {
 			bool		clx;
 		} clx_req;
 		struct {
-			cpdlc_arg_t	alt;
-			cpdlc_arg_t	spd[2];
+			cpdlc_alt_t	alt;
+			cpdlc_spd_t	spd[2];
 			bool		crz_clb;
 			bool		back_on_rte;
 			alt_chg_t	alt_chg;
@@ -267,34 +267,34 @@ struct fans_s {
 			double		freq;
 		} voice_req;
 		struct {
-			fms_pos_t	rpt_wpt;
-			fms_pos_t	rpt_wpt_auto;
+			cpdlc_pos_t	rpt_wpt;
+			cpdlc_pos_t	rpt_wpt_auto;
 			fms_time_t	wpt_time;
 			fms_time_t	wpt_time_auto;
-			cpdlc_arg_t	wpt_alt;
-			cpdlc_arg_t	wpt_alt_auto;
-			cpdlc_arg_t	wpt_spd;
-			cpdlc_arg_t	wpt_spd_auto;
-			fms_pos_t	nxt_fix;
-			fms_pos_t	nxt_fix_auto;
+			cpdlc_alt_t	wpt_alt;
+			cpdlc_alt_t	wpt_alt_auto;
+			cpdlc_spd_t	wpt_spd;
+			cpdlc_spd_t	wpt_spd_auto;
+			cpdlc_pos_t	nxt_fix;
+			cpdlc_pos_t	nxt_fix_auto;
 			fms_time_t	nxt_fix_time;
 			fms_time_t	nxt_fix_time_auto;
-			fms_pos_t	nxt_fix1;
-			fms_pos_t	nxt_fix1_auto;
+			cpdlc_pos_t	nxt_fix1;
+			cpdlc_pos_t	nxt_fix1_auto;
 			fms_temp_t	temp;
 			fms_temp_t	temp_auto;
 			fms_wind_t	winds_aloft;
 			fms_wind_t	winds_aloft_auto;
-			fms_pos_t	cur_pos;
-			fms_pos_t	cur_pos_auto;
+			cpdlc_pos_t	cur_pos;
+			cpdlc_pos_t	cur_pos_auto;
 			fms_time_t	pos_time;
 			fms_time_t	pos_time_auto;
-			cpdlc_arg_t	alt;
-			cpdlc_arg_t	alt_auto;
+			cpdlc_alt_t	alt;
+			cpdlc_alt_t	alt_auto;
 			fms_time_t	time_at_dest;
 			fms_time_t	time_at_dest_auto;
-			cpdlc_arg_t	clb_des;
-			cpdlc_arg_t	clb_des_auto;
+			cpdlc_alt_t	clb_des;
+			cpdlc_alt_t	clb_des_auto;
 			fms_off_t	off;
 			fms_off_t	off_auto;
 		} pos_rep;
@@ -308,7 +308,7 @@ struct fans_s {
 	} req_common;
 	struct {
 		cpdlc_msg_t	*msg;
-		char		title[8];
+		char		title[12];
 		unsigned	ret_page;
 		bool		is_req;
 	} verify;
@@ -319,7 +319,7 @@ struct fans_s {
 		char		freetext[REJ_FREETEXT_LINES][FMS_COLS + 1];
 	} rej;
 	struct {
-		fms_pos_t		pos;
+		cpdlc_pos_t		pos;
 		bool			was_set;
 		unsigned		ret_page;
 		pos_pick_done_cb_t	done_cb;
@@ -330,10 +330,10 @@ struct fans_s {
 		fms_time_t		fuel;
 		bool			souls_set;
 		unsigned		souls;
-		cpdlc_arg_t		des_auto;
-		cpdlc_arg_t		des;
+		cpdlc_alt_t		des_auto;
+		cpdlc_alt_t		des;
 		fms_off_t		off;
-		fms_pos_t		divert;
+		cpdlc_pos_t		divert;
 		emer_reason_t		reason;
 	} emer;
 	fans_report_t		*report;
@@ -398,10 +398,10 @@ void fans_put_altn_selector(fans_t *box, int row, bool align_right,
     int option, const char *first, ...);
 
 void fans_put_alt(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
+    const cpdlc_alt_t *useralt, const cpdlc_alt_t *autoalt,
     bool req, bool units);
 void fans_put_spd(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
+    const cpdlc_spd_t *userspd, const cpdlc_spd_t *autospd,
     bool req, bool pretty, bool units);
 void fans_put_hdg(fans_t *box, int row, int col, bool align_right,
     const fms_hdg_t *hdg, bool req);
@@ -411,7 +411,7 @@ void fans_put_time(fans_t *box, int row, int col, bool align_right,
 void fans_put_temp(fans_t *box, int row, int col, bool align_right,
     const fms_temp_t *usertemp, const fms_temp_t *autotemp, bool req);
 void fans_put_pos(fans_t *box, int row, int col, bool align_right,
-    const fms_pos_t *userpos, const fms_pos_t *autopos, bool req);
+    const cpdlc_pos_t *userpos, const cpdlc_pos_t *autopos, bool req);
 void fans_put_off(fans_t *box, int row, int col, bool align_right,
     const fms_off_t *useroff, const fms_off_t *autooff, bool req);
 void fans_put_wind(fans_t *box, int row, int col, bool align_right,
@@ -425,7 +425,7 @@ void fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at);
 bool fans_step_at_can_send(const fms_step_at_t *step_at);
 
 bool fans_get_cur_pos(const fans_t *box, double *lat, double *lon);
-bool fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd);
+bool fans_get_cur_spd(const fans_t *box, cpdlc_spd_t *spd);
 bool fans_get_cur_alt(const fans_t *box, int *alt_ft, bool *is_fl);
 float fans_get_cur_vvi(const fans_t *box);
 bool fans_get_sel_alt(const fans_t *box, int *alt_ft, bool *is_fl);
@@ -441,10 +441,10 @@ void fans_get_sat(const fans_t *box, fms_temp_t *temp);
 void fans_get_wind(const fans_t *box, fms_wind_t *wind);
 bool fans_get_souls(const fans_t *box, unsigned *souls);
 
-void fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos);
+void fans_wptinfo2pos(const fms_wpt_info_t *info, cpdlc_pos_t *pos);
 void fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim);
-void fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt);
-void fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd);
+void fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_alt_t *alt);
+void fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_spd_t *spd);
 
 void fans_log_dbg_msg(fans_t *box, PRINTF_FORMAT(const char *fmt), ...)
     PRINTF_ATTR(2);

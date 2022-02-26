@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"
+#include "../src/cpdlc_string.h"
 
 #include "fans_req.h"
 #include "fans_req_clx.h"
@@ -50,31 +51,31 @@ verify_clx_req(fans_t *box)
 	if (box->clx_req.clx) {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM25_REQ_PDC, 0);
 	} else {
-		char buf[16] = { 0 };
+		cpdlc_proc_t proc = {};
 
 		CPDLC_ASSERT(box->clx_req.type != CLX_REQ_NONE);
 		CPDLC_ASSERT(box->clx_req.proc[0] != '\0');
 
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM23_REQ_proc, 0);
-		if (box->clx_req.type == CLX_REQ_ARR ||
-		    box->clx_req.type == CLX_REQ_APP) {
-			if (box->clx_req.trans[0] != '\0') {
-				strncat(buf, box->clx_req.trans,
-				    sizeof (buf) - 1);
-				strncat(buf, ".", sizeof (buf) - 1);
-			}
-			strncat(buf, box->clx_req.proc, sizeof (buf) - 1);
-		} else {
-			strncat(buf, box->clx_req.proc, sizeof (buf) - 1);
-			if (box->clx_req.trans[0] != '\0') {
-				strncat(buf, ".", sizeof (buf) - 1);
-				strncat(buf, box->clx_req.trans,
-				    sizeof (buf) - 1);
-			}
+		switch (box->clx_req.type) {
+		case CLX_REQ_ARR:
+			proc.type = CPDLC_PROC_ARRIVAL;
+			break;
+		case CLX_REQ_APP:
+			proc.type = CPDLC_PROC_APPROACH;
+			break;
+		case CLX_REQ_DEP:
+			proc.type = CPDLC_PROC_DEPARTURE;
+			break;
+		default:
+			CPDLC_VERIFY(0);
 		}
-		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
+		cpdlc_strlcpy(proc.name, box->clx_req.proc, sizeof (proc.name));
+		cpdlc_strlcpy(proc.trans, box->clx_req.trans,
+		    sizeof (proc.trans));
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &proc, NULL);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "CLX REQ", FMS_PAGE_REQ_CLX, true);
 }

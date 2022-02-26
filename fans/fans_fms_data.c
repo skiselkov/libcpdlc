@@ -33,7 +33,7 @@
 static void
 fms_data_draw_page1(fans_t *box)
 {
-	cpdlc_arg_t spd;
+	cpdlc_spd_t spd;
 	float value_f32, dest_dist_NM;
 	fms_wpt_info_t wpt;
 	unsigned dest_time_sec;
@@ -44,12 +44,12 @@ fms_data_draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "CUR SPD");
 	if (fans_get_cur_spd(box, &spd)) {
-		if (spd.spd.mach) {
+		if (spd.mach) {
 			fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
-			    FMS_FONT_SMALL, "M.%02d", spd.spd.spd);
+			    FMS_FONT_SMALL, "M.%02d", spd.spd);
 		} else {
 			fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
-			    FMS_FONT_SMALL, "%3d KT", spd.spd.spd);
+			    FMS_FONT_SMALL, "%3d KT", spd.spd);
 		}
 	}
 
@@ -84,9 +84,7 @@ fms_data_draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L5, "PREV WPT");
 	if (fans_get_prev_wpt(box, &wpt)) {
-		cpdlc_arg_t alt = {
-		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
-		};
+		cpdlc_alt_t alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl };
 		fans_put_str(box, LSK5_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%-7s/", wpt.wpt_name);
 		fans_put_alt(box, LSK5_ROW, 8, false, NULL, &alt, false, false);
@@ -94,9 +92,7 @@ fms_data_draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "NEXT WPT");
 	if (fans_get_next_wpt(box, &wpt)) {
-		cpdlc_arg_t alt = {
-		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
-		};
+		cpdlc_alt_t alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl };
 		fans_put_str(box, LSK1_ROW, 5, true, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%7s/", wpt.wpt_name);
 		fans_put_alt(box, LSK1_ROW, 0, true, NULL, &alt, false, false);
@@ -104,9 +100,7 @@ fms_data_draw_page1(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "NEXT+1 WPT");
 	if (fans_get_next_next_wpt(box, &wpt)) {
-		cpdlc_arg_t alt = {
-		    .alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl }
-		};
+		cpdlc_alt_t alt = { .alt = wpt.alt_ft, .fl = wpt.alt_fl };
 		fans_put_str(box, LSK2_ROW, 5, true, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%7s/", wpt.wpt_name);
 		fans_put_alt(box, LSK2_ROW, 0, true, NULL, &alt, false, false);

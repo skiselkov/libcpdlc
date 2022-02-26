@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -33,7 +33,7 @@ extern "C" {
 #endif
 
 void fans_pos_pick_start(fans_t *box, pos_pick_done_cb_t done_cb,
-    unsigned ret_page, const fms_pos_t *old_pos);
+    unsigned ret_page, const cpdlc_pos_t *old_pos);
 void fans_pos_pick_draw_cb(fans_t *box);
 bool fans_pos_pick_key_cb(fans_t *box, fms_key_t key);
 

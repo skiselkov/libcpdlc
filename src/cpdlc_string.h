@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -26,8 +26,10 @@
 #ifndef	_LIBCPDLC_CPDLC_STRING_H_
 #define	_LIBCPDLC_CPDLC_STRING_H_
 
+#include <stdbool.h>
 #include <string.h>
 
+#include "cpdlc_assert.h"
 #include "cpdlc_core.h"
 
 #ifdef	__cplusplus
@@ -59,6 +61,10 @@ cpdlc_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
 	/* Insure the string is ALWAYS terminated */
 	dest[cap - 1] = '\0';
 }
+
+char **cpdlc_strsplit(const char *input, const char *sep, bool skip_empty,
+    unsigned *num);
+void cpdlc_free_strlist(char **comps, unsigned len);
 
 #ifdef	__cplusplus
 }

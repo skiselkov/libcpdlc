@@ -28,14 +28,14 @@ CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
 	-Wno-missing-field-initializers \
 	-Wno-format-truncation \
 	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE \
-	-I$(ACFUTILS)/src $(LWS_CFLAGS) \
+	-I$(SRCPREFIX)/asn1 -I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)
 LIBS += -fPIC -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
 	-Wl,-Bstatic \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-	--static --libs gnutls libidn2) \
+	--static --libs gnutls) \
 	-Wl,-Bdynamic \
 	$(LIBCRYPT) -lpthread -lm
 
@@ -48,8 +48,12 @@ DAEMON_OBJS=\
 	rpc.o \
 	$(COMPREFIX)/cpdlc_config_common.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
+	$(SRCPREFIX)/cpdlc_hexcode.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o
+	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/cpdlc_msg_arinc622.o \
+	$(SRCPREFIX)/cpdlc_string.o \
+	$(ASN_SRC_OBJS)
 
 all : cpdlcd
 

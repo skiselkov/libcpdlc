@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -66,6 +66,9 @@ extern "C" {
 #ifndef	MAX
 #define	MAX(x, y)	((x) > (y) ? (x) : (y))
 #endif
+#ifndef	ABS
+#define	ABS(x)		((x) >= 0 ? (x) : -(x))
+#endif
 
 #if	defined(__GNUC__) || defined(__clang__)
 #define	PRINTF_ATTR(x)		__attribute__((format(printf, x, x + 1)))
@@ -119,6 +122,16 @@ extern "C" {
 	(((x) & 0xff00000000000000llu) << 56))
 #endif	/* BSWAP32 */
 #endif	/* !__GNUC__ && !__clang__ */
+
+#ifndef	CPDLC_DEG_SYMBOL
+#define	CPDLC_DEG_SYMBOL	"\370"
+#endif
+
+#if	defined(__STDC_LIB_EXT1__) || IBM
+#define	cpdlc_gmtime_r(__tim__, __tm__)	_gmtime64_s((__tm__), (__tim__))
+#else
+#define	cpdlc_gmtime_r			gmtime_r
+#endif
 
 #ifdef	__cplusplus
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -26,7 +26,9 @@
 #ifndef	_LIBCPDLC_MSG_H_
 #define	_LIBCPDLC_MSG_H_
 
+#include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "cpdlc_core.h"
 
@@ -101,16 +103,16 @@ typedef enum {
 	CPDLC_UM61_CROSS_pos_AT_AND_MAINT_alt_AT_spd,
 	CPDLC_UM62_AT_time_CROSS_pos_AT_AND_MAINT_alt,
 	CPDLC_UM63_AT_time_CROSS_pos_AT_AND_MAINT_alt_AT_spd,
-	CPDLC_UM64_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_UM65_AT_pos_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_UM66_AT_time_OFFSET_dir_dist_OF_ROUTE,
+	CPDLC_UM64_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_UM65_AT_pos_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_UM66_AT_time_OFFSET_dist_dir_OF_ROUTE,
 	CPDLC_UM67_PROCEED_BACK_ON_ROUTE,
 	CPDLC_UM68_REJOIN_ROUTE_BY_pos,
 	CPDLC_UM69_REJOIN_ROUTE_BY_time,
 	CPDLC_UM70_EXPCT_BACK_ON_ROUTE_BY_pos,
 	CPDLC_UM71_EXPCT_BACK_ON_ROUTE_BY_time,
 	CPDLC_UM72_RESUME_OWN_NAV,
-	CPDLC_UM73_PDC_route,
+	CPDLC_UM73_PDC_predepclx,
 	CPDLC_UM74_DIR_TO_pos,
 	CPDLC_UM75_WHEN_ABL_DIR_TO_pos,
 	CPDLC_UM76_AT_time_DIR_TO_pos,
@@ -119,7 +121,7 @@ typedef enum {
 	CPDLC_UM79_CLR_TO_pos_VIA_route,
 	CPDLC_UM80_CLR_route,
 	CPDLC_UM81_CLR_proc,
-	CPDLC_UM82_CLR_DEVIATE_UP_TO_dir_dist_OF_ROUTE,
+	CPDLC_UM82_CLR_DEVIATE_UP_TO_dist_dir_OF_ROUTE,
 	CPDLC_UM83_AT_pos_CLR_route,
 	CPDLC_UM84_AT_pos_CLR_proc,
 	CPDLC_UM85_EXPCT_route,
@@ -189,7 +191,7 @@ typedef enum {
 	CPDLC_UM149_CAN_YOU_ACPT_alt_AT_pos,
 	CPDLC_UM150_CAN_YOU_ACPT_alt_AT_time,
 	CPDLC_UM151_WHEN_CAN_YOU_ACPT_spd,
-	CPDLC_UM152_WHEN_CAN_YOU_ACPT_dir_dist_OFFSET,
+	CPDLC_UM152_WHEN_CAN_YOU_ACPT_dist_dir_OFFSET,
 	CPDLC_UM153_ALTIMETER_baro,
 	CPDLC_UM154_RDR_SVC_TERM,
 	CPDLC_UM155_RDR_CTC_pos,
@@ -254,9 +256,9 @@ typedef enum {
 	CPDLC_DM12_AT_pos_REQ_DES_TO_alt,
 	CPDLC_DM13_AT_time_REQ_CLB_TO_alt,
 	CPDLC_DM14_AT_time_REQ_DES_TO_alt,
-	CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE,
+	CPDLC_DM15_REQ_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_DM16_AT_pos_REQ_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_DM17_AT_time_REQ_OFFSET_dist_dir_OF_ROUTE,
 	CPDLC_DM18_REQ_spd,
 	CPDLC_DM19_REQ_spd_TO_spd,
 	CPDLC_DM20_REQ_VOICE_CTC,
@@ -266,7 +268,7 @@ typedef enum {
 	CPDLC_DM24_REQ_route,
 	CPDLC_DM25_REQ_PDC,
 	CPDLC_DM26_REQ_WX_DEVIATION_TO_pos_VIA_route,
-	CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE,
+	CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dist_dir_OF_ROUTE,
 	CPDLC_DM28_LEAVING_alt,
 	CPDLC_DM29_CLIMBING_TO_alt,
 	CPDLC_DM30_DESCENDING_TO_alt,
@@ -294,13 +296,13 @@ typedef enum {
 	CPDLC_DM52_WHEN_CAN_WE_EXPECT_LOWER_ALT,
 	CPDLC_DM53_WHEN_CAN_WE_EXPECT_HIGHER_ALT,
 	CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt,
-	CPDLC_DM55_UNUSED,
-	CPDLC_DM56_UNUSED,
-	CPDLC_DM57_UNUSED,
-	CPDLC_DM58_UNUSED,
-	CPDLC_DM59_UNUSED,
-	CPDLC_DM60_UNUSED,
-	CPDLC_DM61_UNUSED,
+	CPDLC_DM55_PAN_PAN_PAN,
+	CPDLC_DM56_MAYDAY_MAYDAY_MAYDAY,
+	CPDLC_DM57_RMNG_FUEL_AND_POB,
+	CPDLC_DM58_CANCEL_EMERG,
+	CPDLC_DM59_DIVERTING_TO_pos_VIA_route,
+	CPDLC_DM60_OFFSETTING_dist_dir_OF_ROUTE,
+	CPDLC_DM61_DESCENDING_TO_alt,
 	CPDLC_DM62_ERROR_errorinfo,
 	CPDLC_DM63_NOT_CURRENT_DATA_AUTHORITY,
 	CPDLC_DM64_CURRENT_DATA_AUTHORITY_id,
@@ -319,16 +321,16 @@ typedef enum {
 	CPDLC_DM77_ASSIGNED_BLOCK_alt_TO_alt,
 	CPDLC_DM78_AT_time_dist_tofrom_pos,
 	CPDLC_DM79_ATIS_code,
-	CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE
+	CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE
 } cpdlc_dl_msg_type_t;
 
 typedef enum {
 	CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time = 'b',
 	CPDLC_DM67c_WE_CAN_ACPT_spd_AT_time = 'c',
-	CPDLC_DM67d_WE_CAN_ACPT_dir_dist_AT_time = 'd',
+	CPDLC_DM67d_WE_CAN_ACPT_dist_dir_AT_time = 'd',
 	CPDLC_DM67e_WE_CANNOT_ACPT_alt = 'e',
 	CPDLC_DM67f_WE_CANNOT_ACPT_spd = 'f',
-	CPDLC_DM67g_WE_CANNOT_ACPT_dir_dist = 'g',
+	CPDLC_DM67g_WE_CANNOT_ACPT_dist_dir = 'g',
 	CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt = 'h',
 	CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt = 'i',
 } cpdlc_dl_msg_subtype_t;
@@ -350,69 +352,513 @@ typedef enum {
 	CPDLC_ARG_POSITION,
 	CPDLC_ARG_DIRECTION,
 	CPDLC_ARG_DISTANCE,
+	CPDLC_ARG_DISTANCE_OFFSET,
 	CPDLC_ARG_VVI,
 	CPDLC_ARG_TOFROM,
 	CPDLC_ARG_ROUTE,
 	CPDLC_ARG_PROCEDURE,
 	CPDLC_ARG_SQUAWK,
-	CPDLC_ARG_ICAONAME,
+	CPDLC_ARG_ICAO_ID,
+	CPDLC_ARG_ICAO_NAME,
 	CPDLC_ARG_FREQUENCY,
 	CPDLC_ARG_DEGREES,
 	CPDLC_ARG_BARO,
-	CPDLC_ARG_FREETEXT
+	CPDLC_ARG_FREETEXT,
+	CPDLC_ARG_PERSONS,
+	CPDLC_ARG_POSREPORT,
+	CPDLC_ARG_PDC,
+	CPDLC_ARG_TP4TABLE,
+	CPDLC_ARG_ERRINFO,
+	CPDLC_ARG_VERSION,
+	CPDLC_ARG_ATIS_CODE,
+	CPDLC_ARG_LEGTYPE
 } cpdlc_arg_type_t;
 
 typedef enum {
-	CPDLC_DIR_ANY,
-	CPDLC_DIR_LEFT,
-	CPDLC_DIR_RIGHT
+	CPDLC_DIR_LEFT =	0,
+	CPDLC_DIR_RIGHT =	1,
+	CPDLC_DIR_EITHER =	2,
+	CPDLC_DIR_NORTH =	3,
+	CPDLC_DIR_SOUTH =	4,
+	CPDLC_DIR_EAST =	5,
+	CPDLC_DIR_WEST =	6,
+	CPDLC_DIR_NE =		7,
+	CPDLC_DIR_NW =		8,
+	CPDLC_DIR_SE =		9,
+	CPDLC_DIR_SW =		10
 } cpdlc_dir_t;
 
+#define	CPDLC_NULL_SPD		((cpdlc_spd_t){0, 0})
+#define	CPDLC_IS_NULL_SPD(_sp)	((_sp).spd == 0)
+
+typedef struct {
+	bool			mach;
+	bool			tru;
+	bool			gnd;
+	unsigned		spd;	/* knots or 1/1000th of Mach */
+} cpdlc_spd_t;
+
+#define	CPDLC_NULL_ALT		((cpdlc_alt_t){false, false, -9999})
+#define	CPDLC_IS_NULL_ALT(a)	((a).alt <= -2000)
+
+typedef struct {
+	bool			fl;	/* flight level? */
+	bool			met;	/* metric? */
+	int			alt;	/* feet */
+} cpdlc_alt_t;
+
+#define	CPDLC_NULL_TIME		((cpdlc_time_t){-1, -1})
+#define	CPDLC_IS_NULL_TIME(tim)	((tim).hrs < 0 || (tim).mins < 0)
+
+typedef struct {
+	int			hrs;
+	int			mins;
+} cpdlc_time_t;
+
+typedef enum {
+	CPDLC_AT,
+	CPDLC_AT_OR_ABV,
+	CPDLC_AT_OR_BLW
+} cpdlc_alt_cstr_type_t;
+
+typedef struct {
+	cpdlc_alt_cstr_type_t	toler;
+	cpdlc_alt_t		alt;
+} cpdlc_alt_cstr_t;
+
+#define	CPDLC_NULL_LAT_LON		((cpdlc_lat_lon_t){NAN, NAN})
+#define	CPDLC_IS_NULL_LAT_LON(ll)	(isnan((ll).lat) || isnan((ll).lon))
+
+typedef struct {
+	double		lat;		/* NAN if CPDLC_NULL_LAT_LON */
+	double		lon;		/* NAN if CPDLC_NULL_LAT_LON */
+} cpdlc_lat_lon_t;
+
+typedef struct {
+	char		fixname[8];	/* required */
+	cpdlc_lat_lon_t	lat_lon;	/* optional, CPDLC_NULL_LAT_LON */
+} cpdlc_pub_ident_t;
+
+typedef struct {
+	char		fixname[8];	/* required */
+	cpdlc_lat_lon_t	lat_lon;	/* optional, CPDLC_NULL_LAT_LON */
+	unsigned	degrees;	/* required */
+} cpdlc_pb_t;
+
+typedef cpdlc_pb_t cpdlc_pbpb_t[2];
+
+typedef struct {
+	char		fixname[8];	/* required */
+	cpdlc_lat_lon_t	lat_lon;	/* optional, CPDLC_NULL_LAT_LON */
+	unsigned	degrees;	/* required */
+	float		dist_nm;	/* required */
+} cpdlc_pbd_t;
+
+typedef enum {
+	CPDLC_POS_FIXNAME,
+	CPDLC_POS_NAVAID,
+	CPDLC_POS_AIRPORT,
+	CPDLC_POS_LAT_LON,
+	CPDLC_POS_PBD,
+	CPDLC_POS_UNKNOWN
+} cpdlc_pos_type_t;
+
+#define	CPDLC_NULL_POS		((cpdlc_pos_t){false})
+#define	CPDLC_IS_NULL_POS(pos)	(!(pos).set)
+
+typedef struct {
+	bool			set;
+	cpdlc_pos_type_t	type;
+	union {
+		char		fixname[8];	/* CPDLC_POS_FIXNAME */
+		char		navaid[8];	/* CPDLC_POS_NAVAID */
+		char		airport[8];	/* CPDLC_POS_AIRPORT */
+		cpdlc_lat_lon_t	lat_lon;	/* CPDLC_POS_LAT_LON */
+		cpdlc_pbd_t	pbd;		/* CPDLC_POS_PBD */
+		char		str[16];	/* CPDLC_POS_UNKNOWN */
+	};
+} cpdlc_pos_t;
+
+typedef struct {
+	cpdlc_pos_t		pos;
+	float			dist_nm;
+	bool			spd_cstr_present;
+	cpdlc_spd_t		spd_cstr;
+	unsigned		num_alt_cstr;
+	cpdlc_alt_cstr_t	alt_cstr[2];
+} cpdlc_atk_wpt_t;
+
+typedef enum {
+	CPDLC_INTC_FROM_PUB_IDENT,
+	CPDLC_INTC_FROM_LAT_LON,
+	CPDLC_INTC_FROM_PBPB,
+	CPDLC_INTC_FROM_PBD
+} cpdlc_intc_from_type_t;
+
+typedef struct {
+	cpdlc_intc_from_type_t		type;
+	union {
+		cpdlc_pub_ident_t	pub_ident;
+		cpdlc_lat_lon_t		lat_lon;
+		cpdlc_pbpb_t		pbpb;
+		cpdlc_pbd_t		pbd;
+	};
+	unsigned			degrees;
+} cpdlc_intc_from_t;
+
+typedef enum {
+	CPDLC_HOLD_LEG_NONE,
+	CPDLC_HOLD_LEG_DIST,
+	CPDLC_HOLD_LEG_TIME
+} cpdlc_hold_leg_type_t;
+
+typedef struct {
+	cpdlc_hold_leg_type_t	type;
+	union {
+		float		dist_nm;	/* 0.1 - 99.9 NM */
+		float		time_min;	/* 0.1 - 9.9 minutes */
+	};
+} cpdlc_hold_leg_t;
+
+typedef struct {
+	cpdlc_pos_t		pos;	/* required */
+	cpdlc_spd_t		spd_low;/* optional, CPDLC_NULL_SPD */
+	bool			alt_present;
+	cpdlc_alt_cstr_t	alt;	/* optional */
+	cpdlc_spd_t		spd_high;/* optional, CPDLC_NULL_SPD */
+	cpdlc_dir_t		dir;	/* optional, CPDLC_DIR_EITHER */
+	unsigned		degrees;/* optional, 0 */
+	cpdlc_time_t		efc;	/* optional, CPDLC_NULL_TIME */
+	cpdlc_hold_leg_t	leg;	/* optional, CPDLC_HOLD_LEG_NONE */
+} cpdlc_hold_at_t;
+
+typedef struct {
+	cpdlc_pos_t		pos;
+	cpdlc_spd_t		spd;	/* optional, CPDLC_NULL_SPD */
+	cpdlc_alt_cstr_t	alt[2];	/* optional, CPDLC_NULL_ALT */
+} cpdlc_wpt_spd_alt_t;
+
+typedef enum {
+	CPDLC_TIME_TOLER_AT =		0,
+	CPDLC_TIME_TOLER_AT_OR_AFTER =	1,
+	CPDLC_TIME_TOLER_AT_OR_BEFORE =	2,
+} cpdlc_time_toler_t;
+
+typedef struct {
+	cpdlc_pos_t		pos;
+	cpdlc_time_t		time;
+	cpdlc_time_toler_t	toler;
+} cpdlc_rta_t;
+
+typedef struct {
+	bool			rpt_lat;
+	double			degrees;	/* lat/lon, degrees */
+	unsigned		deg_incr;	/* optional, 0=unset */
+} cpdlc_rpt_pts_t;
+
+typedef struct {
+	unsigned		num_atk_wpt;
+	cpdlc_atk_wpt_t		atk_wpt[8];
+	cpdlc_rpt_pts_t		rpt_pts;
+	unsigned		num_intc_from;
+	cpdlc_intc_from_t	intc_from[4];
+	unsigned		num_hold_at_wpt;
+	cpdlc_hold_at_t		hold_at_wpt[4];
+	unsigned		num_wpt_spd_alt;
+	cpdlc_wpt_spd_alt_t	wpt_spd_alt[32];
+	unsigned		num_rta;
+	cpdlc_rta_t		rta[32];
+} cpdlc_route_add_info_t;
+
+typedef enum {
+	CPDLC_PROC_UNKNOWN = 0,
+	CPDLC_PROC_ARRIVAL = 1,
+	CPDLC_PROC_APPROACH = 2,
+	CPDLC_PROC_DEPARTURE = 3
+} cpdlc_proc_type_t;
+
+typedef struct {
+	cpdlc_proc_type_t	type;
+	char			name[8];
+	char			trans[8];
+} cpdlc_proc_t;
+
+#define	CPDLC_TRK_DETAIL_MAX_LAT_LON	128
+
+typedef struct {
+	char			name[8];
+	unsigned		num_lat_lon;
+	cpdlc_lat_lon_t		lat_lon[CPDLC_TRK_DETAIL_MAX_LAT_LON];
+} cpdlc_trk_detail_t;
+
+typedef enum {
+	CPDLC_ROUTE_PUB_IDENT,		/* Published database identifier */
+	CPDLC_ROUTE_LAT_LON,		/* Latitude+Longitude */
+	CPDLC_ROUTE_PBPB,		/* Place-Bearing/Place-Bearing */
+	CPDLC_ROUTE_PBD,		/* Place/Bearing/Distance */
+	CPDLC_ROUTE_AWY,		/* Airway */
+	CPDLC_ROUTE_TRACK_DETAIL,	/* Prescribed track */
+	CPDLC_ROUTE_UNKNOWN		/* Unknown - fixname or airway */
+} cpdlc_route_info_type_t;
+
+typedef struct {
+	cpdlc_route_info_type_t		type;
+	union {
+		/* CPDLC_ROUTE_PUB_IDENT */
+		cpdlc_pub_ident_t	pub_ident;
+		/* CPDLC_ROUTE_LAT_LON */
+		cpdlc_lat_lon_t		lat_lon;
+		/* CPDLC_ROUTE_PBPB */
+		cpdlc_pbpb_t		pbpb;
+		/* CPDLC_ROUTE_PBD */
+		cpdlc_pbd_t		pbd;
+		/* CPDLC_ROUTE_AWY */
+		char			awy[8];
+		/* CPDLC_ROUTE_UNKNOWN */
+		char			str[24];
+	};
+} cpdlc_route_info_t;
+
+#define	CPDLC_ROUTE_MAX_INFO	128
+
+typedef struct {
+	char			orig_icao[8];
+	char			dest_icao[8];
+	char			orig_rwy[8];
+	char			dest_rwy[8];
+	cpdlc_proc_t		sid;
+	cpdlc_proc_t		star;
+	cpdlc_proc_t		appch;
+	char			awy_intc[8];
+	unsigned		num_info;
+	cpdlc_route_info_t	info[CPDLC_ROUTE_MAX_INFO];
+	cpdlc_route_add_info_t	add_info;
+	/* CPDLC_ROUTE_TRACK_DETAIL */
+	cpdlc_trk_detail_t	trk_detail;
+} cpdlc_route_t;
+
+#define	CPDLC_NULL_WIND		((cpdlc_wind_t){0, 0})
+#define	CPDLC_IS_NULL_WIND(wind) ((wind).dir == 0)
+
+typedef struct {
+	unsigned		dir;		/* Degrees, 1-360 */
+	unsigned		spd;		/* Knots */
+} cpdlc_wind_t;
+
+typedef enum {
+	CPDLC_TURB_NONE,
+	CPDLC_TURB_LIGHT,
+	CPDLC_TURB_MOD,
+	CPDLC_TURB_SEV
+} cpdlc_turb_t;
+
+typedef enum {
+	CPDLC_ICING_NONE,
+	CPDLC_ICING_TRACE,
+	CPDLC_ICING_LIGHT,
+	CPDLC_ICING_MOD,
+	CPDLC_ICING_SEV
+} cpdlc_icing_t;
+
+#define	CPDLC_NULL_TEMP		-100
+#define	CPDLC_IS_NULL_TEMP(temp) ((temp) <= -100)
+
+#define	CPDLC_NULL_POS_REP	\
+	((cpdlc_pos_rep_t){ \
+		CPDLC_NULL_POS,		/* cur_pos */ \
+		CPDLC_NULL_TIME,	/* time_cur_pos */ \
+		CPDLC_NULL_ALT,		/* alt */ \
+		CPDLC_NULL_POS,		/* fix_next */ \
+		CPDLC_NULL_TIME,	/* time_fix_next */ \
+		CPDLC_NULL_POS,		/* fix_next_p1 */ \
+		CPDLC_NULL_TIME,	/* time_dest */ \
+		CPDLC_NULL_TIME,	/* rmng_fuel */ \
+		CPDLC_NULL_TEMP,	/* temp */ \
+		CPDLC_NULL_WIND,	/* wind */ \
+		CPDLC_TURB_NONE,	/* turb */ \
+		CPDLC_ICING_NONE,	/* icing */ \
+		CPDLC_NULL_SPD,		/* spd */ \
+		CPDLC_NULL_SPD,		/* spd_gnd */ \
+		false,			/* vvi_set */ \
+		0,			/* vvi */ \
+		0,			/* trk */ \
+		0,			/* hdg_true */ \
+		false,			/* dist_set */ \
+		0,			/* dist_nm */ \
+		{},			/* remarks */ \
+		CPDLC_NULL_POS,		/* rpt_wpt_pos */ \
+		CPDLC_NULL_TIME,	/* rpt_wpt_time */ \
+		CPDLC_NULL_ALT		/* rpt_wpt_alt */ \
+	})
+
+typedef struct {
+	cpdlc_pos_t		cur_pos;	/* Required */
+	cpdlc_time_t		time_cur_pos;	/* Required */
+	cpdlc_alt_t		cur_alt;	/* Required */
+	cpdlc_pos_t		fix_next;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		time_fix_next;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_pos_t		fix_next_p1;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		time_dest;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_time_t		rmng_fuel;	/* Optional, CPDLC_NULL_TIME */
+	int			temp;		/* Optional, CPDLC_NULL_TEMP */
+	cpdlc_wind_t		wind;		/* Optional, CPDLC_NULL_WIND */
+	cpdlc_turb_t		turb;		/* Optional, CPDLC_TURB_NONE */
+	cpdlc_icing_t		icing;		/* Optional, CPDLC_ICING_NONE */
+	cpdlc_spd_t		spd;		/* Optional, CPDLC_NULL_SPD */
+	cpdlc_spd_t		spd_gnd;	/* Optional, CPDLC_NULL_SPD */
+	bool			vvi_set;
+	int			vvi;		/* Optional, vvi_set=false */
+	unsigned		trk;		/* Optional, trk=0 */
+	unsigned		hdg_true;	/* Optional, hdg_true=0 */
+	bool			dist_set;
+	float			dist_nm;	/* Optional, dist_set=false */
+	char			remarks[256];	/* Optional, empty */
+	cpdlc_pos_t		rpt_wpt_pos;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		rpt_wpt_time;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_alt_t		rpt_wpt_alt;	/* Optional, CPDLC_NULL_ALT */
+} cpdlc_pos_rep_t;
+
+typedef enum {
+	CPDLC_COM_NAV_LORAN_A,
+	CPDLC_COM_NAV_LORAN_C,
+	CPDLC_COM_NAV_DME,
+	CPDLC_COM_NAV_DECCA,
+	CPDLC_COM_NAV_ADF,
+	CPDLC_COM_NAV_GNSS,
+	CPDLC_COM_NAV_HF_RTF,
+	CPDLC_COM_NAV_INS,
+	CPDLC_COM_NAV_ILS,
+	CPDLC_COM_NAV_OMEGA,
+	CPDLC_COM_NAV_VOR,
+	CPDLC_COM_NAV_DOPPLER,
+	CPDLC_COM_NAV_RNAV,
+	CPDLC_COM_NAV_TACAN,
+	CPDLC_COM_NAV_UHF_RTF,
+	CPDLC_COM_NAV_VHF_RTF
+} cpdlc_com_nav_eqpt_st_t;
+
+typedef enum {
+	CPDLC_SSR_EQPT_NIL,
+	CPDLC_SSR_EQPT_XPDR_MODE_A,
+	CPDLC_SSR_EQPT_XPDR_MODE_AC,
+	CPDLC_SSR_EQPT_XPDR_MODE_S,
+	CPDLC_SSR_EQPT_XPDR_MODE_SPA,
+	CPDLC_SSR_EQPT_XPDR_MODE_SID,
+	CPDLC_SSR_EQPT_XPDR_MODE_SPAID
+} cpdlc_ssr_eqpt_t;
+
+typedef struct {
+	bool			com_nav_app_eqpt_avail;
+	unsigned		num_com_nav_eqpt_st;
+	cpdlc_com_nav_eqpt_st_t	com_nav_eqpt_st[16];
+	cpdlc_ssr_eqpt_t	ssr_eqpt;
+} cpdlc_acf_eqpt_code_t;
+
+typedef struct {
+	char			acf_id[8];	/* required */
+	char			acf_type[8];	/* optional */
+	cpdlc_acf_eqpt_code_t	acf_eqpt_code;	/* optional */
+	cpdlc_time_t		time_dep;	/* required */
+	cpdlc_route_t		route;		/* required */
+	cpdlc_alt_t		alt_restr;	/* optional */
+	double			freq;		/* required */
+	unsigned		squawk;		/* required */
+	unsigned		revision;	/* required */
+} cpdlc_pdc_t;
+
+typedef enum {
+	CPDLC_TP4_LABEL_A,
+	CPDLC_TP4_LABEL_B
+} cpdlc_tp4table_t;
+
+typedef enum {
+	CPDLC_FAC_FUNC_CENTER,
+	CPDLC_FAC_FUNC_APPROACH,
+	CPDLC_FAC_FUNC_TOWER,
+	CPDLC_FAC_FUNC_FINAL,
+	CPDLC_FAC_FUNC_GROUND,
+	CPDLC_FAC_FUNC_CLX,
+	CPDLC_FAC_FUNC_DEPARTURE,
+	CPDLC_FAC_FUNC_CONTROL
+} cpdlc_fac_func_t;
+
+typedef struct {
+	bool			is_name;
+	union {
+		char		icao_id[8];
+		char		name[24];
+	};
+	cpdlc_fac_func_t        func;
+} cpdlc_icao_name_t;
+
+typedef struct {
+	bool			hpa;
+	double			val;
+} cpdlc_altimeter_t;
+
+typedef enum {
+	CPDLC_ERRINFO_APP_ERROR =		0,
+	CPDLC_ERRINFO_DUP_MIN =			1,
+	CPDLC_ERRINFO_UNRECOG_MRN =		2,
+	CPDLC_ERRINFO_END_SVC_WITH_PDG_MSGS =	3,
+	CPDLC_ERRINFO_END_SVC_WITH_NO_RESP =	4,
+	CPDLC_ERRINFO_INSUFF_MSG_STORAGE =	5,
+	CPDLC_ERRINFO_NO_AVBL_MIN =		6,
+	CPDLC_ERRINFO_COMMANDED_TERM =		7,
+	CPDLC_ERRINFO_INSUFF_DATA =		8,
+	CPDLC_ERRINFO_UNEXPCT_DATA =		9,
+	CPDLC_ERRINFO_INVAL_DATA =		10
+} cpdlc_errinfo_t;
+
+typedef struct {
+	bool			is_time;
+	double			param;	/* minutes, or nm */
+} cpdlc_legtype_t;
+
 typedef union {
-	struct {
-		bool		fl;	/* flight level? */
-		bool		met;	/* metric? */
-		int		alt;	/* feet */
-	} alt;
-	struct {
-		bool		mach;
-		unsigned	spd;	/* knots or 1/1000th of Mach */
-	} spd;
-	struct {
-		int		hrs;
-		int		mins;
-	} time;
-	char		pos[24];
-	cpdlc_dir_t	dir;
-	double		dist;	/* nautical miles */
-	int		vvi;	/* feet per minute */
-	bool		tofrom;	/* true = to, false = from */
-	char		*route;
-	char		proc[16];
-	unsigned	squawk;
-	struct {
-		char	icao[8];
-		char	name[32];
-	} icaoname;
-	double		freq;
+	cpdlc_alt_t		alt;
+	cpdlc_spd_t		spd;
+	cpdlc_time_t		time;
+	cpdlc_pos_t		pos;
+	cpdlc_dir_t		dir;
+	double			dist;	/* nautical miles */
+	int			vvi;	/* feet per minute */
+	bool			tofrom;	/* true = to, false = from */
+	cpdlc_route_t		*route;
+	cpdlc_proc_t		proc;
+	unsigned		squawk;
+	char			icao_id[8];
+	cpdlc_icao_name_t	icao_name;
+	double			freq;
 	struct {
 		unsigned	deg;
 		bool		tru;
 	} deg;
-	struct {
-		bool	hpa;
-		double	val;
-	} baro;
-	char		*freetext;
+	cpdlc_altimeter_t	baro;
+	char			*freetext;
+	unsigned		pob;
+	cpdlc_pos_rep_t		pos_rep;
+	cpdlc_pdc_t		*pdc;
+	cpdlc_tp4table_t	tp4;
+	cpdlc_errinfo_t		errinfo;
+	unsigned		version;
+	char			atis_code;
+	cpdlc_legtype_t		legtype;
 } cpdlc_arg_t;
 
 enum {
     CPDLC_MAX_ARGS = 5,
     CPDLC_MAX_RESP_MSGS = 4,
-    CPDLC_MAX_MSG_SEGS = 8,
+    CPDLC_MAX_MSG_SEGS = 5,
     CPDLC_MAX_VERSION_NR = 1,
-    CPDLC_CALLSIGN_LEN = 16
+    CPDLC_CALLSIGN_LEN = 8
 };
+
+typedef struct {
+	uintptr_t		offset;
+	bool			is_seq;
+	uintptr_t		seq_idx;
+} cpdlc_asn_arg_info_t;
 
 typedef struct {
 	bool			is_dl;
@@ -421,6 +867,8 @@ typedef struct {
 	const char		*text;
 	unsigned		num_args;
 	cpdlc_arg_type_t	args[CPDLC_MAX_ARGS];
+	unsigned		asn_elem_id;
+	cpdlc_asn_arg_info_t	asn_arg_info[CPDLC_MAX_ARGS];
 	cpdlc_resp_type_t	resp;
 	unsigned		timeout;	/* seconds */
 	unsigned		num_resp_msgs;
@@ -440,16 +888,41 @@ typedef enum {
 } cpdlc_pkt_t;
 
 typedef struct {
-	cpdlc_pkt_t	pkt_type;
-	unsigned	min;
-	unsigned	mrn;
-	char		from[CPDLC_CALLSIGN_LEN];
-	char		to[CPDLC_CALLSIGN_LEN];
-	bool		is_logon;
-	bool		is_logoff;
-	char		*logon_data;
-	unsigned	num_segs;
-	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
+	bool			set;
+	unsigned		hrs;
+	unsigned		mins;
+	unsigned		secs;
+} cpdlc_timestamp_t;
+
+typedef enum {
+	CPDLC_IMI_DATA,
+	CPDLC_IMI_CONN_REQUEST,
+	CPDLC_IMI_CONN_CONFIRM,
+	CPDLC_IMI_DISC_REQUEST,
+} cpdlc_imi_t;
+
+#define	CPDLC_MAX_OPTS		4
+
+typedef struct {
+	cpdlc_pkt_t		pkt_type;
+	unsigned		min;
+	unsigned		mrn;
+	cpdlc_timestamp_t	ts;
+	char			from[CPDLC_CALLSIGN_LEN];
+	char			to[CPDLC_CALLSIGN_LEN];
+	bool			is_logon;
+	bool			is_logoff;
+	char			*logon_data;
+	unsigned		num_segs;
+	cpdlc_msg_seg_t		segs[CPDLC_MAX_MSG_SEGS];
+	bool			fmt_plain;
+	bool			fmt_arinc622;
+	struct {
+		cpdlc_imi_t	imi;
+		char		acf_id[CPDLC_CALLSIGN_LEN];
+	} arinc622;
+	unsigned		num_opts;
+	char			opts[CPDLC_MAX_OPTS][12];
 } cpdlc_msg_t;
 
 extern const cpdlc_msg_info_t *cpdlc_ul_infos;
@@ -459,12 +932,21 @@ CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(cpdlc_pkt_t pkt_type);
 CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
+CPDLC_API int cpdlc_msg_option_add(cpdlc_msg_t *msg, const char *opt);
+CPDLC_API void cpdlc_msg_option_remove(cpdlc_msg_t *msg, const char *opt);
+CPDLC_API bool cpdlc_msg_option_is_set(const cpdlc_msg_t *msg, const char *opt);
+CPDLC_API unsigned cpdlc_msg_options_count(const cpdlc_msg_t *msg);
+CPDLC_API const char *cpdlc_msg_option_get(const cpdlc_msg_t *msg, unsigned nr);
+
+CPDLC_API void cpdlc_msg_set_imi(cpdlc_msg_t *msg, cpdlc_imi_t imi);
+CPDLC_API cpdlc_imi_t cpdlc_msg_get_imi(const cpdlc_msg_t *msg);
+
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
-CPDLC_API bool cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg,
-    int *consumed, char *reason, unsigned reason_cap);
+CPDLC_API bool cpdlc_msg_decode(const char *in_buf, bool is_dl,
+    cpdlc_msg_t **msg, int *consumed, char *reason, unsigned reason_cap);
 
 void cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type,
     const cpdlc_arg_t *arg, bool readable, unsigned *n_bytes_p,

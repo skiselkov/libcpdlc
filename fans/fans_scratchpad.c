@@ -250,7 +250,9 @@ fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg, bool *read_back)
 	    new_hdg <= 360) {
 		char last = buf[strlen(buf) - 1];
 		hdg->set = true;
-		hdg->hdg = new_hdg % 360;
+		if (new_hdg == 0)
+			new_hdg = 360;
+		hdg->hdg = new_hdg;
 		if (!isdigit(last)) {
 			if (last == 'T')
 				hdg->tru = true;
@@ -269,8 +271,8 @@ fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg, bool *read_back)
 }
 
 bool
-fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
-    const cpdlc_arg_t *autoalt, bool *read_back)
+fans_scratchpad_xfer_alt(fans_t *box, cpdlc_alt_t *useralt,
+    const cpdlc_alt_t *autoalt, bool *read_back)
 {
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	fans_err_t error = FANS_ERR_NONE;
@@ -279,9 +281,9 @@ fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
 	CPDLC_ASSERT(useralt != NULL);
 	/* read_back can be NULL */
 
-	if (useralt->alt.alt != 0)
+	if (!CPDLC_IS_NULL_ALT(*useralt))
 		fans_print_alt(useralt, userbuf, sizeof (userbuf), false);
-	if (autoalt != NULL && autoalt->alt.alt != 0)
+	if (autoalt != NULL && !CPDLC_IS_NULL_ALT(*autoalt))
 		fans_print_alt(autoalt, autobuf, sizeof (autobuf), false);
 	if (!fans_scratchpad_xfer_auto(box, userbuf, autobuf,
 	    sizeof (userbuf), true, read_back)) {
@@ -291,14 +293,14 @@ fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
 		if (strlen(userbuf) != 0)
 			error = fans_parse_alt(userbuf, 0, useralt);
 		else
-			memset(useralt, 0, sizeof (*useralt));
+			*useralt = CPDLC_NULL_ALT;
 	}
 	fans_set_error(box, error);
 	return (error == FANS_ERR_NONE);
 }
 
 bool
-fans_scratchpad_xfer_pos_impl(fans_t *box, fms_pos_t *pos, bool *read_back)
+fans_scratchpad_xfer_pos_impl(fans_t *box, cpdlc_pos_t *pos, bool *read_back)
 {
 	char buf[32];
 
@@ -322,7 +324,7 @@ fans_scratchpad_xfer_pos_impl(fans_t *box, fms_pos_t *pos, bool *read_back)
 }
 
 bool
-fans_scratchpad_xfer_pos(fans_t *box, fms_pos_t *pos,
+fans_scratchpad_xfer_pos(fans_t *box, cpdlc_pos_t *pos,
     unsigned ret_page, pos_pick_done_cb_t done_cb, bool *read_back)
 {
 	CPDLC_ASSERT(box != NULL);
@@ -435,14 +437,14 @@ parse_dir(char *buf, fms_off_t *useroff, cpdlc_dir_t *dir)
 	} else if (!isdigit(last)) {
 		c = last;
 		buf[strlen(buf) - 1] = '\0';
-	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_ANY) {
+	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_EITHER) {
 		return (false);
 	}
 	if (c == 'L')
 		*dir = CPDLC_DIR_LEFT;
 	else if (c == 'R')
 		*dir = CPDLC_DIR_RIGHT;
-	else if (useroff->nm != 0 && useroff->dir != CPDLC_DIR_ANY)
+	else if (useroff->nm != 0 && useroff->dir != CPDLC_DIR_EITHER)
 		*dir = useroff->dir;
 	else
 		return (false);
@@ -470,12 +472,12 @@ fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
 	}
 	if (error == FANS_ERR_NONE) {
 		if (strlen(userbuf) != 0) {
-			float nm = 0;
+			int nm = 0;
 			cpdlc_dir_t dir;
 
 			if (strlen(userbuf) == 0 ||
 			    !parse_dir(userbuf, useroff, &dir) ||
-			    (sscanf(userbuf, "%f", &nm) != 1 &&
+			    (sscanf(userbuf, "%d", &nm) != 1 &&
 			    useroff->nm == 0) ||
 			    (nm <= 0 && useroff->nm == 0) || nm > 999) {
 				error = FANS_ERR_INVALID_ENTRY;
@@ -494,8 +496,8 @@ fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
 }
 
 bool
-fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
-    const cpdlc_arg_t *autospd, bool *read_back)
+fans_scratchpad_xfer_spd(fans_t *box, cpdlc_spd_t *userspd,
+    const cpdlc_spd_t *autospd, bool *read_back)
 {
 	char userbuf[8] = { 0 }, autobuf[8] = { 0 };
 	fans_err_t error = FANS_ERR_NONE;
@@ -504,11 +506,11 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
 	CPDLC_ASSERT(userspd != NULL);
 	/* read_back can be NULL */
 
-	if (userspd->spd.spd != 0) {
+	if (!CPDLC_IS_NULL_SPD(*userspd)) {
 		fans_print_spd(userspd, userbuf, sizeof (userbuf), false,
 		    false);
 	}
-	if (autospd != NULL && autospd->spd.spd != 0) {
+	if (autospd != NULL && !CPDLC_IS_NULL_SPD(*autospd)) {
 		fans_print_spd(autospd, autobuf, sizeof (autobuf), false,
 		    false);
 	}
@@ -518,13 +520,13 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
 	}
 	if (error == FANS_ERR_NONE) {
 		if (strlen(userbuf) != 0) {
-			cpdlc_arg_t new_spd = { .spd.spd = 0 };
+			cpdlc_spd_t new_spd = { .spd = 0 };
 
 			error = fans_parse_spd(userbuf, 0, &new_spd);
 			if (error == FANS_ERR_NONE)
 				memcpy(userspd, &new_spd, sizeof (new_spd));
 		} else {
-			memset(userspd, 0, sizeof (*userspd));
+			*userspd = CPDLC_NULL_SPD;
 		}
 	}
 	fans_set_error(box, error);

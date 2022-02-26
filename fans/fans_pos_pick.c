@@ -34,7 +34,7 @@
 
 void
 fans_pos_pick_start(fans_t *box, pos_pick_done_cb_t done_cb,
-    unsigned ret_page, const fms_pos_t *old_pos)
+    unsigned ret_page, const cpdlc_pos_t *old_pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(done_cb != NULL);
@@ -63,31 +63,33 @@ fans_pos_pick_draw_cb(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "POSITION");
 	switch (box->pos_pick.pos.type) {
-	case FMS_POS_NAVAID:
+	case CPDLC_POS_NAVAID:
 		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "vNAVAID");
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "NAVAID");
 		break;
-	case FMS_POS_ARPT:
+	case CPDLC_POS_AIRPORT:
 		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "vAIRPORT");
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "AIRPORT");
 		break;
-	case FMS_POS_FIX:
+	case CPDLC_POS_FIXNAME:
 		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "vFIX");
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "FIX");
 		break;
-	case FMS_POS_LAT_LON:
+	case CPDLC_POS_LAT_LON:
 		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "vLAT/LON");
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "LAT/LON");
 		break;
-	case FMS_POS_PBD:
+	case CPDLC_POS_PBD:
 		fans_put_str(box, LSK1_ROW, 0, false, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "vPLACE/BEARING/DISTANCE");
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2,
 		    "PLACE/BEARING/DISTANCE");
+		break;
+	default:
 		break;
 	}
 
@@ -106,18 +108,26 @@ fans_pos_pick_key_cb(fans_t *box, fms_key_t key)
 
 	if (key == FMS_KEY_LSK_L1) {
 		box->pos_pick.pos.type = (box->pos_pick.pos.type + 1) %
-		    (FMS_POS_PBD + 1);
+		    (CPDLC_POS_PBD + 1);
 		box->pos_pick.pos.set = false;
 	} else if (key == FMS_KEY_LSK_L2) {
 		bool read_back;
 		if (fans_scratchpad_xfer_pos_impl(box, &box->pos_pick.pos,
 		    &read_back) && !read_back) {
 			fans_scratchpad_clear(box);
+			if (box->pos_pick.pos.set) {
+				CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
+				box->pos_pick.done_cb(box, &box->pos_pick.pos);
+				fans_set_page(box, box->pos_pick.ret_page,
+				    false);
+			}
 		}
 	} else if (key == FMS_KEY_LSK_L6) {
 		CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
-		if (box->pos_pick.pos.set || box->pos_pick.was_set)
+		if (box->pos_pick.pos.set || box->pos_pick.was_set) {
+			CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
 			box->pos_pick.done_cb(box, &box->pos_pick.pos);
+		}
 		fans_set_page(box, box->pos_pick.ret_page, false);
 	} else {
 		return (false);

@@ -189,6 +189,8 @@ struct cpdlc_client_s {
 	char		*inbuf;
 	unsigned	inbuf_sz;
 	minilist_t	inmsgbufs;
+	bool		fmt_plain;
+	bool		fmt_arinc622;
 
 	/*
 	 * When any last data was sent or received. Used for keepalive.
@@ -225,7 +227,7 @@ static void reset_link_state(cpdlc_client_t *cl);
 
 static void send_logon(cpdlc_client_t *cl);
 static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
-    const cpdlc_msg_t *msg, bool track_sent);
+    cpdlc_msg_t *msg, bool track_sent);
 
 static void set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
     PRINTF_ATTR(2);
@@ -401,6 +403,7 @@ cpdlc_client_alloc(bool is_atc)
 	mutex_init(&cl->lock);
 
 	cl->is_atc = is_atc;
+	cl->fmt_plain = true;
 	/*
 	 * Bitrate simulation configuration
 	 */
@@ -479,6 +482,22 @@ cpdlc_client_free(cpdlc_client_t *cl)
 	free(cl->logon.nda);
 	memset(cl, 0, sizeof (*cl));
 	free(cl);
+}
+
+void
+cpdlc_client_set_arinc622(cpdlc_client_t *cl, bool flag)
+{
+	CPDLC_ASSERT(cl != NULL);
+	mutex_enter(&cl->lock);
+	cl->fmt_arinc622 = flag;
+	mutex_exit(&cl->lock);
+}
+
+bool
+cpdlc_client_get_arinc622(const cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (cl->fmt_arinc622);
 }
 
 bool
@@ -1029,6 +1048,10 @@ send_logon(cpdlc_client_t *cl)
 	}
 	if (cl->logon.to != NULL)
 		cpdlc_msg_set_to(msg, cl->logon.to);
+	if (cl->fmt_plain)
+		cpdlc_msg_option_add(msg, "PLAIN");
+	if (cl->fmt_arinc622)
+		cpdlc_msg_option_add(msg, "ARINC622");
 	send_msg_impl(cl, msg, false);
 	cpdlc_msg_free(msg);
 
@@ -1116,6 +1139,21 @@ queue_incoming_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	return (true);
 }
 
+static void
+send_logon_version(cpdlc_client_t *cl)
+{
+	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
+	unsigned ver = 1;
+
+	CPDLC_ASSERT(cl != NULL);
+
+	cpdlc_msg_set_imi(msg, CPDLC_IMI_CONN_CONFIRM);
+	cpdlc_msg_add_seg(msg, true, CPDLC_DM73_VERSION_number, 0);
+	cpdlc_msg_seg_set_arg(msg, 0, 0, &ver, NULL);
+	cpdlc_client_send_msg(cl, msg);
+	cpdlc_msg_free(msg);
+}
+
 static bool
 process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 {
@@ -1143,6 +1181,8 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 				cl->logon_status = CPDLC_LOGON_COMPLETE;
 				cl->last_data_rdwr = time(NULL);
 				set_logon_failure(cl, NULL);
+				if (cl->fmt_arinc622 && !cl->is_atc)
+					send_logon_version(cl);
 			} else {
 				cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
 				set_logon_failure(cl, "Logon denied");
@@ -1162,7 +1202,8 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		}
 		break;
 	default:
-		CPDLC_VERIFY_MSG(0, "Invalid client state %x", cl->logon_status);
+		CPDLC_VERIFY_MSG(0, "Invalid client state %x",
+		    cl->logon_status);
 	}
 
 	return (new_msgs);
@@ -1185,8 +1226,8 @@ process_input(cpdlc_client_t *cl)
 
 		/* Try to decode a message from our accumulated input. */
 		CPDLC_ASSERT3S(consumed_total, <=, cl->inbuf_sz);
-		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], &msg,
-		    &consumed, error, sizeof (error))) {
+		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], cl->is_atc,
+		    &msg, &consumed, error, sizeof (error))) {
 			cl->logon_status = CPDLC_LOGON_NONE;
 			cpdlc_strlcpy(cl->logon_failure, error,
 			    sizeof (cl->logon_failure));
@@ -1735,12 +1776,15 @@ cpdlc_client_reset_logon_failure(cpdlc_client_t *cl)
 }
 
 static cpdlc_msg_token_t
-send_msg_impl(cpdlc_client_t *cl, const cpdlc_msg_t *msg, bool track_sent)
+send_msg_impl(cpdlc_client_t *cl, cpdlc_msg_t *msg, bool track_sent)
 {
 	outmsgbuf_t *outmsgbuf;
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(msg != NULL);
+
+	msg->fmt_plain = cl->fmt_plain;
+	msg->fmt_arinc622 = cl->fmt_arinc622;
 
 	outmsgbuf = safe_calloc(1, sizeof (*outmsgbuf));
 	outmsgbuf->token = cl->outmsgbufs.next_tok++;
@@ -1759,16 +1803,26 @@ cpdlc_msg_token_t
 cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 {
 	cpdlc_msg_token_t tok;
+	cpdlc_msg_t *msg_copy;
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(msg != NULL);
 
 	mutex_enter(&cl->lock);
+	if (cl->logon.from == NULL) {
+		mutex_exit(&cl->lock);
+		return (CPDLC_INVALID_MSG_TOKEN);
+	}
+	msg_copy = cpdlc_msg_copy(msg);
+	cpdlc_msg_set_from(msg_copy, cl->logon.from);
 	if (cl->logon_status != CPDLC_LOGON_COMPLETE) {
 		mutex_exit(&cl->lock);
 		return (CPDLC_INVALID_MSG_TOKEN);
 	}
-	tok = send_msg_impl(cl, msg, true);
+	if (cl->logon.to != NULL)
+		cpdlc_msg_set_to(msg_copy, cl->logon.to);
+	tok = send_msg_impl(cl, msg_copy, true);
+	cpdlc_msg_free(msg_copy);
 	mutex_exit(&cl->lock);
 
 	return (tok);

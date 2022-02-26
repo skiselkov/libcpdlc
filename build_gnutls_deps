@@ -1,0 +1,67 @@
+#!/bin/bash
+
+GMP=gmp-6.2.0.tar.xz
+NETTLE=nettle-3.5.tar.xz
+GNUTLS=gnutls-3.6.11.1.tar.xz
+
+set -e
+
+source build_dep.common
+
+GMP_CONFOPTS="--disable-shared --enable-static --with-pic"
+GMP_PRODUCT="lib/pkgconfig/gmp.pc"
+
+NETTLE_CONFOPTS="--enable-mini-gmp --with-pic --disable-shared --enable-static"
+NETTLE_PRODUCT_LIN="lib64/pkgconfig/nettle.pc"
+NETTLE_PRODUCT="lib/pkgconfig/nettle.pc"
+
+GNUTLS_CONFOPTS="--enable-static --disable-shared --with-included-libtasn1 \
+    --with-pic --with-included-unistring --without-p11-kit --disable-doc \
+    --disable-tools --disable-cxx --disable-tests --without-idn \
+    --with-nettle-mini"
+GNUTLS_PRODUCT="lib/pkgconfig/gnutls.pc"
+
+case $(uname) in
+Linux)
+	STATIC_LIB_OPTS="-static-libgcc\\ -static-libstdc++"
+
+	if [ -f "nettle-linux-64/$NETTLE_PRODUCT" ]; then
+		NETTLE_PRODUCT_LIN="$NETTLE_PRODUCT"
+	fi
+
+	LDFLAGS="$STATIC_LIB_OPTS" \
+	    build_dep "linux-64" "$NETTLE_CONFOPTS" \
+	    "$NETTLE" "nettle" "$NETTLE_PRODUCT_LIN"
+	LDFLAGS="$STATIC_LIB_OPTS" \
+	    build_dep "win-64" "$NETTLE_CONFOPTS --host=x86_64-w64-mingw32" \
+	    "$NETTLE" "nettle" "$NETTLE_PRODUCT"
+
+	NETTLE_PKG_CONFIG_PATH="nettle-linux-64/lib64/pkgconfig:nettle-linux-64/lib/pkgconfig"
+	HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags hogweed)" \
+	HOGWEED_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs hogweed)" \
+	NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
+	NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
+	    build_dep "linux-64" "$GNUTLS_CONFOPTS" "$GNUTLS" "gnutls" \
+	    "$GNUTLS_PRODUCT"
+
+	NETTLE_PKG_CONFIG_PATH="nettle-win-64/lib/pkgconfig"
+	HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags hogweed)" \
+	HOGWEED_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs hogweed)" \
+	NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
+	NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
+	    build_dep "win-64" "$GNUTLS_CONFOPTS --host=x86_64-w64-mingw32" \
+	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT"
+	;;
+Darwin)
+	build_dep "mac-64" "$NETTLE_CONFOPTS" "$NETTLE" "nettle" \
+	    "$NETTLE_PRODUCT"
+
+	NETTLE_PKG_CONFIG_PATH="nettle-mac-64/lib/pkgconfig"
+	HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags hogweed)" \
+	HOGWEED_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs hogweed)" \
+	NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
+	NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
+	    build_dep "mac-64" "$GNUTLS_CONFOPTS" \
+	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT"
+	;;
+esac

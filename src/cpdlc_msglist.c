@@ -81,7 +81,7 @@ msg_is_dl_req(const cpdlc_msg_t *msg)
 	msg_type = msg->segs[0].info->msg_type;
 	return (msg->segs[0].info->is_dl &&
 	    ((msg_type >= CPDLC_DM6_REQ_alt &&
-	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE) ||
+	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dist_dir_OF_ROUTE) ||
 	    (msg_type >= CPDLC_DM49_WHEN_CAN_WE_EXPCT_spd &&
 	    msg_type <= CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt) ||
 	    msg_type == CPDLC_DM70_REQ_HDG_deg ||
@@ -256,9 +256,10 @@ thr_status_upd(cpdlc_msglist_t *msglist, msg_thr_t *thr)
 	} else if (thr->status != CPDLC_MSG_THR_STANDBY && timeout != 0 &&
 	    now - last->time > timeout) {
 		cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
+		cpdlc_errinfo_t err = CPDLC_ERRINFO_APP_ERROR;
 		cpdlc_msg_set_mrn(msg, cpdlc_msg_get_min(last->msg));
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM62_ERROR_errorinfo, 0);
-		cpdlc_msg_seg_set_arg(msg, 0, 0, "TIMEDOUT", NULL);
+		cpdlc_msg_seg_set_arg(msg, 0, 0, &err, NULL);
 		msglist_send_impl(msglist, msg, thr->thr_id);
 		thr->status = CPDLC_MSG_THR_TIMEDOUT;
 		thr->dirty = false;

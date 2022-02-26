@@ -31,6 +31,7 @@
 
 #include "fans_impl.h"
 #include "fans_req.h"
+#include "fans_pos_rep.h"
 #include "fans_req_alt.h"
 #include "fans_scratchpad.h"
 #include "fans_vrfy.h"
@@ -41,48 +42,31 @@
 static void
 verify_pos_rep(fans_t *box)
 {
-	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	unsigned l = 0;
-	char buf[1024] = {};
-	char pos_buf[64], alt_buf[8], spd_buf[8];
-	fms_pos_t pos;
-	fms_time_t tim;
-	fms_wind_t wind;
-	fms_temp_t temp;
-	cpdlc_arg_t spd, alt, cur_alt;
-	fms_wpt_info_t wpt;
-	float dist_NM;
-	unsigned flt_time_sec;
+	cpdlc_pos_rep_t rep = CPDLC_NULL_POS_REP;
+	float vvi;
+	int seg;
 
 	CPDLC_ASSERT(box != NULL);
 
+	rep.rpt_wpt_alt = CPDLC_NULL_ALT;
+
 	if (box->pos_rep.cur_pos.set) {
-		pos = box->pos_rep.cur_pos;
+		rep.cur_pos = box->pos_rep.cur_pos;
 	} else {
 		CPDLC_ASSERT(box->pos_rep.cur_pos_auto.set);
-		pos = box->pos_rep.cur_pos_auto;
+		rep.cur_pos = box->pos_rep.cur_pos_auto;
 	}
-	if (box->pos_rep.alt.alt.alt != 0) {
-		cur_alt = box->pos_rep.alt;
+	if (!CPDLC_IS_NULL_ALT(box->pos_rep.alt)) {
+		rep.cur_alt = box->pos_rep.alt;
 	} else {
-		CPDLC_ASSERT(box->pos_rep.alt_auto.alt.alt != 0);
-		cur_alt = box->pos_rep.alt_auto;
+		CPDLC_ASSERT(box->pos_rep.alt_auto.alt != 0);
+		rep.cur_alt = box->pos_rep.alt_auto;
 	}
-	if (box->pos_rep.pos_time.set) {
-		tim = box->pos_rep.pos_time;
-	} else {
-		CPDLC_ASSERT(box->pos_rep.pos_time_auto.set);
-		tim = box->pos_rep.pos_time_auto;
-	}
-	fans_get_cur_spd(box, &spd);
-	fans_print_pos(&pos, pos_buf, sizeof (pos_buf), POS_PRINT_NORM_SPACE);
-	fans_print_alt(&cur_alt, alt_buf, sizeof (alt_buf), true);
-	fans_print_spd(&spd, spd_buf, sizeof (spd_buf), false, true);
-
-	APPEND_SNPRINTF(buf, l, "%02d%02dZ %s %s",
-	    tim.hrs, tim.mins, pos_buf, alt_buf);
-
+	rep.time_cur_pos = fms_time2cpdlc_time(box->pos_rep.pos_time.set ?
+	    box->pos_rep.pos_time : box->pos_rep.pos_time_auto);
+	fans_get_cur_spd(box, &rep.spd);
+#if 0
 	if (box->pos_rep.clb_des.alt.alt != 0)
 		alt = box->pos_rep.clb_des;
 	else
@@ -112,27 +96,19 @@ verify_pos_rep(fans_t *box)
 		    box->pos_rep.off_auto.dir == CPDLC_DIR_LEFT ? "L" : "R",
 		    box->pos_rep.off_auto.nm);
 	}
-
-	if (box->pos_rep.rpt_wpt.set)
-		pos = box->pos_rep.rpt_wpt;
-	else
-		pos = box->pos_rep.rpt_wpt_auto;
-	if (pos.set && pos.name[0] != '\0') {
-		APPEND_SNPRINTF(buf, l, " PREV %s", pos.name);
-
-		if (box->pos_rep.wpt_time.set)
-			tim = box->pos_rep.wpt_time;
-		else
-			tim = box->pos_rep.wpt_time_auto;
-		if (tim.set) {
-			APPEND_SNPRINTF(buf, l, " %02d%02dZ",
-			    tim.hrs, tim.mins);
-		}
-
-		if (box->pos_rep.wpt_alt.alt.alt != 0)
-			alt = box->pos_rep.wpt_alt;
-		else
-			alt = box->pos_rep.wpt_alt_auto;
+#endif
+	vvi = fans_get_cur_vvi(box);
+	if (!isnan(vvi)) {
+		rep.vvi_set = true;
+		rep.vvi = round(vvi / 100) * 100;
+	}
+	rep.rpt_wpt_pos = (box->pos_rep.rpt_wpt.set ?
+	    box->pos_rep.rpt_wpt : box->pos_rep.rpt_wpt_auto);
+	rep.rpt_wpt_time = fms_time2cpdlc_time(box->pos_rep.wpt_time.set ?
+	    box->pos_rep.wpt_time : box->pos_rep.wpt_time_auto);
+	rep.rpt_wpt_alt = (!CPDLC_IS_NULL_ALT(box->pos_rep.wpt_alt) ?
+	    box->pos_rep.wpt_alt : box->pos_rep.wpt_alt_auto);
+#if 0
 		if (alt.alt.alt != 0) {
 			fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
 			APPEND_SNPRINTF(buf, l, " %s", alt_buf);
@@ -147,104 +123,68 @@ verify_pos_rep(fans_t *box)
 			APPEND_SNPRINTF(buf, l, " %s", spd_buf);
 		}
 	}
-	if (box->pos_rep.nxt_fix.set)
-		pos = box->pos_rep.nxt_fix;
-	else
-		pos = box->pos_rep.nxt_fix_auto;
-	if (pos.set && pos.name[0] != '\0') {
-		APPEND_SNPRINTF(buf, l, " NEXT %s", pos.name);
-
-		if (box->pos_rep.nxt_fix_time.set)
-			tim = box->pos_rep.nxt_fix_time;
-		else
-			tim = box->pos_rep.nxt_fix_time_auto;
-		if (tim.set) {
-			APPEND_SNPRINTF(buf, l, " %02d%02dZ",
-			    tim.hrs, tim.mins);
-		}
-	}
-	if (box->pos_rep.nxt_fix1.set)
-		pos = box->pos_rep.nxt_fix1;
-	else
-		pos = box->pos_rep.nxt_fix1_auto;
-	if (pos.set && pos.name[0] != '\0')
-		APPEND_SNPRINTF(buf, l, " NEXT+1 %s", pos.name);
-
-	if (fans_get_dest_info(box, &wpt, &dist_NM, &flt_time_sec)) {
-		APPEND_SNPRINTF(buf, l, " DEST %s", wpt.wpt_name);
-
-		if (box->pos_rep.time_at_dest.set)
-			tim = box->pos_rep.time_at_dest;
-		else
-			tim = box->pos_rep.time_at_dest_auto;
-		if (tim.set) {
-			APPEND_SNPRINTF(buf, l, " ETA %02d%02dZ",
-			    tim.hrs, tim.mins);
-		}
-	}
-
-	if (box->pos_rep.winds_aloft.set)
-		wind = box->pos_rep.winds_aloft;
-	else
-		wind = box->pos_rep.winds_aloft_auto;
-	if (wind.set)
-		APPEND_SNPRINTF(buf, l, " WIND %03d%03dKT", wind.deg, wind.spd);
-
-	if (box->pos_rep.temp.set)
-		temp = box->pos_rep.temp;
-	else
-		temp = box->pos_rep.temp_auto;
-	if (temp.set)
-		APPEND_SNPRINTF(buf, l, " OAT %+d", temp.temp);
+#endif
+	rep.fix_next = (box->pos_rep.nxt_fix.set ? box->pos_rep.nxt_fix :
+	    box->pos_rep.nxt_fix_auto);
+	rep.time_fix_next = fms_time2cpdlc_time(box->pos_rep.nxt_fix_time.set ?
+	    box->pos_rep.nxt_fix_time : box->pos_rep.nxt_fix_time_auto);
+	rep.fix_next_p1 = (box->pos_rep.nxt_fix1.set ? box->pos_rep.nxt_fix1 :
+	    box->pos_rep.nxt_fix1_auto);
+	rep.time_dest = fms_time2cpdlc_time(box->pos_rep.time_at_dest.set ?
+	    box->pos_rep.time_at_dest : box->pos_rep.time_at_dest_auto);
+	rep.wind = fms_wind2cpdlc_wind(box->pos_rep.winds_aloft.set ?
+	    box->pos_rep.winds_aloft : box->pos_rep.winds_aloft_auto);
+	rep.temp = (box->pos_rep.temp.set ? box->pos_rep.temp.temp :
+	    box->pos_rep.temp_auto.temp);
 
 	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM48_POS_REPORT_posreport, 0);
-	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
-	fans_req_add_common(box, msg);
+	cpdlc_msg_seg_set_arg(msg, seg, 0, &rep, NULL);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "POS REP", FMS_PAGE_POS_REP, true);
 }
 
 static void
-set_rpt_wpt(fans_t *box, const fms_pos_t *pos)
+set_rpt_wpt(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->pos_rep.rpt_wpt, pos, sizeof (*pos));
+	box->pos_rep.rpt_wpt = *pos;
 }
 
 static void
-set_nxt_fix(fans_t *box, const fms_pos_t *pos)
+set_nxt_fix(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->pos_rep.nxt_fix, pos, sizeof (*pos));
+	box->pos_rep.nxt_fix = *pos;
 }
 
 static void
-set_nxt_fix1(fans_t *box, const fms_pos_t *pos)
+set_nxt_fix1(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->pos_rep.nxt_fix1, pos, sizeof (*pos));
+	box->pos_rep.nxt_fix1 = *pos;
 }
 
 static void
-set_cur_pos(fans_t *box, const fms_pos_t *pos)
+set_cur_pos(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->pos_rep.cur_pos, pos, sizeof (*pos));
+	box->pos_rep.cur_pos = *pos;
 }
 
 static bool
 can_verify_pos_rep(fans_t *box)
 {
-	cpdlc_arg_t spd;
+	cpdlc_spd_t spd;
 
 	CPDLC_ASSERT(box != NULL);
 	return ((box->pos_rep.cur_pos.set || box->pos_rep.cur_pos_auto.set) &&
-	    (box->pos_rep.alt.alt.alt != 0 ||
-	    box->pos_rep.alt_auto.alt.alt != 0) &&
+	    (!CPDLC_IS_NULL_ALT(box->pos_rep.alt) ||
+	    !CPDLC_IS_NULL_ALT(box->pos_rep.alt_auto)) &&
 	    (box->pos_rep.pos_time.set || box->pos_rep.pos_time_auto.set) &&
 	    fans_get_cur_spd(box, &spd));
 }
@@ -327,6 +267,15 @@ fans_pos_rep_init_cb(fans_t *box)
 	memset(&box->req_common, 0, sizeof (box->req_common));
 
 	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
+
+	box->pos_rep.rpt_wpt = CPDLC_NULL_POS;
+	box->pos_rep.wpt_alt = CPDLC_NULL_ALT;
+	box->pos_rep.wpt_spd = CPDLC_NULL_SPD;
+	box->pos_rep.nxt_fix = CPDLC_NULL_POS;
+	box->pos_rep.nxt_fix1 = CPDLC_NULL_POS;
+	box->pos_rep.cur_pos = CPDLC_NULL_POS;
+	box->pos_rep.alt = CPDLC_NULL_ALT;
+	box->pos_rep.clb_des = CPDLC_NULL_ALT;
 }
 
 static bool
@@ -358,7 +307,7 @@ update_auto_data(fans_t *box)
 	fans_wptinfo2time(&wptinfo, &box->pos_rep.wpt_time_auto);
 	fans_wptinfo2alt(&wptinfo, &box->pos_rep.wpt_alt_auto);
 	fans_wptinfo2spd(&wptinfo, &box->pos_rep.wpt_spd_auto);
-	if (box->pos_rep.wpt_spd_auto.spd.spd == 0)
+	if (CPDLC_IS_NULL_SPD(box->pos_rep.wpt_spd_auto))
 		fans_get_cur_spd(box, &box->pos_rep.wpt_spd_auto);
 
 	(void)fans_get_next_wpt(box, &wptinfo);
@@ -385,17 +334,17 @@ update_auto_data(fans_t *box)
 	fans_get_sat(box, &box->pos_rep.temp_auto);
 	fans_get_wind(box, &box->pos_rep.winds_aloft_auto);
 
-	if (fans_get_cur_pos(box, &box->pos_rep.cur_pos_auto.lat,
-	    &box->pos_rep.cur_pos_auto.lon)) {
+	if (fans_get_cur_pos(box, &box->pos_rep.cur_pos_auto.lat_lon.lat,
+	    &box->pos_rep.cur_pos_auto.lat_lon.lon)) {
 		box->pos_rep.cur_pos_auto.set = true;
-		box->pos_rep.cur_pos_auto.type = FMS_POS_LAT_LON;
+		box->pos_rep.cur_pos_auto.type = CPDLC_POS_LAT_LON;
 	} else {
-		memset(&box->pos_rep.cur_pos_auto, 0, sizeof (fms_pos_t));
+		box->pos_rep.cur_pos_auto = CPDLC_NULL_POS;
 	}
-	if (fans_get_cur_alt(box, &cur_alt, &box->pos_rep.alt_auto.alt.fl))
-		box->pos_rep.alt_auto.alt.alt = cur_alt;
+	if (fans_get_cur_alt(box, &cur_alt, &box->pos_rep.alt_auto.fl))
+		box->pos_rep.alt_auto.alt = cur_alt;
 	else
-		memset(&box->pos_rep.alt_auto, 0, sizeof (cpdlc_arg_t));
+		box->pos_rep.alt_auto = CPDLC_NULL_ALT;
 	box->pos_rep.pos_time_auto.set = true;
 	box->pos_rep.pos_time_auto.hrs = t.tm_hour;
 	box->pos_rep.pos_time_auto.mins = t.tm_min;
@@ -406,10 +355,10 @@ update_auto_data(fans_t *box)
 	    sel_alt > cur_alt + SAME_ALT_THRESH) ||
 	    (box_is_clb_or_des(box, -1) &&
 	    sel_alt < cur_alt - SAME_ALT_THRESH))) {
-		box->pos_rep.clb_des_auto.alt.fl = sel_alt_fl;
-		box->pos_rep.clb_des_auto.alt.alt = sel_alt;
+		box->pos_rep.clb_des_auto.fl = sel_alt_fl;
+		box->pos_rep.clb_des_auto.alt = sel_alt;
 	} else {
-		memset(&box->pos_rep.clb_des_auto, 0, sizeof (cpdlc_arg_t));
+		box->pos_rep.clb_des_auto = CPDLC_NULL_ALT;
 	}
 
 	off_NM = fans_get_offset(box);

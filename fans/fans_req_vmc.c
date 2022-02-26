@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -35,7 +35,7 @@ verify_vmc_req(fans_t *box)
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
 	cpdlc_msg_add_seg(msg, true, CPDLC_DM69_REQ_VMC_DES, 0);
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 	fans_verify_msg(box, msg, "VMC REQ", FMS_PAGE_REQ_VMC, true);
 }
 

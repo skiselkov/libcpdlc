@@ -447,18 +447,18 @@ put_str_with_units(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_alt(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
+    const cpdlc_alt_t *useralt, const cpdlc_alt_t *autoalt,
     bool req, bool units)
 {
 	CPDLC_ASSERT(box != NULL);
-	DATA_PICK(const cpdlc_arg_t *, alt,
-	    useralt != NULL && useralt->alt.alt != 0, useralt, autoalt);
+	DATA_PICK(const cpdlc_alt_t *, alt,
+	    useralt != NULL && !CPDLC_IS_NULL_ALT(*useralt), useralt, autoalt);
 
-	if (alt != NULL && alt->alt.alt != 0) {
+	if (alt != NULL && !CPDLC_IS_NULL_ALT(*alt)) {
 		char buf[8];
 
 		fans_print_alt(alt, buf, sizeof (buf), false);
-		if (units && !alt->alt.fl) {
+		if (units && !alt->fl) {
 			put_str_with_units(box, row, col, align_right,
 			    color, font, "FT", "%s", buf);
 		} else {
@@ -473,16 +473,17 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_spd(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
+    const cpdlc_spd_t *userspd, const cpdlc_spd_t *autospd,
     bool req, bool pretty, bool units)
 {
 	char buf[12];
 
 	CPDLC_ASSERT(box != NULL);
-	DATA_PICK(const cpdlc_arg_t *, spd, userspd->spd.spd != 0,
+	DATA_PICK(const cpdlc_spd_t *, spd,
+	    userspd != NULL && !CPDLC_IS_NULL_SPD(*userspd),
 	    userspd, autospd);
 
-	if (spd != NULL && spd->spd.spd != 0) {
+	if (spd != NULL && !CPDLC_IS_NULL_SPD(*spd)) {
 		fans_print_spd(spd, buf, sizeof (buf), pretty, units);
 		fans_put_str(box, row, col, align_right, color, font,
 		    "%s", buf);
@@ -541,7 +542,7 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 	DATA_PICK(const fms_temp_t *, temp, usertemp->set, usertemp, autotemp);
 	if (temp != NULL && temp->set) {
 		fans_put_str(box, row, col, align_right, color,
-		    font, "%+d", temp->temp);
+		    font, temp->temp != 0 ? "%+d" : "%d", temp->temp);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___" : "---");
@@ -550,7 +551,7 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_pos(fans_t *box, int row, int col, bool align_right,
-    const fms_pos_t *userpos, const fms_pos_t *autopos, bool req)
+    const cpdlc_pos_t *userpos, const cpdlc_pos_t *autopos, bool req)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(userpos != NULL);
@@ -564,12 +565,12 @@ fans_put_pos(fans_t *box, int row, int col, bool align_right,
 		char buf[16];
 		fans_print_pos(autopos, buf, sizeof (buf), POS_PRINT_COMPACT);
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "<POS");
+		    FMS_FONT_LARGE, align_right ? "POS>" : "<POS");
 		fans_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%s", buf);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "<POS");
+		    FMS_FONT_LARGE, align_right ? "POS>" : "<POS");
 		fans_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, req ? "_________" : "---------");
 	}
@@ -585,7 +586,7 @@ fans_put_off(fans_t *box, int row, int col, bool align_right,
 	if (off != NULL && off->nm != 0) {
 		CPDLC_ASSERT(off->dir == CPDLC_DIR_LEFT ||
 		    off->dir == CPDLC_DIR_RIGHT);
-		fans_put_str(box, row, col, align_right, color, font, "%c%.1f",
+		fans_put_str(box, row, col, align_right, color, font, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
 	} else {
 		fans_put_str(box, row, col, align_right,
@@ -653,6 +654,7 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 		memcpy(&box->funcs, funcs, sizeof (*funcs));
 	box->userinfo = userinfo;
 	box->cl = cpdlc_client_alloc(false);
+	cpdlc_client_set_arinc622(box->cl, true);
 	CPDLC_ASSERT(box->cl != NULL);
 	cpdlc_strlcpy(box->hostname, "localhost", sizeof (box->hostname));
 	box->msglist = cpdlc_msglist_alloc(box->cl);
@@ -1164,9 +1166,9 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "POSv");
 		fans_put_lsk_title(box, FMS_KEY_LSK_R2, "POS");
-		if (strlen(step_at->pos) != 0) {
+		if (step_at->pos.set) {
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
-			    FMS_FONT_LARGE, "%s", step_at->pos);
+			    FMS_FONT_LARGE, "%s", step_at->pos.fixname);
 		} else {
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "_____");
@@ -1196,9 +1198,17 @@ fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 				return;
 			}
 		} else {
-			if (!fans_scratchpad_xfer(box, step_at->pos,
-			    sizeof (step_at->pos), true, &read_back)) {
+			if (!fans_scratchpad_xfer(box, step_at->pos.fixname,
+			    sizeof (step_at->pos.fixname), true, &read_back)) {
 				return;
+			}
+			if (!read_back) {
+				if (strlen(step_at->pos.fixname) != 0) {
+					step_at->pos.set = true;
+					step_at->pos.type = CPDLC_POS_FIXNAME;
+				} else {
+					step_at->pos = CPDLC_NULL_POS;
+				}
 			}
 		}
 		if (!read_back)
@@ -1212,7 +1222,7 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 	CPDLC_ASSERT(step_at != NULL);
 	return (step_at->type == STEP_AT_NONE ||
 	    (step_at->type == STEP_AT_TIME && step_at->tim.set) ||
-	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
+	    (step_at->type == STEP_AT_POS && step_at->pos.set));
 }
 
 bool
@@ -1232,14 +1242,14 @@ fans_get_cur_pos(const fans_t *box, double *lat, double *lon)
 }
 
 bool
-fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
+fans_get_cur_spd(const fans_t *box, cpdlc_spd_t *spd)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(spd != NULL);
 	memset(spd, 0, sizeof (*spd));
 	if (box->funcs.get_cur_spd != NULL && box->funcs.get_cur_spd(
-	    box->userinfo, &spd->spd.mach, &spd->spd.spd)) {
-		spd->spd.spd = MIN(spd->spd.spd, 999);
+	    box->userinfo, &spd->mach, &spd->spd)) {
+		spd->spd = MIN(spd->spd, 999);
 		return (true);
 	}
 	return (false);
@@ -1422,18 +1432,16 @@ fans_get_souls(const fans_t *box, unsigned *souls)
 }
 
 void
-fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos)
+fans_wptinfo2pos(const fms_wpt_info_t *info, cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(pos != NULL);
 
 	memset(pos, 0, sizeof (*pos));
 	if (info->wpt_name[0] != '\0') {
-		pos->set = true;
-		pos->type = FMS_POS_FIX;
-		cpdlc_strlcpy(pos->name, info->wpt_name, sizeof (pos->name));
-	} else {
-		pos->set = false;
+		pos->type = CPDLC_POS_FIXNAME;
+		cpdlc_strlcpy(pos->fixname, info->wpt_name,
+		    sizeof (pos->fixname));
 	}
 }
 
@@ -1452,28 +1460,28 @@ fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim)
 }
 
 void
-fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt)
+fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_alt_t *alt)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(alt != NULL);
 
-	memset(alt, 0, sizeof (*alt));
+	*alt = CPDLC_NULL_ALT;
 	if (info->alt_set) {
-		alt->alt.fl = info->alt_fl;
-		alt->alt.alt = info->alt_ft;
+		alt->fl = info->alt_fl;
+		alt->alt = info->alt_ft;
 	}
 }
 
 void
-fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd)
+fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_spd_t *spd)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(spd != NULL);
 
-	memset(spd, 0, sizeof (*spd));
+	*spd = CPDLC_NULL_SPD;
 	if (info->spd_set) {
-		spd->spd.mach = info->spd_mach;
-		spd->spd.spd = info->spd;
+		spd->mach = info->spd_mach;
+		spd->spd = info->spd;
 	}
 }
 

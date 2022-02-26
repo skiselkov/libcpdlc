@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -160,6 +160,9 @@ typedef struct {
 
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
+
+	bool			fmt_plain;
+	bool			fmt_arinc622;
 
 	mutex_t			lock;
 
@@ -331,12 +334,10 @@ static struct lws_protocols proto_list_lws[] =
     { .name = NULL }	/* list terminator */
 };
 
-static void send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    const char *fmt, va_list ap);
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...);
+    cpdlc_errinfo_t errinfo);
 static void send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...);
+    cpdlc_errinfo_t errinfo);
 static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
 static void conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg);
@@ -1157,15 +1158,16 @@ complete_logon(conn_t *conn)
 		return;
 	}
 	msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	cpdlc_msg_set_mrn(msg, conn->logon_min);
+	cpdlc_msg_set_to(msg, conn->logon_from);
 	if (conn->logon_success && !conn->is_atc &&
 	    conn->logon_to[0] == '\0') {
+		cpdlc_errinfo_t err = CPDLC_ERRINFO_INSUFF_DATA;
 		conn->logon_status = LOGON_NONE;
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
-		cpdlc_msg_seg_set_arg(msg, 0, 0, "LOGON REQUIRES TO= HEADER",
-		    NULL);
+		cpdlc_msg_seg_set_arg(msg, 0, 0, &err, NULL);
 	} else if (conn->logon_success) {
 		ident_list_t *idl = safe_calloc(1, sizeof (*idl));
+		cpdlc_tp4table_t tp4 = CPDLC_TP4_LABEL_A;
 
 		conn->logon_status = LOGON_COMPLETE;
 
@@ -1180,12 +1182,21 @@ complete_logon(conn_t *conn)
 		mutex_exit(&conns_by_from_lock);
 
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
-		cpdlc_msg_set_from(msg, "ATN");
+		cpdlc_msg_set_from(msg, "AFN");
+
+		if (conn->fmt_arinc622 && !conn->is_atc) {
+			cpdlc_msg_set_to(msg, conn->logon_from);
+			cpdlc_msg_add_seg(msg, false,
+			    CPDLC_UM163_FACILITY_designation_tp4table, 0);
+			cpdlc_msg_seg_set_arg(msg, 0, 0, conn->logon_to, NULL);
+			cpdlc_msg_seg_set_arg(msg, 0, 1, &tp4, NULL);
+			cpdlc_msg_set_imi(msg, CPDLC_IMI_CONN_REQUEST);
+		}
 	} else {
 		conn->logon_status = LOGON_NONE;
 
 		cpdlc_msg_set_logon_data(msg, "FAILURE");
-		cpdlc_msg_set_from(msg, "ATN");
+		cpdlc_msg_set_from(msg, "AFN");
 	}
 
 	memset(conn->logon_to, 0, sizeof (conn->logon_to));
@@ -1254,12 +1265,12 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	if (conn->logon_status == LOGON_STARTED ||
 	    conn->logon_status == LOGON_COMPLETING) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON ALREADY IN PROGRESS");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
 		return;
 	}
 	if (cpdlc_msg_get_from(msg) == NULL) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON REQUIRES FROM= HEADER");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
 		return;
 	}
 	/* Clear any previous logon on non-ATC connections */
@@ -1291,6 +1302,9 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	conn->logon_status = LOGON_STARTED;
 	conn->logon_min = cpdlc_msg_get_min(msg);
 
+	conn->fmt_plain = (cpdlc_msg_option_is_set(msg, "PLAIN") ||
+	    cpdlc_msg_options_count(msg) == 0);
+	conn->fmt_arinc622 = cpdlc_msg_option_is_set(msg, "ARINC622");
 	/* This is async */
 	conn->auth_key = auth_sess_open(msg, conn->addr_str,
 	    logon_done_cb, conn);
@@ -1392,13 +1406,29 @@ conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
  * sending to a client. The caller retains ownership of the `msg' object.
  */
 static void
-conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
+conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
 {
 	unsigned l;
 	char *buf;
+	cpdlc_msg_t *msg;
+	bool is_end_svc = false;
 
 	ASSERT(conn != NULL);
-	ASSERT(msg != NULL);
+	ASSERT(msg_in != NULL);
+	msg = cpdlc_msg_copy(msg_in);
+
+	for (unsigned i = 0, n = msg->num_segs; i < n; i++) {
+		ASSERT(msg->segs[i].info != NULL);
+		if (!msg->segs[i].info->is_dl &&
+		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
+			is_end_svc = true;
+		}
+	}
+	if (is_end_svc)
+		cpdlc_msg_set_imi(msg, CPDLC_IMI_DISC_REQUEST);
+
+	msg->fmt_plain = conn->fmt_plain;
+	msg->fmt_arinc622 = conn->fmt_arinc622;
 
 	l = cpdlc_msg_encode(msg, NULL, 0);
 	buf = safe_malloc(l + 1);
@@ -1406,19 +1436,15 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	conn_log_buf(conn->addr_str, buf, false);
 	conn_send_buf(conn, buf, l);
 	free(buf);
-
 	/*
 	 * Check if the message being sent is a service termination.
 	 * In that case, terminate the connection's logon status.
 	 */
-	for (unsigned i = 0, n = msg->num_segs; i < n; i++) {
-		ASSERT(msg->segs[i].info != NULL);
-		if (!msg->segs[i].info->is_dl &&
-		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
-			conn_reset_logon(conn);
-			conn->logoff_time = time(NULL);
-		}
+	if (is_end_svc) {
+		conn_reset_logon(conn);
+		conn->logoff_time = time(NULL);
 	}
+	cpdlc_msg_free(msg);
 }
 
 /*
@@ -1431,27 +1457,15 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
  *	it will be a downlink error message. The error message will also
  *	have its MRN set appropriately to mark it as a response to
  *	`orig_msg'.
- * @param fmt A printf-style format string (+ arguments) for the free text
- *	details in the error message body.
+ * @param errinfo A cpdlc_errinfo_t enum containing the error.
  */
 static void
-send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt,
-    va_list ap)
+send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
+    cpdlc_errinfo_t errinfo)
 {
-	int l;
-	va_list ap2;
-	char *buf;
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn != NULL);
-	ASSERT(fmt != NULL);
-
-	va_copy(ap2, ap);
-	l = vsnprintf(NULL, 0, fmt, ap2);
-	va_end(ap2);
-
-	buf = safe_malloc(l + 1);
-	vsnprintf(buf, l + 1, fmt, ap);
 
 	if (orig_msg != NULL) {
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
@@ -1467,33 +1481,22 @@ send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt,
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
-	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
+	cpdlc_msg_seg_set_arg(msg, 0, 0, &errinfo, NULL);
+	cpdlc_msg_set_to(msg, conn->logon_from);
 
 	conn_send_msg(conn, msg);
 
-	free(buf);
 	cpdlc_msg_free(msg);
 }
 
 static void
-send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	send_error_msg_v(conn, orig_msg, fmt, ap);
-	va_end(ap);
-}
-
-static void
 send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...)
+    cpdlc_errinfo_t errinfo)
 {
 	const list_t *l;
 
 	ASSERT(to != NULL);
 	ASSERT(orig_msg != NULL);
-	ASSERT(fmt != NULL);
 
 	mutex_enter(&conns_by_from_lock);
 	l = htbl_lookup_multi(&conns_by_from, to);
@@ -1501,13 +1504,10 @@ send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
 		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
 		    mv = mv_next) {
 			conn_t *conn = HTBL_VALUE_MULTI(mv);
-			va_list ap;
 
 			mv_next = list_next(l, mv);
 			ASSERT(conn != NULL);
-			va_start(ap, fmt);
-			send_error_msg_v(conn, orig_msg, fmt, ap);
-			va_end(ap);
+			send_error_msg(conn, orig_msg, errinfo);
 		}
 	}
 	mutex_exit(&conns_by_from_lock);
@@ -1666,7 +1666,7 @@ forward_msg_cb(const cpdlc_msg_t *msg, const char *addr_str, void *userinfo)
 	} else {
 		if (!store_msg(msg, to, false)) {
 			send_error_msg_to(cpdlc_msg_get_from(msg), msg,
-			    "TOO MANY QUEUED MESSAGES");
+			    CPDLC_ERRINFO_INSUFF_MSG_STORAGE);
 		}
 	}
 	mutex_exit(&conns_by_from_lock);
@@ -1726,7 +1726,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	mutex_enter(&conn->lock);
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON REQUIRED");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1749,15 +1749,22 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		/* These messages do not get logged */
 		return;
 	}
+	/* Consume a downlink version number message */
+	if (!conn->is_atc && msg->num_segs == 1 &&
+	    msg->segs[0].info->msg_type == CPDLC_DM73_VERSION_number) {
+		conn_log_msg(conn->addr_str, msg, true);
+		cpdlc_msg_free(msg);
+		return;
+	}
 	if (msg->to[0] != '\0') {
 		/*
 		 * Aircraft stations can only communicate with their
 		 * LOGON target.
 		 */
-		if (!conn->is_atc && !msg_is_not_cda(msg)) {
+		if (!conn->is_atc && strcmp(msg->to, conn->to) != 0 &&
+		    !msg_is_not_cda(msg)) {
 			conn_log_msg(conn->addr_str, msg, true);
-			send_error_msg(conn, msg,
-			    "MESSAGE CANNOT CONTAIN TO= HEADER");
+			send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
 			cpdlc_msg_free(msg);
 			return;
 		}
@@ -1777,7 +1784,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * otherwise have no default send target.
 		 */
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1791,15 +1798,14 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg,
-		    "MESSAGE UPLINK/DOWNLINK MISMATCH");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
 	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
 	    !msg_auto_assign_from(msg)) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, "REMOTE END NOT CONNECTED");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1838,8 +1844,8 @@ conn_process_input(conn_t *conn)
 		char error[128] = { 0 };
 
 		if (!cpdlc_msg_decode(
-		    (const char *)&conn->inbuf[consumed_total], &msg,
-		    &consumed, error, sizeof (error))) {
+		    (const char *)&conn->inbuf[consumed_total], !conn->is_atc,
+		    &msg, &consumed, error, sizeof (error))) {
 			logMsg("Error decoding message from client %s: %s",
 			    conn->addr_str, error);
 			return (false);

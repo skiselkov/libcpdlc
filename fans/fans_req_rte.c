@@ -65,21 +65,17 @@ verify_rte_req(fans_t *box)
 {
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	char buf[32];
 
 	if (box->rte_req.dct.set) {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM22_REQ_DIR_TO_pos, 0);
-		fans_print_pos(&box->rte_req.dct, buf, sizeof (buf),
-		    POS_PRINT_NORM);
-		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.dct, NULL);
 	} else if (box->rte_req.wx_dev.set) {
+		const cpdlc_route_t dct = {};
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM26_REQ_WX_DEVIATION_TO_pos_VIA_route, 0);
-		fans_print_pos(&box->rte_req.wx_dev, buf, sizeof (buf),
-		    POS_PRINT_NORM);
-		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg, 1, "DCT", NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.wx_dev, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 1, &dct, NULL);
 	} else if (box->rte_req.hdg.set) {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM70_REQ_HDG_deg, 0);
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.hdg.hdg,
@@ -91,28 +87,31 @@ verify_rte_req(fans_t *box)
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.trk.hdg,
 		    &box->rte_req.trk.tru);
 	}
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "RTE REQ", FMS_PAGE_REQ_RTE, true);
 }
 
 static void
-set_dct(fans_t *box, const fms_pos_t *pos)
+set_dct(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->rte_req.dct, pos, sizeof (box->rte_req.dct));
+	box->rte_req.dct = *pos;
+	box->rte_req.dct.set = true;
 	box->rte_req.wx_dev.set = false;
 	box->rte_req.hdg.set = false;
 	box->rte_req.trk.set = false;
 }
 
 static void
-set_wx_dev(fans_t *box, const fms_pos_t *pos)
+set_wx_dev(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
 	box->rte_req.dct.set = false;
-	memcpy(&box->rte_req.wx_dev, pos, sizeof (box->rte_req.wx_dev));
+	box->rte_req.wx_dev = *pos;
+	box->rte_req.wx_dev.set = true;
 	box->rte_req.hdg.set = false;
 	box->rte_req.trk.set = false;
 }
@@ -121,6 +120,7 @@ void
 fans_req_rte_init_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
+	memset(&box->req_common, 0, sizeof (box->req_common));
 	memset(&box->rte_req, 0, sizeof (box->rte_req));
 }
 
@@ -129,10 +129,7 @@ fans_req_rte_draw_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 
-	fans_put_page_title(box, "FANS  ROUTE REQ");
-
 	fans_set_num_subpages(box, 2);
-
 	fans_put_page_title(box, "FANS  ROUTE REQ");
 	fans_put_page_ind(box);
 
@@ -188,8 +185,8 @@ fans_req_rte_key_cb(fans_t *box, fms_key_t key)
 				fans_scratchpad_clear(box);
 		}
 	} else if (key == FMS_KEY_LSK_L5) {
-	if (can_verify_rte_req(box))
-		verify_rte_req(box);
+		if (can_verify_rte_req(box))
+			verify_rte_req(box);
 	} else if (key == FMS_KEY_LSK_L6) {
 		fans_set_page(box, FMS_PAGE_REQUESTS, false);
 	} else if (KEY_IS_REQ_FREETEXT(box, key, 1)) {

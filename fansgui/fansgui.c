@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -60,7 +60,7 @@
 
 typedef struct {
 	double	x, y, w, h;
-	void	(*fmsfunc)(fans_t *box, int arg);
+	bool	(*fmsfunc)(fans_t *box, fms_key_t arg);
 	int	arg;
 } clickspot_t;
 
@@ -109,7 +109,7 @@ static cairo_surface_t *font_bitmaps[FMS_FONT_LARGE + 1][FMS_COLOR_MAGENTA + 1];
 #define	TEXT_CHAR_W	16	/* pixels */
 #define	TEXT_CHAR_H	24	/* pixels */
 
-#define	_(func)	((void (*)(fans_t *, int))(void *)(func))
+#define	_(func)	((void *)(func))
 static clickspot_t	clickspots[] = {
     { .013, .142, .068, .042, _(fans_push_key), FMS_KEY_LSK_L1 },
     { .013, .203, .068, .042, _(fans_push_key), FMS_KEY_LSK_L2 },
@@ -180,9 +180,9 @@ static void msgs_updated_cb(void *userinfo, cpdlc_msg_thr_id_t *thr_ids,
 static void get_time(void *userinfo, unsigned *hours, unsigned *mins);
 static bool get_cur_pos(void *userinfo, double *lat, double *lon);
 static bool get_cur_spd(void *userinfo, bool *mach, unsigned *spd);
-static float get_cur_alt(void *userinfo);
+static bool get_cur_alt(void *userinfo, int *alt_ft, bool *is_fl);
 static float get_cur_vvi(void *userinfo);
-static float get_sel_alt(void *userinfo);
+static bool get_sel_alt(void *userinfo, int *alt_ft, bool *is_fl);
 static bool get_sat(void *userinfo, int *temp);
 static bool get_wind(void *userinfo, unsigned *deg_true, unsigned *knots);
 static float get_offset(void *userinfo);
@@ -251,11 +251,19 @@ get_cur_spd(void *userinfo, bool *mach, unsigned *spd)
 	return (false);
 }
 
-static float
-get_cur_alt(void *userinfo)
+static bool
+get_cur_alt(void *userinfo, int *alt_ft, bool *is_fl)
 {
+	float alt;
 	UNUSED(userinfo);
-	return (xpintf_get_cur_alt());
+	alt = xpintf_get_cur_alt();
+	if (!isnan(alt)) {
+		*alt_ft = alt;
+		*is_fl = false;
+		return (true);
+	} else {
+		return (false);
+	}
 }
 
 static float
@@ -265,11 +273,19 @@ get_cur_vvi(void *userinfo)
 	return (xpintf_get_cur_vvi());
 }
 
-static float
-get_sel_alt(void *userinfo)
+static bool
+get_sel_alt(void *userinfo, int *alt_ft, bool *is_fl)
 {
+	float alt;
 	UNUSED(userinfo);
-	return (xpintf_get_sel_alt());
+	alt = xpintf_get_sel_alt();
+	if (!isnan(alt)) {
+		*alt_ft = alt;
+		*is_fl = false;
+		return (true);
+	} else {
+		return (false);
+	}
 }
 
 static bool
@@ -452,6 +468,7 @@ char2fontcell(char c, int *font_x, int *font_y)
 			FONT_MAP('#', 30, 2);
 			FONT_MAP('&', 31, 2);
 			FONT_MAP('`', 32, 2);
+			FONT_MAP('\370', 32, 2);
 			FONT_MAP('^', 33, 2);	/* special for fans_t */
 			FONT_MAP('v', 34, 2);
 			FONT_MAP('_', 35, 2);	/* special for fans_t */
@@ -587,8 +604,7 @@ mouse_button_cb(GLFWwindow *window, int button, int action, int mods)
 		clickspot_t *cs = &clickspots[i];
 		if (clickspot_mouse_check(cs)) {
 			cur_clickspot = i;
-			if (cs->fmsfunc ==
-			    (void(*)(fans_t *, int))fans_push_key &&
+			if (cs->fmsfunc == fans_push_key &&
 			    cs->arg == FMS_KEY_CLR_DEL) {
 				clr_press_microtime = microclock();
 			}

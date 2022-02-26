@@ -46,7 +46,7 @@ verify_voice_req(fans_t *box)
 	} else {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM20_REQ_VOICE_CTC, 0);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "VOICE", FMS_PAGE_REQ_VOICE, true);
 }
@@ -62,7 +62,7 @@ draw_main_page(fans_t *box)
 		char buf[8];
 		int l;
 
-		if (box->voice_req.freq <= 21) {
+		if (box->voice_req.freq <= 28) {
 			/* HF */
 			l = snprintf(buf, sizeof (buf), "%.04f",
 			    box->voice_req.freq);
@@ -126,7 +126,7 @@ fans_req_voice_key_cb(fans_t *box, fms_key_t key)
 		bool read_back;
 
 		if (box->voice_req.freq_set) {
-			if (box->voice_req.freq <= 21) {
+			if (box->voice_req.freq <= 28) {
 				/* HF */
 				snprintf(buf, sizeof (buf), "%.04f",
 				    box->voice_req.freq);
@@ -144,7 +144,7 @@ fans_req_voice_key_cb(fans_t *box, fms_key_t key)
 			double freq;
 			if (sscanf(buf, "%lf", &freq) != 1 || freq < 1 ||
 			    (freq >= 500 && freq < 1000) || freq >= 500000 ||
-			    (freq >= 21 && freq < 118)) {
+			    (freq > 28 && freq < 118)) {
 				fans_set_error(box, FANS_ERR_INVALID_ENTRY);
 			} else {
 				if (freq >= 1000)
