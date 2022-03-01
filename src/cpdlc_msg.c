@@ -210,15 +210,15 @@ serialize_pbd(const cpdlc_pbd_t *pbd, bool readable, unsigned *len_p,
 	CPDLC_ASSERT(outbuf_p != NULL);
 	CPDLC_ASSERT(cap_p != NULL);
 	if (readable) {
-		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s%03d/%.1f",
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s%03d/%.1f ",
 		    pbd->fixname, pbd->degrees, pbd->dist_nm);
 	} else if (!CPDLC_IS_NULL_LAT_LON(pbd->lat_lon)) {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-		    "PBD:%s/%03d/%.1f(%.4f,%.4f)", pbd->fixname, pbd->degrees,
+		    "PBD:%s/%03d/%.1f(%.4f,%.4f) ", pbd->fixname, pbd->degrees,
 		    pbd->dist_nm, pbd->lat_lon.lat, pbd->lat_lon.lon);
 	} else {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-		    "PBD:%s/%03d/%.1f", pbd->fixname, pbd->degrees,
+		    "PBD:%s/%03d/%.1f ", pbd->fixname, pbd->degrees,
 		    pbd->dist_nm);
 	}
 }
@@ -1076,9 +1076,11 @@ deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
 		s = strchr(s, ',');
 		if (s == NULL)
 			return (false);
+		s++;
 		s = strchr(s, ',');
 		if (s == NULL)
 			break;
+		s++;
 	}
 	return (true);
 }
@@ -1186,7 +1188,7 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_PBPB;
 		for (int i = 0; i < 2; i++) {
-			s = deserialize_pb(s, &info->pbpb[0]);
+			s = deserialize_pb(s, &info->pbpb[i]);
 			if (comp == NULL) {
 				MALFORMED_MSG("Error deserializing "
 				    "place-bearing/place-bearing \"%s\"", comp);
@@ -1203,10 +1205,10 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 			return (false);
 		}
 		info = &route->info[route->num_info++];
-		info->type = CPDLC_ROUTE_LAT_LON;
+		info->type = CPDLC_ROUTE_PBD;
 		if (!deserialize_pbd(&comp[4], &info->pbd)) {
 			MALFORMED_MSG("Error deserializing "
-			    "place-bearing/place-bearing \"%s\"", comp);
+			    "place-bearing-distance \"%s\"", comp);
 			return (false);
 		}
 	} else if (strncmp(comp, "AWY:", 4) == 0) {
