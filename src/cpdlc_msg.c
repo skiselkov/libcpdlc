@@ -238,8 +238,10 @@ serialize_trk_detail(const cpdlc_trk_detail_t *trk, bool readable,
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "TRK:%s(",
 		    trk->name);
 		for (unsigned i = 0; i < trk->num_lat_lon; i++) {
-			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%.4f,%.4f",
-			    trk->lat_lon[i].lat, trk->lat_lon[i].lon);
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "%.4f,%.4f%s",
+			    trk->lat_lon[i].lat, trk->lat_lon[i].lon,
+			    i + 1< trk->num_lat_lon ? "," : "");
 		}
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, ") ");
 	}
