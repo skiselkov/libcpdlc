@@ -1079,9 +1079,8 @@ deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
 			return (false);
 		s++;
 		s = strchr(s, ',');
-		if (s == NULL) {
+		if (s == NULL)
 			break;
-		};
 		s++;
 	}
 	return (true);
@@ -1282,7 +1281,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	char msg_subtype = 0;
 	unsigned num_args = 0;
 	const cpdlc_msg_info_t *info;
-	char textbuf[512];
+	char textbuf[8192];
 
 	CPDLC_ASSERT(reason != NULL);
 
