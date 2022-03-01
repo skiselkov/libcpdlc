@@ -319,8 +319,7 @@ serialize_route_info(const cpdlc_route_info_t *info, bool readable,
 		    len_p, outbuf_p, cap_p);
 		break;
 	case CPDLC_ROUTE_UNKNOWN:
-		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s%s",
-		    info->name, readable ? " " : "");
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s ", info->str);
 		break;
 	default:
 		CPDLC_VERIFY_MSG(0, "Invalid route info type %x", info->type);
@@ -1079,7 +1078,7 @@ parse_route_info(const char *comp, cpdlc_route_info_t *info,
 
 	if (strchr(comp, ':') == NULL) {
 		info->type = CPDLC_ROUTE_UNKNOWN;
-		cpdlc_strlcpy(info->name, comp, sizeof (info->name));
+		cpdlc_strlcpy(info->str, comp, sizeof (info->str));
 		return (true);
 	}
 	if (strncmp(comp, "FIX:", 4) == 0) {
@@ -1167,9 +1166,10 @@ parse_route(const char *buf, char *reason, unsigned reason_cap)
 		    "(%d, max: %d)", n_comps, CPDLC_ROUTE_MAX_INFO);
 		goto errout;
 	}
-	for (unsigned i = 0; i < n_comps; i++) {
-		if (!parse_route_info(comps[i], &route->info[i], reason,
-		    reason_cap)) {
+	for (route->num_info = 0; route->num_info < n_comps;
+	    route->num_info++) {
+		if (!parse_route_info(comps[route->num_info],
+		    &route->info[route->num_info], reason, reason_cap)) {
 			goto errout;
 		}
 	}

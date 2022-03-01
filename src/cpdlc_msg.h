@@ -582,7 +582,7 @@ typedef struct {
 		/* CPDLC_ROUTE_TRACK_DETAIL */
 		cpdlc_trk_detail_t	trk_detail;
 		/* CPDLC_ROUTE_UNKNOWN */
-		char			name[8];
+		char			str[16];
 	};
 } cpdlc_route_info_t;
 
