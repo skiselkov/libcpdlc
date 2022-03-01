@@ -344,8 +344,8 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 		    route->dest_icao);
 	}
 	if (route->orig_rwy[0] != '\0') {
-		APPEND_SNPRINTF(len, outbuf, cap, "DEPRWY:%s ",
-		    route->orig_rwy);
+		APPEND_SNPRINTF(len, outbuf, cap, "%s%s ",
+		    readable ? "RW" : "DEPRWY:", route->orig_rwy);
 	}
 	if (route->sid.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
@@ -1110,6 +1110,9 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 	} else if (strncmp(comp, "ADES:", 5) == 0) {
 		cpdlc_strlcpy(route->dest_icao, &comp[5],
 		    sizeof (route->dest_icao));
+	} else if (strncmp(comp, "DEPRWY:", 7) == 0) {
+		cpdlc_strlcpy(route->orig_rwy, &comp[7],
+		    sizeof (route->orig_rwy));
 	} else if (strncmp(comp, "SID:", 4) == 0) {
 		cpdlc_strlcpy(route->sid.name, &comp[4],
 		    sizeof (route->sid.name));
