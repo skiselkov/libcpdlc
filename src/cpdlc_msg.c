@@ -337,7 +337,7 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 
 	if (route->orig_icao[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s ",
-		    readable ? "ADEP:" : "", route->orig_icao);
+		    !readable ? "ADEP:" : "", route->orig_icao);
 	}
 	if (route->dest_icao[0] != '\0' && !readable) {
 		APPEND_SNPRINTF(len, outbuf, cap, "ADES:%s ",
