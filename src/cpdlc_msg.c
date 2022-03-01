@@ -194,7 +194,7 @@ serialize_pb(const cpdlc_pb_t *pb, bool readable, char *str, unsigned cap)
 	if (readable) {
 		snprintf(str, cap, "%s%03d", pb->fixname, pb->degrees);
 	} else if (!CPDLC_IS_NULL_LAT_LON(pb->lat_lon)) {
-		snprintf(str, cap, "%s/%03d[%.4f,%.4f]", pb->fixname,
+		snprintf(str, cap, "%s/%03d(%.4f,%.4f)", pb->fixname,
 		    pb->degrees, pb->lat_lon.lat, pb->lat_lon.lon);
 	} else {
 		snprintf(str, cap, "%s/%03d", pb->fixname, pb->degrees);
@@ -214,7 +214,7 @@ serialize_pbd(const cpdlc_pbd_t *pbd, bool readable, unsigned *len_p,
 		    pbd->fixname, pbd->degrees, pbd->dist_nm);
 	} else if (!CPDLC_IS_NULL_LAT_LON(pbd->lat_lon)) {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-		    "PBD:%s/%03d/%.1f[%.4f,%.4f]", pbd->fixname, pbd->degrees,
+		    "PBD:%s/%03d/%.1f(%.4f,%.4f)", pbd->fixname, pbd->degrees,
 		    pbd->dist_nm, pbd->lat_lon.lat, pbd->lat_lon.lon);
 	} else {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
@@ -235,13 +235,13 @@ serialize_trk_detail(const cpdlc_trk_detail_t *trk, bool readable,
 	if (readable) {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "(%s) ", trk->name);
 	} else {
-		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "TRK:%s[",
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "TRK:%s(",
 		    trk->name);
 		for (unsigned i = 0; i < trk->num_lat_lon; i++) {
 			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%.4f,%.4f",
 			    trk->lat_lon[i].lat, trk->lat_lon[i].lon);
 		}
-		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "] ");
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, ") ");
 	}
 }
 
@@ -264,7 +264,7 @@ serialize_route_info(const cpdlc_route_info_t *info, bool readable,
 			    info->pub_ident.fixname);
 			if (!CPDLC_IS_NULL_LAT_LON(info->pub_ident.lat_lon)) {
 				APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-				    "[%.4f,%.4f]", info->pub_ident.lat_lon.lat,
+				    "(%.4f,%.4f)", info->pub_ident.lat_lon.lat,
 				    info->pub_ident.lat_lon.lon);
 			}
 			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, " ");
@@ -999,7 +999,7 @@ deserialize_pb(const char *s, cpdlc_pb_t *pb)
 	    !is_valid_crs(pb->degrees)) {
 		return (NULL);
 	}
-	bra = strchr(&slash[1], '[');
+	bra = strchr(&slash[1], '(');
 	if (bra != NULL) {
 		if (sscanf(&bra[1], "%lf,%lf", &pb->lat_lon.lat,
 		    &pb->lat_lon.lon) != 2 || !is_valid_lat_lon(pb->lat_lon)) {
@@ -1039,7 +1039,7 @@ deserialize_pbd(const char *s, cpdlc_pbd_t *pbd)
 	    pbd->dist_nm < 0.1 || pbd->dist_nm > 99.9) {
 		return (NULL);
 	}
-	bra = strchr(&slash[1], '[');
+	bra = strchr(&slash[1], '(');
 	if (bra != NULL) {
 		if (sscanf(&bra[1], "%lf,%lf", &pbd->lat_lon.lat,
 		    &pbd->lat_lon.lon) != 2 ||
@@ -1060,14 +1060,14 @@ deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
 	CPDLC_ASSERT(s != NULL);
 	CPDLC_ASSERT(trk != NULL);
 
-	bra = strchr(s, '[');
+	bra = strchr(s, '(');
 	if (bra == NULL)
 		return (false);
 	cpdlc_strlcpy(trk->name, s, MIN(sizeof (trk->name),
 	    (unsigned)(bra - s) + 1));
 	s = bra + 1;
 	for (; trk->num_lat_lon < CPDLC_TRK_DETAIL_MAX_LAT_LON &&
-	    *s != '\0' && *s != ']'; trk->num_lat_lon++) {
+	    *s != '\0' && *s != ')'; trk->num_lat_lon++) {
 		if (sscanf(s, "%lf,%lf", &trk->lat_lon[trk->num_lat_lon].lat,
 		    &trk->lat_lon[trk->num_lat_lon].lon) != 2 ||
 		    !is_valid_lat_lon(trk->lat_lon[trk->num_lat_lon])) {
@@ -1129,7 +1129,7 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 		cpdlc_strlcpy(route->appch.trans, &comp[6],
 		    sizeof (route->appch.trans));
 	} else if (strncmp(comp, "FIX:", 4) == 0) {
-		const char *bra = strchr(&comp[4], '[');
+		const char *bra = strchr(&comp[4], '(');
 		cpdlc_route_info_t *info;
 
 		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
