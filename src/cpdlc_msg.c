@@ -1066,20 +1066,22 @@ deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
 	cpdlc_strlcpy(trk->name, s, MIN(sizeof (trk->name),
 	    (unsigned)(bra - s) + 1));
 	s = bra + 1;
-	for (; trk->num_lat_lon < CPDLC_TRK_DETAIL_MAX_LAT_LON &&
-	    *s != '\0' && *s != ')'; trk->num_lat_lon++) {
+	while (trk->num_lat_lon < CPDLC_TRK_DETAIL_MAX_LAT_LON &&
+	    *s != '\0' && *s != ')') {
 		if (sscanf(s, "%lf,%lf", &trk->lat_lon[trk->num_lat_lon].lat,
 		    &trk->lat_lon[trk->num_lat_lon].lon) != 2 ||
 		    !is_valid_lat_lon(trk->lat_lon[trk->num_lat_lon])) {
 			return (false);
 		}
+		trk->num_lat_lon++;
 		s = strchr(s, ',');
 		if (s == NULL)
 			return (false);
 		s++;
 		s = strchr(s, ',');
-		if (s == NULL)
+		if (s == NULL) {
 			break;
+		};
 		s++;
 	}
 	return (true);
