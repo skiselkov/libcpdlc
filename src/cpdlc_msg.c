@@ -349,8 +349,13 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 	}
 	if (route->sid.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
-		    readable ? "SID:" : "", route->sid.name,
-		    route->sid.trans[0] != '\0' ? "." : "", route->sid.trans);
+		    !readable ? "SID:" : "", route->sid.name,
+		    readable && route->sid.trans[0] != '\0' ? "." : "",
+		    readable ? route->sid.trans : "");
+	}
+	if (route->sid.trans[0] != '\0' && !readable) {
+		APPEND_SNPRINTF(len, outbuf, cap, "SIDTR:%s ",
+		    route->sid.trans);
 	}
 	for (unsigned i = 0; i < route->num_info; i++) {
 		serialize_route_info(&route->info[i], readable,
@@ -358,14 +363,24 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 	}
 	if (route->star.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
-		    readable ? "STAR:" : "", route->star.trans,
-		    route->star.trans[0] != '\0' ? "." : "", route->star.name);
+		    !readable ? "STAR:" : "",
+		    readable ? route->star.trans : "",
+		    readable && route->star.trans[0] != '\0' ? "." : "",
+		    route->star.name);
+	}
+	if (route->star.trans[0] != '\0' && !readable) {
+		APPEND_SNPRINTF(len, outbuf, cap, "STARTR:%s ",
+		    route->star.trans);
 	}
 	if (route->appch.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
-		    readable ? "APPCH:" : "", route->appch.trans,
-		    route->appch.trans[0] != '\0' ? "." : "",
+		    !readable ? "APP:" : "", readable ? route->appch.trans : "",
+		    readable && route->appch.trans[0] != '\0' ? "." : "",
 		    route->appch.name);
+	}
+	if (route->appch.trans[0] != '\0' && !readable) {
+		APPEND_SNPRINTF(len, outbuf, cap, "APPTR:%s ",
+		    route->appch.trans);
 	}
 	if (route->dest_icao[0] != '\0' && readable)
 		APPEND_SNPRINTF(len, outbuf, cap, "%s", route->dest_icao);
@@ -1069,20 +1084,59 @@ deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
 }
 
 static bool
-parse_route_info(const char *comp, cpdlc_route_info_t *info,
+parse_route_info(cpdlc_route_t *route, const char *comp,
     char *reason, unsigned reason_cap)
 {
+	CPDLC_ASSERT(route != NULL);
 	CPDLC_ASSERT(comp != NULL);
-	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(reason != NULL);
 
 	if (strchr(comp, ':') == NULL) {
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_UNKNOWN;
 		cpdlc_strlcpy(info->str, comp, sizeof (info->str));
+		route->num_info++;
 		return (true);
 	}
-	if (strncmp(comp, "FIX:", 4) == 0) {
+	if (strncmp(comp, "ADEP:", 5) == 0) {
+		cpdlc_strlcpy(route->orig_icao, &comp[5],
+		    sizeof (route->orig_icao));
+	} else if (strncmp(comp, "ADES:", 5) == 0) {
+		cpdlc_strlcpy(route->dest_icao, &comp[5],
+		    sizeof (route->dest_icao));
+	} else if (strncmp(comp, "SID:", 4) == 0) {
+		cpdlc_strlcpy(route->sid.name, &comp[4],
+		    sizeof (route->sid.name));
+	} else if (strncmp(comp, "SIDTR:", 6) == 0) {
+		cpdlc_strlcpy(route->sid.trans, &comp[6],
+		    sizeof (route->sid.trans));
+	} else if (strncmp(comp, "STAR:", 5) == 0) {
+		cpdlc_strlcpy(route->star.name, &comp[5],
+		    sizeof (route->star.name));
+	} else if (strncmp(comp, "STARTR:", 7) == 0) {
+		cpdlc_strlcpy(route->star.trans, &comp[7],
+		    sizeof (route->star.trans));
+	} else if (strncmp(comp, "APP:", 4) == 0) {
+		cpdlc_strlcpy(route->appch.name, &comp[4],
+		    sizeof (route->appch.name));
+	} else if (strncmp(comp, "APPTR:", 6) == 0) {
+		cpdlc_strlcpy(route->appch.trans, &comp[6],
+		    sizeof (route->appch.trans));
+	} else if (strncmp(comp, "FIX:", 4) == 0) {
 		const char *bra = strchr(&comp[4], '[');
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_PUB_IDENT;
 		if (bra != NULL) {
 			cpdlc_strlcpy(info->pub_ident.fixname, &comp[4],
@@ -1103,6 +1157,13 @@ parse_route_info(const char *comp, cpdlc_route_info_t *info,
 			info->pub_ident.lat_lon = CPDLC_NULL_LAT_LON;
 		}
 	} else if (strncmp(comp, "LATLON:", 7) == 0) {
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_LAT_LON;
 		if (sscanf(&comp[7], "%lf,%lf", &info->lat_lon.lat,
 		    &info->lat_lon.lon) != 2 ||
@@ -1113,7 +1174,13 @@ parse_route_info(const char *comp, cpdlc_route_info_t *info,
 		}
 	} else if (strncmp(comp, "PBPB:", 5) == 0) {
 		const char *s = &comp[5];
+		cpdlc_route_info_t *info;
 
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_PBPB;
 		for (int i = 0; i < 2; i++) {
 			s = deserialize_pb(s, &info->pbpb[0]);
@@ -1126,6 +1193,13 @@ parse_route_info(const char *comp, cpdlc_route_info_t *info,
 				s++;
 		}
 	} else if (strncmp(comp, "PBD:", 4) == 0) {
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_LAT_LON;
 		if (!deserialize_pbd(&comp[4], &info->pbd)) {
 			MALFORMED_MSG("Error deserializing "
@@ -1133,9 +1207,23 @@ parse_route_info(const char *comp, cpdlc_route_info_t *info,
 			return (false);
 		}
 	} else if (strncmp(comp, "AWY:", 4) == 0) {
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_AWY;
 		cpdlc_strlcpy(info->awy, &comp[4], sizeof (info->awy));
 	} else if (strncmp(comp, "TRK:", 4) == 0) {
+		cpdlc_route_info_t *info;
+
+		if (route->num_info == CPDLC_ROUTE_MAX_INFO) {
+			MALFORMED_MSG("Malformed route: too many route infos");
+			return (false);
+		}
+		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_TRACK_DETAIL;
 		if (!deserialize_trk_detail(&comp[4], &info->trk_detail)) {
 			MALFORMED_MSG("Error deserializing trackdetail \"%s\"",
@@ -1166,12 +1254,9 @@ parse_route(const char *buf, char *reason, unsigned reason_cap)
 		    "(%d, max: %d)", n_comps, CPDLC_ROUTE_MAX_INFO);
 		goto errout;
 	}
-	for (route->num_info = 0; route->num_info < n_comps;
-	    route->num_info++) {
-		if (!parse_route_info(comps[route->num_info],
-		    &route->info[route->num_info], reason, reason_cap)) {
+	for (unsigned i = 0; i < n_comps; i++) {
+		if (!parse_route_info(route, comps[i], reason, reason_cap))
 			goto errout;
-		}
 	}
 	cpdlc_free_strlist(comps, n_comps);
 	return (route);
