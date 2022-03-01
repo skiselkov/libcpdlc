@@ -435,14 +435,14 @@ parse_dir(char *buf, fms_off_t *useroff, cpdlc_dir_t *dir)
 	} else if (!isdigit(last)) {
 		c = last;
 		buf[strlen(buf) - 1] = '\0';
-	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_ANY) {
+	} else if (useroff->nm == 0 || useroff->dir == CPDLC_DIR_EITHER) {
 		return (false);
 	}
 	if (c == 'L')
 		*dir = CPDLC_DIR_LEFT;
 	else if (c == 'R')
 		*dir = CPDLC_DIR_RIGHT;
-	else if (useroff->nm != 0 && useroff->dir != CPDLC_DIR_ANY)
+	else if (useroff->nm != 0 && useroff->dir != CPDLC_DIR_EITHER)
 		*dir = useroff->dir;
 	else
 		return (false);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -63,6 +63,19 @@
 		set_error(reason, reason_cap, "Malformed message: " \
 		    __VA_ARGS__); \
 	} while (0)
+
+static inline bool
+is_valid_crs(unsigned deg)
+{
+	return (deg >= 1 && deg <= 360);
+}
+
+static inline bool
+is_valid_lat_lon(cpdlc_lat_lon_t ll)
+{
+	return (ll.lat >= -90 && ll.lat <= 90 &&
+	    ll.lon >= -180 && ll.lon <= 180);
+}
 
 static void
 set_error(char *reason, unsigned cap, const char *fmt, ...)
@@ -173,11 +186,197 @@ cpdlc_unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 	return (j);
 }
 
+static void
+serialize_pb(const cpdlc_pb_t *pb, bool readable, char *str, unsigned cap)
+{
+	CPDLC_ASSERT(pb != NULL);
+	CPDLC_ASSERT(str != NULL);
+	if (readable) {
+		snprintf(str, cap, "%s%03d", pb->fixname, pb->degrees);
+	} else if (!CPDLC_IS_NULL_LAT_LON(pb->lat_lon)) {
+		snprintf(str, cap, "%s/%03d[%.4f,%.4f]", pb->fixname,
+		    pb->degrees, pb->lat_lon.lat, pb->lat_lon.lon);
+	} else {
+		snprintf(str, cap, "%s/%03d", pb->fixname, pb->degrees);
+	}
+}
+
+static void
+serialize_pbd(const cpdlc_pbd_t *pbd, bool readable, unsigned *len_p,
+    char **outbuf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(pbd != NULL);
+	CPDLC_ASSERT(len_p != NULL);
+	CPDLC_ASSERT(outbuf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+	if (readable) {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s%03d/%.1f",
+		    pbd->fixname, pbd->degrees, pbd->dist_nm);
+	} else if (!CPDLC_IS_NULL_LAT_LON(pbd->lat_lon)) {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+		    "PBD:%s/%03d/%.1f[%.4f,%.4f]", pbd->fixname, pbd->degrees,
+		    pbd->dist_nm, pbd->lat_lon.lat, pbd->lat_lon.lon);
+	} else {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+		    "PBD:%s/%03d/%.1f", pbd->fixname, pbd->degrees,
+		    pbd->dist_nm);
+	}
+}
+
+static void
+serialize_trk_detail(const cpdlc_trk_detail_t *trk, bool readable,
+    unsigned *len_p, char **outbuf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(trk != NULL);
+	CPDLC_ASSERT(len_p != NULL);
+	CPDLC_ASSERT(outbuf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	if (readable) {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "(%s) ", trk->name);
+	} else {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "TRK:%s[",
+		    trk->name);
+		for (unsigned i = 0; i < trk->num_lat_lon; i++) {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%.4f,%.4f",
+			    trk->lat_lon[i].lat, trk->lat_lon[i].lon);
+		}
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "] ");
+	}
+}
+
+static void
+serialize_route_info(const cpdlc_route_info_t *info, bool readable,
+    unsigned *len_p, char **outbuf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(len_p != NULL);
+	CPDLC_ASSERT(outbuf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	switch (info->type) {
+	case CPDLC_ROUTE_PUB_IDENT:
+		if (readable) {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s ",
+			    info->pub_ident.fixname);
+		} else {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "FIX:%s",
+			    info->pub_ident.fixname);
+			if (!CPDLC_IS_NULL_LAT_LON(info->pub_ident.lat_lon)) {
+				APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+				    "[%.4f,%.4f]", info->pub_ident.lat_lon.lat,
+				    info->pub_ident.lat_lon.lon);
+			}
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, " ");
+		}
+		break;
+	case CPDLC_ROUTE_LAT_LON:
+		if (readable) {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "%c%02.0f%04.1f%c%03.0f%04.1f ",
+			    info->lat_lon.lat >= 0 ? 'N' : 'S',
+			    trunc(info->lat_lon.lat),
+			    fabs(info->lat_lon.lat - trunc(info->lat_lon.lat)),
+			    info->lat_lon.lon >= 0 ? 'E' : 'W',
+			    trunc(info->lat_lon.lon),
+			    fabs(info->lat_lon.lon - trunc(info->lat_lon.lon)));
+		} else {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "LATLON:%.4f,%.4f ", info->lat_lon.lat,
+			    info->lat_lon.lon);
+		}
+		break;
+	case CPDLC_ROUTE_PBPB: {
+		char comps[2][32];
+
+		for (int i = 0; i < 2; i++) {
+			serialize_pb(&info->pbpb[i], readable, comps[i],
+			    sizeof (comps[i]));
+		}
+		if (readable) {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "%s/%s ", comps[0], comps[1]);
+		} else {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "PBPB:%s/%s ", comps[0], comps[1]);
+		}
+		break;
+	}
+	case CPDLC_ROUTE_PBD:
+		serialize_pbd(&info->pbd, readable, len_p, outbuf_p, cap_p);
+		break;
+	case CPDLC_ROUTE_AWY:
+		if (readable) {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "%s ", info->awy);
+		} else {
+			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+			    "AWY:%s ", info->awy);
+		}
+		break;
+	case CPDLC_ROUTE_TRACK_DETAIL:
+		serialize_trk_detail(&info->trk_detail, readable,
+		    len_p, outbuf_p, cap_p);
+		break;
+	case CPDLC_ROUTE_UNKNOWN:
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p, "%s%s",
+		    info->name, readable ? " " : "");
+		break;
+	default:
+		CPDLC_VERIFY_MSG(0, "Invalid route info type %x", info->type);
+	}
+}
+
+static void
+serialize_route(const cpdlc_route_t *route, bool readable,
+    char *outbuf, unsigned cap)
+{
+	unsigned len = 0;
+
+	CPDLC_ASSERT(route != NULL);
+	CPDLC_ASSERT(outbuf != NULL);
+
+	if (route->orig_icao[0] != '\0') {
+		APPEND_SNPRINTF(len, outbuf, cap, "%s%s ",
+		    readable ? "ADEP:" : "", route->orig_icao);
+	}
+	if (route->dest_icao[0] != '\0' && !readable) {
+		APPEND_SNPRINTF(len, outbuf, cap, "ADES:%s ",
+		    route->dest_icao);
+	}
+	if (route->orig_rwy[0] != '\0') {
+		APPEND_SNPRINTF(len, outbuf, cap, "DEPRWY:%s ",
+		    route->orig_rwy);
+	}
+	if (route->sid.name[0] != '\0') {
+		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
+		    readable ? "SID:" : "", route->sid.name,
+		    route->sid.trans[0] != '\0' ? "." : "", route->sid.trans);
+	}
+	for (unsigned i = 0; i < route->num_info; i++) {
+		serialize_route_info(&route->info[i], readable,
+		    &len, &outbuf, &cap);
+	}
+	if (route->star.name[0] != '\0') {
+		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
+		    readable ? "STAR:" : "", route->star.trans,
+		    route->star.trans[0] != '\0' ? "." : "", route->star.name);
+	}
+	if (route->appch.name[0] != '\0') {
+		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
+		    readable ? "APPCH:" : "", route->appch.trans,
+		    route->appch.trans[0] != '\0' ? "." : "",
+		    route->appch.name);
+	}
+	if (route->dest_icao[0] != '\0' && readable)
+		APPEND_SNPRINTF(len, outbuf, cap, "%s", route->dest_icao);
+}
+
 void
 cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
 {
-	char textbuf[1024];
+	char textbuf[8192];
 
 	switch (arg_type) {
 	case CPDLC_ARG_ALTITUDE:
@@ -261,17 +460,48 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    textbuf);
 		}
 		break;
-	case CPDLC_ARG_DIRECTION:
-		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
-			    arg->dir == CPDLC_DIR_ANY ? "" :
-			    (arg->dir == CPDLC_DIR_LEFT ? "LEFT" : "RIGHT"));
-		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %c",
-			    arg->dir == CPDLC_DIR_ANY ? 'N' :
-			    (arg->dir == CPDLC_DIR_LEFT ? 'L' : 'R'));
+	case CPDLC_ARG_DIRECTION: {
+		const char *name;
+		switch (arg->dir) {
+		case CPDLC_DIR_LEFT:
+			name = (readable ? "LEFT" : " L");
+			break;
+		case CPDLC_DIR_RIGHT:
+			name = (readable ? "RIGHT" : " R");
+			break;
+		case CPDLC_DIR_EITHER:
+			name = (readable ? "EITHER" : " -");
+			break;
+		case CPDLC_DIR_NORTH:
+			name = (readable ? "NORTH" : " N");
+			break;
+		case CPDLC_DIR_SOUTH:
+			name = (readable ? "SOUTH" : " S");
+			break;
+		case CPDLC_DIR_EAST:
+			name = (readable ? "EAST" : " E");
+			break;
+		case CPDLC_DIR_WEST:
+			name = (readable ? "WEST" : " W");
+			break;
+		case CPDLC_DIR_NE:
+			name = (readable ? "NORTHEAST" : " NE");
+			break;
+		case CPDLC_DIR_NW:
+			name = (readable ? "NORTHWEST" : " NW");
+			break;
+		case CPDLC_DIR_SE:
+			name = (readable ? "SOUTHEAST" : " SE");
+			break;
+		case CPDLC_DIR_SW:
+			name = (readable ? "SOUTHWEST" : " SW");
+			break;
+		default:
+			CPDLC_VERIFY_MSG(0, "Invalid direction %x", arg->dir);
 		}
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s", name);
 		break;
+	}
 	case CPDLC_ARG_DISTANCE:
 		if (readable) {
 			if (arg->dist - (int)arg->dist == 0) {
@@ -301,11 +531,16 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_ROUTE:
 		if (arg->route != NULL) {
+			char routebuf[8192];
 			if (readable) {
+				serialize_route(arg->route, true,
+				    routebuf, sizeof (routebuf));
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%s", arg->route);
+				    "%s", routebuf);
 			} else {
-				cpdlc_escape_percent(arg->route, textbuf,
+				serialize_route(arg->route, false,
+				    routebuf, sizeof (routebuf));
+				cpdlc_escape_percent(routebuf, textbuf,
 				    sizeof (textbuf));
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 				    " %s", textbuf);
@@ -445,6 +680,14 @@ cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 	return (msg);
 }
 
+static cpdlc_route_t *
+duplicate_route(const cpdlc_route_t *route_in)
+{
+	cpdlc_route_t *route_out = safe_malloc(sizeof (*route_out));
+	memcpy(route_out, route_in, sizeof (*route_out));
+	return (route_out);
+}
+
 cpdlc_msg_t *
 cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 {
@@ -463,7 +706,7 @@ cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 		for (unsigned j = 0; j < oldseg->info->num_args; j++) {
 			if (oldseg->info->args[j] == CPDLC_ARG_ROUTE &&
 			    oldseg->args[j].route != NULL) {
-				newseg->args[j].route = strdup(
+				newseg->args[j].route = duplicate_route(
 				    oldseg->args[j].route);
 			} else if (oldseg->info->args[j] ==
 			    CPDLC_ARG_FREETEXT &&
@@ -585,7 +828,7 @@ readable_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 		 */
 		start = close + 1;
 		if (info->args[arg] == CPDLC_ARG_DIRECTION &&
-		    seg->args[arg].dir == CPDLC_DIR_ANY) {
+		    seg->args[arg].dir == CPDLC_DIR_EITHER) {
 			/*
 			 * Skip an extra space when the turn direction is
 			 * `ANY'
@@ -726,6 +969,218 @@ contains_spaces(const char *str)
 	return (false);
 }
 
+static const char *
+deserialize_pb(const char *s, cpdlc_pb_t *pb)
+{
+	const char *slash, *bra, *end;
+	CPDLC_ASSERT(s != NULL);
+	CPDLC_ASSERT(pb != NULL);
+
+	slash = strchr(s, '/');
+	if (slash == NULL)
+		return (NULL);
+	cpdlc_strlcpy(pb->fixname, s, MIN(sizeof (pb->fixname),
+	    (unsigned)(slash - s) + 1));
+	if (sscanf(&slash[1], "%d", &pb->degrees) != 1 ||
+	    !is_valid_crs(pb->degrees)) {
+		return (NULL);
+	}
+	bra = strchr(&slash[1], '[');
+	if (bra != NULL) {
+		if (sscanf(&bra[1], "%lf,%lf", &pb->lat_lon.lat,
+		    &pb->lat_lon.lon) != 2 || !is_valid_lat_lon(pb->lat_lon)) {
+			return (NULL);
+		}
+	} else {
+		pb->lat_lon = CPDLC_NULL_LAT_LON;
+	}
+	end = strchr(&slash[1], '/');
+	if (end == NULL)
+		end = s + strlen(s);
+
+	return (end);
+}
+
+static bool
+deserialize_pbd(const char *s, cpdlc_pbd_t *pbd)
+{
+	const char *slash, *bra;
+
+	CPDLC_ASSERT(s != NULL);
+	CPDLC_ASSERT(pbd != NULL);
+
+	slash = strchr(s, '/');
+	if (slash == NULL)
+		return (NULL);
+	cpdlc_strlcpy(pbd->fixname, s, MIN(sizeof (pbd->fixname),
+	    (unsigned)(slash - s) + 1));
+	if (sscanf(&slash[1], "%d", &pbd->degrees) != 1 ||
+	    !is_valid_crs(pbd->degrees)) {
+		return (NULL);
+	}
+	slash = strchr(&slash[1], '/');
+	if (slash == NULL)
+		return (NULL);
+	if (sscanf(&slash[1], "%lf", &pbd->dist_nm) != 1 ||
+	    pbd->dist_nm < 0.1 || pbd->dist_nm > 99.9) {
+		return (NULL);
+	}
+	bra = strchr(&slash[1], '[');
+	if (bra != NULL) {
+		if (sscanf(&bra[1], "%lf,%lf", &pbd->lat_lon.lat,
+		    &pbd->lat_lon.lon) != 2 ||
+		    !is_valid_lat_lon(pbd->lat_lon)) {
+			return (NULL);
+		}
+	} else {
+		pbd->lat_lon = CPDLC_NULL_LAT_LON;
+	}
+	return (true);
+}
+
+static bool
+deserialize_trk_detail(const char *s, cpdlc_trk_detail_t *trk)
+{
+	const char *bra;
+
+	CPDLC_ASSERT(s != NULL);
+	CPDLC_ASSERT(trk != NULL);
+
+	bra = strchr(s, '[');
+	if (bra == NULL)
+		return (false);
+	cpdlc_strlcpy(trk->name, s, MIN(sizeof (trk->name),
+	    (unsigned)(bra - s) + 1));
+	s = bra + 1;
+	for (; trk->num_lat_lon < CPDLC_TRK_DETAIL_MAX_LAT_LON &&
+	    *s != '\0' && *s != ']'; trk->num_lat_lon++) {
+		if (sscanf(s, "%lf,%lf", &trk->lat_lon[trk->num_lat_lon].lat,
+		    &trk->lat_lon[trk->num_lat_lon].lon) != 2 ||
+		    !is_valid_lat_lon(trk->lat_lon[trk->num_lat_lon])) {
+			return (false);
+		}
+		s = strchr(s, ',');
+		if (s == NULL)
+			return (false);
+		s = strchr(s, ',');
+		if (s == NULL)
+			break;
+	}
+	return (true);
+}
+
+static bool
+parse_route_info(const char *comp, cpdlc_route_info_t *info,
+    char *reason, unsigned reason_cap)
+{
+	CPDLC_ASSERT(comp != NULL);
+	CPDLC_ASSERT(info != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	if (strchr(comp, ':') == NULL) {
+		info->type = CPDLC_ROUTE_UNKNOWN;
+		cpdlc_strlcpy(info->name, comp, sizeof (info->name));
+		return (true);
+	}
+	if (strncmp(comp, "FIX:", 4) == 0) {
+		const char *bra = strchr(&comp[4], '[');
+		info->type = CPDLC_ROUTE_PUB_IDENT;
+		if (bra != NULL) {
+			cpdlc_strlcpy(info->pub_ident.fixname, &comp[4],
+			    MIN(sizeof (info->pub_ident.fixname),
+			    (unsigned)(bra - &comp[4]) + 1));
+			if (sscanf(&bra[1], "%lf,%lf",
+			    &info->pub_ident.lat_lon.lat,
+			    &info->pub_ident.lat_lon.lon) != 2 ||
+			    !is_valid_lat_lon(info->pub_ident.lat_lon)) {
+				MALFORMED_MSG("Malformed or invalid lat-lon "
+				    "coordinates in route component \"%s\"",
+				    comp);
+				return (false);
+			}
+		} else {
+			cpdlc_strlcpy(info->pub_ident.fixname, &comp[4],
+			    sizeof (info->pub_ident.fixname));
+			info->pub_ident.lat_lon = CPDLC_NULL_LAT_LON;
+		}
+	} else if (strncmp(comp, "LATLON:", 7) == 0) {
+		info->type = CPDLC_ROUTE_LAT_LON;
+		if (sscanf(&comp[7], "%lf,%lf", &info->lat_lon.lat,
+		    &info->lat_lon.lon) != 2 ||
+		    !is_valid_lat_lon(info->lat_lon)) {
+			MALFORMED_MSG("Malformed or invalid lat-lon "
+			    "coordinates in route component \"%s\"", comp);
+			return (false);
+		}
+	} else if (strncmp(comp, "PBPB:", 5) == 0) {
+		const char *s = &comp[5];
+
+		info->type = CPDLC_ROUTE_PBPB;
+		for (int i = 0; i < 2; i++) {
+			s = deserialize_pb(s, &info->pbpb[0]);
+			if (comp == NULL) {
+				MALFORMED_MSG("Error deserializing "
+				    "place-bearing/place-bearing \"%s\"", comp);
+				return (false);
+			}
+			if (s[0] == '/')
+				s++;
+		}
+	} else if (strncmp(comp, "PBD:", 4) == 0) {
+		info->type = CPDLC_ROUTE_LAT_LON;
+		if (!deserialize_pbd(&comp[4], &info->pbd)) {
+			MALFORMED_MSG("Error deserializing "
+			    "place-bearing/place-bearing \"%s\"", comp);
+			return (false);
+		}
+	} else if (strncmp(comp, "AWY:", 4) == 0) {
+		info->type = CPDLC_ROUTE_AWY;
+		cpdlc_strlcpy(info->awy, &comp[4], sizeof (info->awy));
+	} else if (strncmp(comp, "TRK:", 4) == 0) {
+		info->type = CPDLC_ROUTE_TRACK_DETAIL;
+		if (!deserialize_trk_detail(&comp[4], &info->trk_detail)) {
+			MALFORMED_MSG("Error deserializing trackdetail \"%s\"",
+			    comp);
+			return (false);
+		}
+	} else {
+		MALFORMED_MSG("Route component \"%s\" has unknown type marker",
+		    comp);
+		return (false);
+	}
+	return (true);
+}
+
+static cpdlc_route_t *
+parse_route(const char *buf, char *reason, unsigned reason_cap)
+{
+	unsigned n_comps;
+	char **comps;
+	cpdlc_route_t *route = safe_calloc(1, sizeof (*route));
+
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	comps = cpdlc_strsplit(buf, " ", true, &n_comps);
+	if (n_comps > CPDLC_ROUTE_MAX_INFO) {
+		MALFORMED_MSG("Route contains too many components "
+		    "(%d, max: %d)", n_comps, CPDLC_ROUTE_MAX_INFO);
+		goto errout;
+	}
+	for (unsigned i = 0; i < n_comps; i++) {
+		if (!parse_route_info(comps[i], &route->info[i], reason,
+		    reason_cap)) {
+			goto errout;
+		}
+	}
+	cpdlc_free_strlist(comps, n_comps);
+	return (route);
+errout:
+	cpdlc_free_strlist(comps, n_comps);
+	free(route);
+	return (NULL);
+}
+
 static bool
 msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
     char *reason, unsigned reason_cap)
@@ -736,6 +1191,8 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	unsigned num_args = 0;
 	const cpdlc_msg_info_t *info;
 	char textbuf[512];
+
+	CPDLC_ASSERT(reason != NULL);
 
 	if (strncmp(start, "DM", 2) == 0) {
 		is_dl = true;
@@ -898,8 +1355,39 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			break;
 		case CPDLC_ARG_DIRECTION:
-			switch (start[0]) {
-			case 'N':
+			if (strncmp(start, "NE", 2) == 0) {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTHEAST'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_NE;
+			} else if (strncmp(start, "NW", 2) == 0) {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTHWEST'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_NW;
+			} else if (strncmp(start, "SE", 2) == 0) {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'SOUTHEAST'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_SE;
+			} else if (strncmp(start, "SW", 2) == 0) {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'SOUTHWEST'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_SW;
+			} else if (start[0] == '-') {
 				if (is_hold(is_dl, msg_type) ||
 				    is_offset(is_dl, msg_type)) {
 					MALFORMED_MSG("this message type "
@@ -907,17 +1395,45 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 					    "of 'ANY'");
 					return (false);
 				}
-				arg->dir = CPDLC_DIR_ANY;
-				break;
-			case 'L':
+				arg->dir = CPDLC_DIR_EITHER;
+			} else if (start[0] == 'L') {
 				arg->dir = CPDLC_DIR_LEFT;
-				break;
-			case 'R':
+			} else if (start[0] == 'R') {
 				arg->dir = CPDLC_DIR_RIGHT;
-				break;
-			default:
-				MALFORMED_MSG("invalid direction letter (%c)",
-				    start[0]);
+			} else if (start[0] == 'N') {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTH'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_NORTH;
+			} else if (start[0] == 'S') {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTH'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_SOUTH;
+			} else if (start[0] == 'E') {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTH'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_EAST;
+			} else if (start[0] == 'W') {
+				if (is_offset(is_dl, msg_type)) {
+					MALFORMED_MSG("this message type "
+					    "cannot specify a direction "
+					    "of 'NORTH'");
+					return (false);
+				}
+				arg->dir = CPDLC_DIR_WEST;
+			} else {
+				MALFORMED_MSG("invalid turn direction");
 				return (false);
 			}
 			break;
@@ -949,7 +1465,9 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
-		case CPDLC_ARG_ROUTE:
+		case CPDLC_ARG_ROUTE: {
+			char *buf;
+
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(end - start) + 1));
 			l = cpdlc_unescape_percent(textbuf, NULL, 0);
@@ -959,10 +1477,15 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			if (arg->route != NULL)
 				free(arg->route);
-			arg->route = malloc(l + 1);
-			cpdlc_unescape_percent(textbuf, arg->route, l + 1);
+			buf = safe_malloc(l + 1);
+			cpdlc_unescape_percent(textbuf, buf, l + 1);
+			arg->route = parse_route(buf, reason, reason_cap);
+			free(buf);
+			if (arg->route == NULL)
+				return (false);
 			start = end;
 			break;
+		}
 		case CPDLC_ARG_PROCEDURE:
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
@@ -1492,7 +2015,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_ROUTE:
 		if (arg->route != NULL)
 			free(arg->route);
-		arg->route = strdup(arg_val1);
+		arg->route = duplicate_route(arg_val1);
 		break;
 	case CPDLC_ARG_PROCEDURE:
 		cpdlc_strlcpy(arg->proc, arg_val1, sizeof (arg->proc));
@@ -1592,12 +2115,11 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_ROUTE:
 		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		if (arg->route == NULL) {
-			if (str_cap > 0)
-				*(char *)arg_val1 = '\0';
+			memset(arg_val1, 0, sizeof (cpdlc_route_t));
 			return (0);
 		}
-		cpdlc_strlcpy(arg_val1, arg->route, str_cap);
-		return (strlen(arg->route));
+		memcpy(arg_val1, arg->route, sizeof (cpdlc_route_t));
+		return (sizeof (cpdlc_route_t));
 	case CPDLC_ARG_PROCEDURE:
 		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
 		cpdlc_strlcpy(arg_val1, arg->proc, str_cap);

@@ -22,5 +22,5 @@ keyUsage = nonRepudiation, digitalSignature, keyEncipherment
 subjectAltName = @alt_names
 
 [alt_names]
-DNS.1 = simpc
+DNS.1 = foo
 DNS.2 = localhost

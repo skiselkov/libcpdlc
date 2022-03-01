@@ -1,4 +1,5 @@
 ATCTwoWayDataLinkCommunications DEFINITIONS IMPLICIT TAGS ::= BEGIN
+
 ATCuplinkmessage ::= SEQUENCE
 {
 	aTCmessageheader		ATCmessageheader,
@@ -2176,7 +2177,6 @@ Trackdetail ::= SEQUENCE
 }
 
 Trackname ::= IA5String (SIZE (3..6))
-
 
 ATWalongtrackwaypointsequence ::= SEQUENCE SIZE (1..8) OF ATWalongtrackwaypoint
 

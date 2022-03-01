@@ -64,6 +64,7 @@ CORE_SRC_OBJS=\
 	$(SRCPREFIX)/cpdlc_infos.o \
 	$(SRCPREFIX)/cpdlc_msg.o \
 	$(SRCPREFIX)/cpdlc_msglist.o \
+	$(SRCPREFIX)/cpdlc_string.o \
 	$(SRCPREFIX)/minilist.o \
 
 FANS_OBJS=\

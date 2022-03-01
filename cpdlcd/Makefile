@@ -49,7 +49,8 @@ DAEMON_OBJS=\
 	$(COMPREFIX)/cpdlc_config_common.o \
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
-	$(SRCPREFIX)/cpdlc_msg.o
+	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/cpdlc_string.o
 
 all : cpdlcd
 
