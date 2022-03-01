@@ -438,7 +438,7 @@ typedef struct {
 	char		fixname[8];	/* required */
 	cpdlc_lat_lon_t	lat_lon;	/* optional, CPDLC_NULL_LAT_LON */
 	unsigned	degrees;	/* required */
-	double		dist_nm;	/* required */
+	float		dist_nm;	/* required */
 } cpdlc_pbd_t;
 
 typedef enum {
@@ -462,7 +462,7 @@ typedef struct {
 
 typedef struct {
 	cpdlc_pos_t		pos;
-	double			dist_nm;
+	float			dist_nm;
 	bool			spd_cstr_present;
 	cpdlc_spd_t		spd_cstr;
 	unsigned		num_alt_cstr;
@@ -496,8 +496,8 @@ typedef enum {
 typedef struct {
 	cpdlc_hold_leg_type_t	type;
 	union {
-		double		dist_nm;	/* 0.1 - 99.9 NM */
-		double		time_min;	/* 0.1 - 9.9 minutes */
+		float		dist_nm;	/* 0.1 - 99.9 NM */
+		float		time_min;	/* 0.1 - 9.9 minutes */
 	};
 } cpdlc_hold_leg_t;
 
@@ -579,8 +579,6 @@ typedef struct {
 		cpdlc_pbd_t		pbd;
 		/* CPDLC_ROUTE_AWY */
 		char			awy[8];
-		/* CPDLC_ROUTE_TRACK_DETAIL */
-		cpdlc_trk_detail_t	trk_detail;
 		/* CPDLC_ROUTE_UNKNOWN */
 		char			str[16];
 	};
@@ -599,6 +597,8 @@ typedef struct {
 	unsigned		num_info;
 	cpdlc_route_info_t	info[CPDLC_ROUTE_MAX_INFO];
 	cpdlc_route_add_info_t	add_info;
+	/* CPDLC_ROUTE_TRACK_DETAIL */
+	cpdlc_trk_detail_t	trk_detail;
 } cpdlc_route_t;
 
 typedef union {
@@ -607,7 +607,7 @@ typedef union {
 	cpdlc_time_t		time;
 	char			pos[24];
 	cpdlc_dir_t		dir;
-	double			dist;	/* nautical miles */
+	float			dist;	/* nautical miles */
 	int			vvi;	/* feet per minute */
 	bool			tofrom;	/* true = to, false = from */
 	cpdlc_route_t		*route;
@@ -624,7 +624,7 @@ typedef union {
 	} deg;
 	struct {
 		bool		hpa;
-		double		val;
+		float		val;
 	} baro;
 	char			*freetext;
 } cpdlc_arg_t;

@@ -248,9 +248,11 @@ serialize_trk_detail(const cpdlc_trk_detail_t *trk, bool readable,
 }
 
 static void
-serialize_route_info(const cpdlc_route_info_t *info, bool readable,
+serialize_route_info(const cpdlc_route_t *route,
+    const cpdlc_route_info_t *info, bool readable,
     unsigned *len_p, char **outbuf_p, unsigned *cap_p)
 {
+	CPDLC_ASSERT(route != NULL);
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(len_p != NULL);
 	CPDLC_ASSERT(outbuf_p != NULL);
@@ -317,7 +319,7 @@ serialize_route_info(const cpdlc_route_info_t *info, bool readable,
 		}
 		break;
 	case CPDLC_ROUTE_TRACK_DETAIL:
-		serialize_trk_detail(&info->trk_detail, readable,
+		serialize_trk_detail(&route->trk_detail, readable,
 		    len_p, outbuf_p, cap_p);
 		break;
 	case CPDLC_ROUTE_UNKNOWN:
@@ -360,7 +362,7 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 		    route->sid.trans);
 	}
 	for (unsigned i = 0; i < route->num_info; i++) {
-		serialize_route_info(&route->info[i], readable,
+		serialize_route_info(route, &route->info[i], readable,
 		    &len, &outbuf, &cap);
 	}
 	if (route->star.name[0] != '\0') {
@@ -1037,7 +1039,7 @@ deserialize_pbd(const char *s, cpdlc_pbd_t *pbd)
 	slash = strchr(&slash[1], '/');
 	if (slash == NULL)
 		return (NULL);
-	if (sscanf(&slash[1], "%lf", &pbd->dist_nm) != 1 ||
+	if (sscanf(&slash[1], "%f", &pbd->dist_nm) != 1 ||
 	    pbd->dist_nm < 0.1 || pbd->dist_nm > 99.9) {
 		return (NULL);
 	}
@@ -1233,7 +1235,7 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 		}
 		info = &route->info[route->num_info++];
 		info->type = CPDLC_ROUTE_TRACK_DETAIL;
-		if (!deserialize_trk_detail(&comp[4], &info->trk_detail)) {
+		if (!deserialize_trk_detail(&comp[4], &route->trk_detail)) {
 			MALFORMED_MSG("Error deserializing trackdetail \"%s\"",
 			    comp);
 			return (false);
