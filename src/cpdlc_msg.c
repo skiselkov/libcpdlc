@@ -187,6 +187,28 @@ cpdlc_unescape_percent(const char *in_buf, char *out_buf, unsigned cap)
 }
 
 static void
+serialize_lat_lon(const cpdlc_lat_lon_t *lat_lon, bool readable,
+    unsigned *len_p, char **outbuf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(lat_lon != NULL);
+	CPDLC_ASSERT(len_p != NULL);
+	CPDLC_ASSERT(outbuf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	if (readable) {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+		    "%c%02.0f%04.1f%c%03.0f%04.1f ",
+		    lat_lon->lat >= 0 ? 'N' : 'S', trunc(lat_lon->lat),
+		    fabs(lat_lon->lat - trunc(lat_lon->lat)),
+		    lat_lon->lon >= 0 ? 'E' : 'W', trunc(lat_lon->lon),
+		    fabs(lat_lon->lon - trunc(lat_lon->lon)));
+	} else {
+		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
+		    "LATLON:%.4f,%.4f ", lat_lon->lat, lat_lon->lon);
+	}
+}
+
+static void
 serialize_pb(const cpdlc_pb_t *pb, bool readable, char *str, unsigned cap)
 {
 	CPDLC_ASSERT(pb != NULL);
@@ -275,20 +297,8 @@ serialize_route_info(const cpdlc_route_t *route,
 		}
 		break;
 	case CPDLC_ROUTE_LAT_LON:
-		if (readable) {
-			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-			    "%c%02.0f%04.1f%c%03.0f%04.1f ",
-			    info->lat_lon.lat >= 0 ? 'N' : 'S',
-			    trunc(info->lat_lon.lat),
-			    fabs(info->lat_lon.lat - trunc(info->lat_lon.lat)),
-			    info->lat_lon.lon >= 0 ? 'E' : 'W',
-			    trunc(info->lat_lon.lon),
-			    fabs(info->lat_lon.lon - trunc(info->lat_lon.lon)));
-		} else {
-			APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-			    "LATLON:%.4f,%.4f ", info->lat_lon.lat,
-			    info->lat_lon.lon);
-		}
+		serialize_lat_lon(&info->lat_lon, readable,
+		    len_p, outbuf_p, cap_p);
 		break;
 	case CPDLC_ROUTE_PBPB: {
 		char comps[2][32];
@@ -390,6 +400,366 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 		APPEND_SNPRINTF(len, outbuf, cap, "%s", route->dest_icao);
 }
 
+static void
+serialize_pos(const cpdlc_pos_t *pos, bool readable, char *outbuf, unsigned cap)
+{
+	unsigned n = 0;
+
+	CPDLC_ASSERT(pos != NULL);
+	CPDLC_ASSERT(outbuf != NULL);
+
+	switch (pos->type) {
+	case CPDLC_POS_FIXNAME:
+		APPEND_SNPRINTF(n, outbuf, cap, "%s%s",
+		    readable ? "" : "FIX:", pos->fixname);
+		break;
+	case CPDLC_POS_NAVAID:
+		APPEND_SNPRINTF(n, outbuf, cap, "%s%s",
+		    readable ? "" : "NAV:", pos->navaid);
+		break;
+	case CPDLC_POS_AIRPORT:
+		APPEND_SNPRINTF(n, outbuf, cap, "%s%s",
+		    readable ? "" : "ARPT:", pos->airport);
+		break;
+	case CPDLC_POS_LAT_LON:
+		serialize_lat_lon(&pos->lat_lon, readable, &n, &outbuf, &cap);
+		break;
+	case CPDLC_POS_PBD:
+		serialize_pbd(&pos->pbd, readable, &n, &outbuf, &cap);
+		break;
+	case CPDLC_POS_UNKNOWN:
+		APPEND_SNPRINTF(n, outbuf, cap, "%s", pos->str);
+		break;
+	}
+}
+
+static void
+encode_alt(const cpdlc_alt_t *alt, bool readable, unsigned *n_bytes_p,
+    char **buf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(alt != NULL);
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	if (readable) {
+		const char *units;
+		int value;
+
+		if (alt->fl) {
+			if (alt->met) {
+				value = alt->alt;
+				units = " M";
+			} else {
+				value = alt->alt / 100;
+				units = "";
+			}
+		} else {
+			if (alt->met) {
+				value = alt->alt;
+				units = " M";
+			} else {
+				value = alt->alt;
+				units = " FT";
+			}
+		}
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d%s",
+		    alt->fl ? "FL" : "", value, units);
+	} else {
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s%d%s",
+		    alt->fl ? "FL" : "", (alt->fl && !alt->met) ?
+		    alt->alt / 100 : alt->alt, alt->met ? "M" : "");
+	}
+}
+
+static void
+encode_spd(const cpdlc_spd_t *spd, bool readable, unsigned *n_bytes_p,
+    char **buf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(spd != NULL);
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	if (spd->mach) {
+		if (spd->spd < 1000) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%sM.%03d", readable ? "" : " ", spd->spd);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%sM%d.%03d", readable ? "" : " ",
+			    spd->spd / 1000, spd->spd % 1000);
+		}
+	} else {
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%d KT", spd->spd);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %d", spd->spd);
+		}
+	}
+}
+
+static const char *
+turb2str(cpdlc_turb_t turb)
+{
+	switch (turb) {
+	case CPDLC_TURB_NONE:
+		return ("NIL");
+	case CPDLC_TURB_LIGHT:
+		return ("LGT");
+	case CPDLC_TURB_MOD:
+		return ("MOD");
+	case CPDLC_TURB_SEV:
+		return ("SEV");
+	}
+	CPDLC_VERIFY(0);
+}
+
+static const char *
+icing2str(cpdlc_icing_t icing)
+{
+	switch (icing) {
+	case CPDLC_ICING_NONE:
+		return ("NIL");
+	case CPDLC_ICING_TRACE:
+		return ("TRACE");
+	case CPDLC_ICING_LIGHT:
+		return ("LGT");
+	case CPDLC_ICING_MOD:
+		return ("MOD");
+	case CPDLC_ICING_SEV:
+		return ("SEV");
+	}
+	CPDLC_VERIFY(0);
+}
+
+static void
+serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
+    unsigned cap)
+{
+	unsigned n = 0;
+
+	CPDLC_ASSERT(rep != NULL);
+	CPDLC_ASSERT(buf != NULL);
+
+	APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+	    rep->time_cur_pos.hrs, rep->time_cur_pos.mins);
+	encode_alt(&rep->cur_alt, true, &n, &buf, &cap);
+	APPEND_SNPRINTF(n, buf, cap, " ");
+	if (!CPDLC_IS_NULL_SPD(rep->spd)) {
+		APPEND_SNPRINTF(n, buf, cap, "TAS ");
+		encode_spd(&rep->spd, true, &n, &buf, &cap);
+		APPEND_SNPRINTF(n, buf, cap, " ");
+	}
+	if (!CPDLC_IS_NULL_SPD(rep->spd_gnd)) {
+		APPEND_SNPRINTF(n, buf, cap, "GS ");
+		encode_spd(&rep->spd_gnd, true, &n, &buf, &cap);
+		APPEND_SNPRINTF(n, buf, cap, " ");
+	}
+	if (rep->vvi_set && ABS(rep->vvi) >= 200) {
+		APPEND_SNPRINTF(n, buf, cap, "%s %d FPM ",
+		    rep->vvi > 0 ? "CLB" : "DES", ABS(rep->vvi));
+	}
+	if (rep->trk != 0)
+		APPEND_SNPRINTF(n, buf, cap, "TRK %03d ", rep->trk);
+	if (rep->rpt_wpt_pos.set) {
+		char posbuf[128];
+
+		serialize_pos(&rep->rpt_wpt_pos, true, posbuf, sizeof (posbuf));
+		APPEND_SNPRINTF(n, buf, cap, "RPT %s ", posbuf);
+		if (!CPDLC_IS_NULL_TIME(rep->rpt_wpt_time)) {
+			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+			    rep->rpt_wpt_time.hrs, rep->rpt_wpt_time.mins);
+		}
+		if (!CPDLC_IS_NULL_ALT(rep->rpt_wpt_alt))
+			encode_alt(&rep->rpt_wpt_alt, true, &n, &buf, &cap);
+	}
+	if (rep->fix_next.set) {
+		char posbuf[128];
+
+		serialize_pos(&rep->fix_next, true, posbuf, sizeof (posbuf));
+		APPEND_SNPRINTF(n, buf, cap, "NEXT %s ", posbuf);
+		if (!CPDLC_IS_NULL_TIME(rep->time_fix_next)) {
+			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+			    rep->time_fix_next.hrs, rep->time_fix_next.mins);
+		}
+		if (rep->dist_set) {
+			APPEND_SNPRINTF(n, buf, cap, "DTG %.*f ",
+			    rep->dist_nm < 99.95 ? 1 : 0, rep->dist_nm);
+		}
+	}
+	if (rep->fix_next_p1.set) {
+		char posbuf[128];
+		serialize_pos(&rep->fix_next_p1, true, posbuf, sizeof (posbuf));
+		APPEND_SNPRINTF(n, buf, cap, "NEXT+1 %s ", posbuf);
+	}
+	if (!CPDLC_IS_NULL_TIME(rep->time_dest)) {
+		APPEND_SNPRINTF(n, buf, cap, "DEST %02d%02d ",
+		    rep->time_dest.hrs, rep->time_dest.mins);
+	}
+	if (!CPDLC_IS_NULL_TIME(rep->rmng_fuel)) {
+		APPEND_SNPRINTF(n, buf, cap, "FUEL %02d%02d ",
+		    rep->rmng_fuel.hrs, rep->rmng_fuel.mins);
+	}
+	if (!CPDLC_IS_NULL_TEMP(rep->temp))
+		APPEND_SNPRINTF(n, buf, cap, "OAT %+d ", rep->temp);
+	if (!CPDLC_IS_NULL_WIND(rep->wind)) {
+		APPEND_SNPRINTF(n, buf, cap, "WIND %03d/%d ",
+		    rep->wind.dir, rep->wind.spd);
+	}
+	if (rep->turb != CPDLC_TURB_NONE) {
+		APPEND_SNPRINTF(n, buf, cap, "TURB %s ", turb2str(rep->turb));
+	}
+	if (rep->icing != CPDLC_ICING_NONE) {
+		APPEND_SNPRINTF(n, buf, cap, "ICG %s ", icing2str(rep->icing));
+	}
+}
+
+static void
+serialize_posreport_machine(const cpdlc_pos_rep_t *rep, char *buf,
+    unsigned cap)
+{
+	char wkbuf[512];
+	unsigned n = 0;
+
+	CPDLC_ASSERT(rep != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	/* [0] cur_pos */
+	serialize_pos(&rep->cur_pos, false, wkbuf, sizeof (wkbuf));
+	APPEND_SNPRINTF(n, buf, cap, "%s", wkbuf);
+	/* [1] time_cur_pos */
+	APPEND_SNPRINTF(n, buf, cap, "%02d%02d",
+	    rep->time_cur_pos.hrs, rep->time_cur_pos.mins);
+	/* [2] cur_alt */
+	encode_alt(&rep->cur_alt, false, &n, &buf, &cap);
+	APPEND_SNPRINTF(n, buf, cap, " ");
+	/* [3] fix_next */
+	if (rep->fix_next.set) {
+		serialize_pos(&rep->fix_next, false, wkbuf, sizeof (wkbuf));
+		APPEND_SNPRINTF(n, buf, cap, "%s ", wkbuf);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [4] time_fix_next */
+	if (!CPDLC_IS_NULL_TIME(rep->time_fix_next)) {
+		APPEND_SNPRINTF(n, buf, cap, "%02d%02d ",
+		    rep->time_fix_next.hrs, rep->time_fix_next.mins);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [5] fix_next_p1 */
+	if (rep->fix_next_p1.set) {
+		serialize_pos(&rep->fix_next_p1, false, wkbuf, sizeof (wkbuf));
+		APPEND_SNPRINTF(n, buf, cap, "%s ", wkbuf);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [6] time_dest */
+	if (!CPDLC_IS_NULL_TIME(rep->time_dest)) {
+		APPEND_SNPRINTF(n, buf, cap, "%02d%02d ",
+		    rep->time_dest.hrs, rep->time_dest.mins);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [7] rmng_fuel */
+	if (!CPDLC_IS_NULL_TIME(rep->rmng_fuel)) {
+		APPEND_SNPRINTF(n, buf, cap, "%02d%02d ",
+		    rep->rmng_fuel.hrs, rep->rmng_fuel.mins);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [8] temp */
+	if (!CPDLC_IS_NULL_TEMP(rep->temp))
+		APPEND_SNPRINTF(n, buf, cap, "%d ", rep->temp);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	/* [9] wind */
+	if (!CPDLC_IS_NULL_WIND(rep->wind)) {
+		APPEND_SNPRINTF(n, buf, cap, "%03d/%d ",
+		    rep->wind.dir, rep->wind.spd);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [10] turb */
+	APPEND_SNPRINTF(n, buf, cap, "%d ", rep->turb);
+	/* [11] icing */
+	APPEND_SNPRINTF(n, buf, cap, "%d ", rep->icing);
+	/* [12] spd */
+	if (!CPDLC_IS_NULL_SPD(rep->spd)) {
+		encode_spd(&rep->spd, false, &n, &buf, &cap);
+		APPEND_SNPRINTF(n, buf, cap, " ");
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [13] spd_gnd */
+	if (!CPDLC_IS_NULL_SPD(rep->spd_gnd)) {
+		encode_spd(&rep->spd_gnd, false, &n, &buf, &cap);
+		APPEND_SNPRINTF(n, buf, cap, " ");
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [14] vvi */
+	if (rep->vvi_set)
+		APPEND_SNPRINTF(n, buf, cap, "%d ", rep->vvi);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	/* [15] trk */
+	if (rep->trk != 0)
+		APPEND_SNPRINTF(n, buf, cap, "%d ", rep->trk);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	/* [16] hdg_true */
+	if (rep->hdg_true != 0)
+		APPEND_SNPRINTF(n, buf, cap, "%d ", rep->hdg_true);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	/* [17] dist */
+	if (rep->dist_set)
+		APPEND_SNPRINTF(n, buf, cap, "%.1f ", rep->dist_nm);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	/* [18] remarks */
+	if (rep->remarks[0] != '\0') {
+		cpdlc_escape_percent(rep->remarks, wkbuf, sizeof (wkbuf));
+		APPEND_SNPRINTF(n, buf, cap, "%s ", wkbuf);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [19] rpt_wpt_pos */
+	if (rep->rpt_wpt_pos.set) {
+		serialize_pos(&rep->rpt_wpt_pos, false, wkbuf, sizeof (wkbuf));
+		APPEND_SNPRINTF(n, buf, cap, "%s ", wkbuf);
+	} else {
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [20] rpt_wpt_time */
+	if (!CPDLC_IS_NULL_TIME(rep->rpt_wpt_time)) {
+		APPEND_SNPRINTF(n, buf, cap, "%02d%02d ",
+		    rep->rpt_wpt_time.hrs, rep->rpt_wpt_time.mins);
+	} else {
+			APPEND_SNPRINTF(n, buf, cap, "- ");
+	}
+	/* [21] rpt_wpt_alt */
+	if (!CPDLC_IS_NULL_ALT(rep->rpt_wpt_alt))
+		encode_alt(&rep->rpt_wpt_alt, false, &n, &buf, &cap);
+	else
+		APPEND_SNPRINTF(n, buf, cap, "- ");
+}
+
+static void
+serialize_posreport(const cpdlc_pos_rep_t *rep, bool readable,
+    char *buf, unsigned cap)
+{
+	CPDLC_ASSERT(rep != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	if (readable)
+		serialize_posreport_readable(rep, buf, cap);
+	else
+		serialize_posreport_machine(rep, buf, cap);
+}
+
 void
 cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
@@ -398,58 +768,10 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 
 	switch (arg_type) {
 	case CPDLC_ARG_ALTITUDE:
-		if (readable) {
-			const char *units;
-			int value;
-
-			if (arg->alt.fl) {
-				if (arg->alt.met) {
-					value = arg->alt.alt;
-					units = " M";
-				} else {
-					value = arg->alt.alt / 100;
-					units = "";
-				}
-			} else {
-				if (arg->alt.met) {
-					value = arg->alt.alt;
-					units = " M";
-				} else {
-					value = arg->alt.alt;
-					units = " FT";
-				}
-			}
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d%s",
-			    arg->alt.fl ? "FL" : "", value, units);
-		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s%d%s",
-			    arg->alt.fl ? "FL" : "",
-			    (arg->alt.fl && !arg->alt.met) ?
-			    arg->alt.alt / 100 : arg->alt.alt,
-			    arg->alt.met ? "M" : "");
-		}
+		encode_alt(&arg->alt, readable, n_bytes_p, buf_p, cap_p);
 		break;
 	case CPDLC_ARG_SPEED:
-		if (arg->spd.mach) {
-			if (arg->spd.spd < 1000) {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%sM.%03d", readable ? "" : " ",
-				    arg->spd.spd);
-			} else {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%sM%d.%03d", readable ? "" : " ",
-				    arg->spd.spd / 1000,
-				    arg->spd.spd % 1000);
-			}
-		} else {
-			if (readable) {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%d KT", arg->spd.spd);
-			} else {
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " %d", arg->spd.spd);
-			}
-		}
+		encode_spd(&arg->spd, readable, n_bytes_p, buf_p, cap_p);
 		break;
 	case CPDLC_ARG_TIME:
 		if (arg->time.hrs < 0) {
@@ -457,7 +779,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    readable ? "" : " ");
 		} else {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%s%02d%02dZ", readable ? "" : " ",
+			    "%s%02d%02d", readable ? "" : " ",
 			    arg->time.hrs, arg->time.mins);
 		}
 		break;
@@ -467,17 +789,19 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		    arg->time.hrs * 60 + arg->time.mins,
 		    readable ? " MINUTES" : "");
 		break;
-	case CPDLC_ARG_POSITION:
+	case CPDLC_ARG_POSITION: {
+		char posbuf[128];
+		serialize_pos(&arg->pos, readable, posbuf, sizeof (posbuf));
 		if (readable) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
-			    arg->pos);
+			    posbuf);
 		} else {
-			cpdlc_escape_percent(arg->pos, textbuf,
-			    sizeof (textbuf));
+			cpdlc_escape_percent(posbuf, textbuf, sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
 		}
 		break;
+	}
 	case CPDLC_ARG_DIRECTION: {
 		const char *name;
 		switch (arg->dir) {
@@ -664,6 +988,29 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
 		    readable ? "" : " ", textbuf);
 		break;
+	case CPDLC_ARG_PERSONS:
+		if (arg->pob != 0) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d",
+			    readable ? "" : " ", arg->pob);
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s-",
+			    readable ? "" : " ");
+		}
+		break;
+	case CPDLC_ARG_POSREPORT: {
+		char repbuf[1024];
+		serialize_posreport(&arg->pos_rep, readable, repbuf,
+		    sizeof (repbuf));
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    repbuf);
+		} else {
+			cpdlc_escape_percent(repbuf, textbuf, sizeof (textbuf));
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+			    textbuf);
+		}
+		break;
+	}
 	}
 }
 
@@ -1277,6 +1624,260 @@ errout:
 }
 
 static bool
+parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
+{
+	CPDLC_ASSERT(pos != NULL);
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	if (strchr(buf, ':') == NULL) {
+		pos->type = CPDLC_POS_UNKNOWN;
+		cpdlc_strlcpy(pos->str, buf, sizeof (pos->str));
+		return (true);
+	}
+	if (strncmp(buf, "FIX:", 4) == 0) {
+		pos->type = CPDLC_POS_FIXNAME;
+		cpdlc_strlcpy(pos->fixname, &buf[4], sizeof (pos->fixname));
+	} else if (strncmp(buf, "NAV:", 4) == 0) {
+		pos->type = CPDLC_POS_NAVAID;
+		cpdlc_strlcpy(pos->navaid, &buf[4], sizeof (pos->navaid));
+	} else if (strncmp(buf, "ARPT:", 4) == 0) {
+		pos->type = CPDLC_POS_AIRPORT;
+		cpdlc_strlcpy(pos->airport, &buf[4], sizeof (pos->airport));
+	} else if (strncmp(buf, "LATLON:", 7) == 0) {
+		pos->type = CPDLC_POS_LAT_LON;
+		if (sscanf(&buf[7], "%lf,%lf", &pos->lat_lon.lat,
+		    &pos->lat_lon.lon) != 2 ||
+		    !is_valid_lat_lon(pos->lat_lon)) {
+			MALFORMED_MSG("Malformed or invalid lat-lon "
+			    "coordinates in position \"%s\"", buf);
+			return (false);
+		}
+	} else if (strncmp(buf, "PBD:", 4) == 0) {
+		pos->type = CPDLC_POS_PBD;
+		if (!deserialize_pbd(&buf[4], &pos->pbd)) {
+			MALFORMED_MSG("Error deserializing "
+			    "place-bearing-distance \"%s\"", buf);
+			return (false);
+		}
+	} else {
+		MALFORMED_MSG("Position spec \"%s\" has unknown type",
+		    buf);
+	}
+	return (true);
+}
+
+static bool
+parse_time(const char *buf, cpdlc_time_t *tim, char *reason,
+    unsigned reason_cap)
+{
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(tim != NULL);
+
+	if (strncmp(buf, "NOW", 3) == 0) {
+		tim->hrs = -1;
+	} else {
+		char hrs[3] = { buf[0], buf[1] }, mins[3] = { buf[2], buf[3] };
+
+		if (sscanf(hrs, "%d", &tim->hrs) != 1 ||
+		    sscanf(mins, "%d", &tim->mins) != 1 ||
+		    tim->hrs < 0 || tim->hrs > 23 ||
+		    tim->mins < 0 || tim->mins > 59) {
+			MALFORMED_MSG("invalid time");
+			return (false);
+		}
+	}
+	return (true);
+}
+
+static bool
+parse_alt(const char *start, const char *end, cpdlc_alt_t *alt,
+    char *reason, unsigned reason_cap)
+{
+	const char *arg_end;
+
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
+	CPDLC_ASSERT(alt != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	if (start + 2 < end && start[0] == 'F' && start[1] == 'L') {
+		alt->fl = true;
+		if (sscanf(&start[2], "%d", &alt->alt) != 1 || alt->alt <= 0) {
+			MALFORMED_MSG("invalid flight level");
+			return (false);
+		}
+	} else {
+		alt->alt = atoi(start);
+		if (sscanf(start, "%d", &alt->alt) != 1 ||
+		    alt->alt < -1500 || alt->alt > 100000) {
+			MALFORMED_MSG("invalid altitude");
+			return (false);
+		}
+	}
+	arg_end = find_arg_end(start, end);
+	if (*(arg_end - 1) == 'M')
+		alt->met = true;
+	/* Multiply non-metric FLs by 100 */
+	if (alt->fl && !alt->met)
+		alt->alt *= 100;
+	/* Second round of validation for FLs */
+	if (alt->fl && ((!alt->met && alt->alt > 60000) ||
+	    (alt->met && alt->alt > 20000))) {
+		MALFORMED_MSG("invalid flight level");
+		return (false);
+	}
+	return (true);
+}
+
+static bool
+parse_spd(const char *start, const char *end, cpdlc_spd_t *spd,
+    char *reason, unsigned reason_cap)
+{
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
+	CPDLC_ASSERT(spd != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	if (start + 1 < end && start[0] == 'M') {
+		spd->mach = true;
+		spd->spd = round(atof(&start[1]) * 1000);
+		if (spd->spd < 100) {
+			MALFORMED_MSG("invalid Mach");
+			return (false);
+		}
+	} else {
+		spd->spd = atoi(start);
+	}
+	return (true);
+}
+
+static bool
+parse_posreport(const char *buf, cpdlc_pos_rep_t *rep, char *reason,
+    unsigned reason_cap)
+{
+	unsigned n_comps;
+	char **comps;
+
+	CPDLC_ASSERT(buf != NULL);
+	CPDLC_ASSERT(rep != NULL);
+	CPDLC_ASSERT(reason != NULL);
+	memset(rep, 0, sizeof (*rep));
+
+	comps = cpdlc_strsplit(buf, " ", true, &n_comps);
+	if (n_comps < 22) {
+		MALFORMED_MSG("Malformed pos rep structure \"%s\" "
+		    "has too few components (%d)", buf, n_comps);
+		goto errout;
+	}
+	if (!parse_pos(&rep->cur_pos, comps[0], reason, reason_cap))
+		goto errout;
+	if (!parse_time(comps[1], &rep->time_cur_pos, reason, reason_cap))
+		goto errout;
+	if (!parse_alt(comps[2], comps[2] + strlen(comps[2]), &rep->cur_alt,
+	    reason, reason_cap)) {
+		goto errout;
+	}
+	if (strcmp(comps[3], "-") != 0 &&
+	    !parse_pos(&rep->fix_next, comps[3], reason, reason_cap)) {
+		goto errout;
+	}
+	if (strcmp(comps[4], "-") != 0) {
+		if (!parse_time(comps[4], &rep->time_fix_next, reason,
+		    reason_cap)) {
+			goto errout;
+		}
+	} else {
+		rep->time_fix_next = CPDLC_NULL_TIME;
+	}
+	if (strcmp(comps[5], "-") != 0 &&
+	    !parse_pos(&rep->fix_next_p1, comps[5], reason, reason_cap)) {
+		goto errout;
+	}
+	if (strcmp(comps[6], "-") != 0) {
+		if (!parse_time(comps[6], &rep->time_dest, reason, reason_cap))
+			goto errout;
+	} else {
+		rep->time_dest = CPDLC_NULL_TIME;
+	}
+	if (strcmp(comps[7], "-") != 0) {
+		if (!parse_time(comps[7], &rep->rmng_fuel, reason, reason_cap))
+			goto errout;
+	} else {
+		rep->rmng_fuel = CPDLC_NULL_TIME;
+	}
+	rep->temp = (strcmp(comps[8], "-") != 0 ? atoi(comps[8]) :
+	    CPDLC_NULL_TEMP);
+	if (strcmp(comps[9], "-") != 0) {
+		if (sscanf(comps[9], "%d/%d", &rep->wind.dir,
+		    &rep->wind.spd) != 2) {
+			MALFORMED_MSG("Malformed wind data \"%s\"", comps[9]);
+			goto errout;
+		}
+	}
+	rep->turb = MIN(atoi(comps[10]), CPDLC_TURB_SEV);
+	rep->icing = MIN(atoi(comps[11]), CPDLC_ICING_SEV);
+	if (strcmp(comps[12], "-") != 0) {
+		if (!parse_spd(comps[12], comps[12] + strlen(comps[12]),
+		    &rep->spd, reason, reason_cap)) {
+			goto errout;
+		}
+	} else {
+		rep->spd = CPDLC_NULL_SPD;
+	}
+	if (strcmp(comps[13], "-") != 0) {
+		if (!parse_spd(comps[13], comps[13] + strlen(comps[13]),
+		    &rep->spd_gnd, reason, reason_cap)) {
+			goto errout;
+		}
+	} else {
+		rep->spd_gnd = CPDLC_NULL_SPD;
+	}
+	if (strcmp(comps[14], "-") != 0) {
+		rep->vvi_set = true;
+		rep->vvi = atoi(comps[14]);
+	}
+	if (strcmp(comps[15], "-") != 0)
+		rep->trk = atoi(comps[15]);
+	if (strcmp(comps[16], "-") != 0)
+		rep->hdg_true = atoi(comps[16]);
+	if (strcmp(comps[17], "-") != 0) {
+		rep->dist_set =true;
+		rep->dist_nm = atof(comps[17]);
+	}
+	if (cpdlc_unescape_percent(comps[18], rep->remarks,
+	    sizeof (rep->remarks)) == -1) {
+		MALFORMED_MSG("invalid URL escape in \"%s\"", comps[18]);
+		goto errout;
+	}
+	if (strcmp(comps[19], "-") != 0 &&
+	    !parse_pos(&rep->rpt_wpt_pos, comps[19], reason, reason_cap)) {
+		goto errout;
+	}
+	if (strcmp(comps[20], "-") != 0) {
+		if (!parse_time(comps[20], &rep->rpt_wpt_time,
+		    reason, reason_cap)) {
+			goto errout;
+		}
+	} else {
+		rep->rpt_wpt_time = CPDLC_NULL_TIME;
+	}
+	if (strcmp(comps[21], "-") != 0) {
+		if (!parse_alt(comps[21], comps[21] + strlen(comps[21]),
+		    &rep->rpt_wpt_alt, reason, reason_cap)) {
+			goto errout;
+		}
+	} else {
+		rep->rpt_wpt_alt = CPDLC_NULL_ALT;
+	}
+	cpdlc_free_strlist(comps, n_comps);
+	return (true);
+errout:
+	cpdlc_free_strlist(comps, n_comps);
+	return (false);
+}
+
+static bool
 msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
     char *reason, unsigned reason_cap)
 {
@@ -1287,6 +1888,9 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	const cpdlc_msg_info_t *info;
 	char textbuf[8192];
 
+	CPDLC_ASSERT(seg != NULL);
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(reason != NULL);
 
 	if (strncmp(start, "DM", 2) == 0) {
@@ -1355,75 +1959,20 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 
 		switch (info->args[num_args]) {
 		case CPDLC_ARG_ALTITUDE:
-			if (start + 2 < end && start[0] == 'F' &&
-			    start[1] == 'L') {
-				arg->alt.fl = true;
-				if (sscanf(&start[2], "%d",
-				    &arg->alt.alt) != 1 ||
-				    arg->alt.alt <= 0) {
-					MALFORMED_MSG("invalid flight level");
-					return (false);
-				}
-			} else {
-				arg->alt.alt = atoi(start);
-				if (sscanf(start, "%d", &arg->alt.alt) != 1 ||
-				    arg->alt.alt < -1500 ||
-				    arg->alt.alt > 100000) {
-					MALFORMED_MSG("invalid altitude");
-					return (false);
-				}
-			}
-			arg_end = find_arg_end(start, end);
-			if (*(arg_end - 1) == 'M')
-				arg->alt.met = true;
-			/* Multiply non-metric FLs by 100 */
-			if (arg->alt.fl && !arg->alt.met)
-				arg->alt.alt *= 100;
-			/* Second round of validation for FLs */
-			if (arg->alt.fl &&
-			    ((!arg->alt.met && arg->alt.alt > 100000) ||
-			    (arg->alt.met && arg->alt.alt > 30000))) {
-				MALFORMED_MSG("invalid flight level");
+			if (!parse_alt(start, end, &arg->alt, reason,
+			    reason_cap)) {
 				return (false);
 			}
 			break;
 		case CPDLC_ARG_SPEED:
-			if (start + 1 < end && start[0] == 'M') {
-				arg->spd.mach = true;
-				arg->spd.spd = round(atof(&start[1]) * 1000);
-				if (arg->spd.spd < 100) {
-					MALFORMED_MSG("invalid Mach");
-					return (false);
-				}
-			} else {
-				arg->spd.spd = atoi(start);
+			if (!parse_spd(start, end, &arg->spd, reason,
+			    reason_cap)) {
+				return (false);
 			}
 			break;
 		case CPDLC_ARG_TIME:
-			if (strncmp(start, "NOW", 3) == 0) {
-				arg->time.hrs = -1;
-			} else {
-				char hrs[3] = { 0 }, mins[3] = { 0 };
-
-				arg_end = find_arg_end(start, end);
-
-				if (arg_end - start != 5) {
-					MALFORMED_MSG("invalid time");
-					return (false);
-				}
-				hrs[0] = start[0];
-				hrs[1] = start[1];
-				mins[0] = start[2];
-				mins[1] = start[3];
-				if (sscanf(hrs, "%d", &arg->time.hrs) != 1 ||
-				    sscanf(mins, "%d", &arg->time.mins) != 1 ||
-				    arg->time.hrs < 0 || arg->time.hrs > 23 ||
-				    arg->time.mins < 0 || arg->time.mins > 59 ||
-				    start[4] != 'Z') {
-					MALFORMED_MSG("invalid time");
-					return (false);
-				}
-			}
+			if (!parse_time(start, &arg->time, reason, reason_cap))
+				return (false);
 			break;
 		case CPDLC_ARG_TIME_DUR:
 			arg_end = find_arg_end(start, end);
@@ -1434,21 +1983,26 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			arg->time.hrs = arg->time.mins / 60;
 			arg->time.mins = arg->time.mins % 60;
 			break;
-		case CPDLC_ARG_POSITION:
+		case CPDLC_ARG_POSITION: {
+			char tmpbuf[128];
+
 			arg_end = find_arg_end(start, end);
-			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
+			if ((unsigned)(arg_end - start) >= sizeof (tmpbuf)) {
+				MALFORMED_MSG("position spec too long");
+				return (false);
+			}
+			cpdlc_strlcpy(tmpbuf, start, MIN(sizeof (tmpbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (cpdlc_unescape_percent(textbuf, arg->pos,
-			    sizeof (arg->pos)) == -1) {
-				MALFORMED_MSG("invalid URL escapes");
+			if (cpdlc_unescape_percent(tmpbuf, textbuf,
+			    sizeof (textbuf)) == -1) {
+				MALFORMED_MSG("invalid URL escape in \"%s\"",
+				    tmpbuf);
 				return (false);
 			}
-			if (contains_spaces(arg->pos)) {
-				MALFORMED_MSG("position cannot contain "
-				    "whitespace");
+			if (!parse_pos(&arg->pos, textbuf, reason, reason_cap))
 				return (false);
-			}
 			break;
+		}
 		case CPDLC_ARG_DIRECTION:
 			if (strncmp(start, "NE", 2) == 0) {
 				if (is_offset(is_dl, msg_type)) {
@@ -1590,11 +2144,6 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
-			if (contains_spaces(arg->pos)) {
-				MALFORMED_MSG("procedure name cannot contain "
-				    "whitespace");
-				return (false);
-			}
 			break;
 		case CPDLC_ARG_SQUAWK:
 			if (sscanf(start, "%d", &arg->squawk) != 1 ||
@@ -1710,6 +2259,28 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			cpdlc_unescape_percent(textbuf, arg->freetext, l + 1);
 			start = end;
 			break;
+		case CPDLC_ARG_PERSONS:
+			arg->pob = atoi(start);
+			if (arg->pob > 1024) {
+				MALFORMED_MSG("invalid number of persons on "
+				    "board");
+				return (false);
+			}
+			break;
+		case CPDLC_ARG_POSREPORT: {
+			char tmpbuf[1024];
+
+			arg_end = find_arg_end(start, end);
+			cpdlc_strlcpy(tmpbuf, start, MIN(sizeof (tmpbuf),
+			    (unsigned)(arg_end - start) + 1));
+			cpdlc_unescape_percent(tmpbuf, textbuf,
+			    sizeof (textbuf));
+			if (!parse_posreport(textbuf, &arg->pos_rep,
+			    reason, reason_cap)) {
+				return (false);
+			}
+			break;
+		}
 		}
 
 		SKIP_NONSPACE(start, end);
@@ -2092,7 +2663,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->time.mins = *(int *)arg_val2;
 		break;
 	case CPDLC_ARG_POSITION:
-		cpdlc_strlcpy(arg->pos, arg_val1, sizeof (arg->pos));
+		arg->pos = *(cpdlc_pos_t *)arg_val1;
 		break;
 	case CPDLC_ARG_DIRECTION:
 		arg->dir = *(cpdlc_dir_t *)arg_val1;
@@ -2143,6 +2714,13 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 			free(arg->freetext);
 		arg->freetext = strdup(arg_val1);
 		break;
+	case CPDLC_ARG_PERSONS:
+		arg->pob = *(unsigned *)arg_val1;
+		CPDLC_ASSERT3U(arg->pob, <=, 1024);
+		break;
+	case CPDLC_ARG_POSREPORT:
+		arg->pos_rep = *(cpdlc_pos_rep_t *)arg_val1;
+		break;
 	default:
 		CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) "
 		    "contains invalid argument %d type %x", msg, seg_nr,
@@ -2189,8 +2767,9 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (sizeof (arg->time));
 	case CPDLC_ARG_POSITION:
 		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
-		cpdlc_strlcpy(arg_val1, arg->pos, str_cap);
-		return (strlen(arg->pos));
+		if (str_cap >= sizeof (arg->pos))
+			memcpy(arg_val1, &arg->pos, sizeof (arg->pos));
+		return (sizeof (arg->pos));
 	case CPDLC_ARG_DIRECTION:
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(cpdlc_dir_t *)arg_val1 = arg->dir;
@@ -2253,6 +2832,14 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		}
 		cpdlc_strlcpy(arg_val1, arg->freetext, str_cap);
 		return (strlen(arg->freetext));
+	case CPDLC_ARG_PERSONS:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(unsigned *)arg_val1 = arg->pob;
+		return (sizeof (arg->pob));
+	case CPDLC_ARG_POSREPORT:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(cpdlc_pos_rep_t *)arg_val1 = arg->pos_rep;
+		return (sizeof (arg->pos_rep));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
 	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,

@@ -155,14 +155,14 @@ put_report_info(fans_t *box, const fans_report_t *report, int row, bool is_list)
 		    FMS_FONT_SMALL, "BACK ON ROUTE");
 		break;
 	case CPDLC_UM128_REPORT_LEAVING_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
+		fans_print_alt(&arg1->alt, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "LEAVING ALT");
 		fans_put_str(box, row, data_off, false, data_color,
 		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM129_REPORT_LEVEL_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
+		fans_print_alt(&arg1->alt, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "LEVEL ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,
@@ -171,19 +171,19 @@ put_report_info(fans_t *box, const fans_report_t *report, int row, bool is_list)
 	case CPDLC_UM130_REPORT_PASSING_pos:
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "PASSING POSITION");
-		fans_put_str(box, row, data_off, false, data_color,
-		    FMS_FONT_SMALL, "%s", arg1->pos);
+		fans_put_pos(box, row, data_off, false, &arg1->pos,
+		    NULL, false);
 		break;
 	case CPDLC_UM175_REPORT_REACHING_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
+		fans_print_alt(&arg1->alt, arg1_str, sizeof (arg1_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "REACHING ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,
 		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM180_REPORT_REACHING_BLOCK_alt_TO_alt:
-		fans_print_alt(arg1, arg1_str, sizeof (arg1_str), false);
-		fans_print_alt(arg2, arg2_str, sizeof (arg2_str), false);
+		fans_print_alt(&arg1->alt, arg1_str, sizeof (arg1_str), false);
+		fans_print_alt(&arg2->alt, arg2_str, sizeof (arg2_str), false);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "BLOCK ALTITUDE");
 		fans_put_str(box, row, data_off, false, data_color,
@@ -472,7 +472,8 @@ update_passing_pos(const fans_t *box, fans_report_t *report)
 	 * We've passed a waypoint once becomes our FROM waypoint.
 	 */
 	return (fans_get_prev_wpt(box, &wpt) &&
-	    strcmp(wpt.wpt_name, report->seg->args[0].pos) == 0);
+	    report->seg->args[0].pos.type == CPDLC_POS_FIXNAME &&
+	    strcmp(wpt.wpt_name, report->seg->args[0].pos.fixname) == 0);
 }
 
 static void

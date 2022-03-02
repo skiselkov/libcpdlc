@@ -101,7 +101,7 @@ static void
 draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALTITUDE");
-	fans_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt,
+	fans_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt.alt,
 	    false, true, false);
 
 	if (box->wcw_req.alt.alt.alt >= CRZ_CLB_THRESH) {
@@ -117,11 +117,11 @@ draw_main_page(fans_t *box)
 	    "NONE", "HIGHER", "LOWER", NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "SPD/SPD BLOCK");
-	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0],
+	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0].spd,
 	    false, false, false, false);
 	fans_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_WHITE,
 	    FMS_FONT_LARGE, "/");
-	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1],
+	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1].spd,
 	    false, false, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
@@ -170,13 +170,13 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		bool read_back;
 
 		memset(&arg, 0, sizeof (arg));
-		fans_print_alt(&box->wcw_req.alt, buf, sizeof (buf), false);
+		fans_print_alt(&box->wcw_req.alt.alt, buf, sizeof (buf), false);
 		if (!fans_scratchpad_xfer(box, buf, sizeof (buf), true,
 		    &read_back)) {
 			return (true);
 		}
 		if (strlen(buf) == 0) {
-			memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
+			box->wcw_req.alt.alt = CPDLC_NULL_ALT;
 		} else if ((err = fans_parse_alt(buf, 0, &arg)) !=
 		    FANS_ERR_NONE) {
 			fans_set_error(box, err);

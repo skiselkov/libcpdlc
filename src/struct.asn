@@ -32,79 +32,79 @@ Timeseconds ::= INTEGER (0..59)
 ATCuplinkmsgelementid ::= CHOICE
 {
 	-- UNABLE
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM0NULL				[0] UM0NULL,
 
 	-- STANDBY
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM1NULL				[1] UM1NULL,
 
 	-- REQUEST DEFERRED
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM2NULL				[2] UM2NULL,
 
 	-- ROGER
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM3NULL				[3] UM3NULL,
 
 	-- AFFIRM
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM4NULL				[4] UM4NULL,
 
 	-- NEGATIVE
-	-- Urg(N)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(NE)/Rec()
 	uM5NULL				[5] UM5NULL,
 
 	-- EXPECT [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM6Altitude			[6] UM6Altitude,
 
 	-- EXPECT CLIMB AT [time]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM7Time				[7] UM7Time,
 
 	-- EXPECT CLIMB AT [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM8Position			[8] UM8Position,
 
 	-- EXPECT DESCENT AT [time]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM9Time				[9] UM9Time,
 
 	-- EXPECT DESCENT AT [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM10Position			[10] UM10Position,
 
 	-- EXPECT CRUISE CLIMB AT [time]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM11Time			[11] UM11Time,
 
 	-- EXPECT CRUISE CLIMB AT [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM12Position			[12] UM12Position,
 
 	-- AT [time] EXPECT CLIMB TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM13TimeAltitude		[13] UM13TimeAltitude,
 
 	-- AT [position] EXPECT CLIMB TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM14PositionAltitude		[14] UM14PositionAltitude,
 
 	-- AT [time] EXPECT DESCENT TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM15TimeAltitude		[15] UM15TimeAltitude,
 
 	-- AT [position] EXPECT DESCENT TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM16PositionAltitude		[16] UM16PositionAltitude,
 
 	-- AT [time] EXPECT CRUISE CLIMB TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM17TimeAltitude		[17] UM17TimeAltitude,
 
 	-- AT [position] EXPECT CRUISE CLIMB TO [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM18PositionAltitude		[18] UM18PositionAltitude,
 
 	-- MAINTAIN [altitude]
@@ -199,19 +199,19 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM41Altitude			[41] UM41Altitude,
 
 	-- EXPECT TO CROSS [position] AT [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM42PositionAltitude		[42] UM42PositionAltitude,
 
 	-- EXPECT TO CROSS [position] AT OR ABOVE [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM43PositionAltitude		[43] UM43PositionAltitude,
 
 	-- EXPECT TO CROSS [position] AT OR BELOW [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM44PositionAltitude		[44] UM44PositionAltitude,
 
 	-- EXPECT TO CROSS [position] AT AND MAINTAIN [altitude]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM45PositionAltitude		[45] UM45PositionAltitude,
 
 	-- CROSS [position] AT [altitude]
@@ -235,31 +235,31 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM50PositionAltitudeAltitude	[50] UM50PositionAltitudeAltitude,
 
 	-- CROSS [position] AT [time]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM51PositionTime		[51] UM51PositionTime,
 
 	-- CROSS [position] AT OR BEFORE [time]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM52PositionTime		[52] UM52PositionTime,
 
 	-- CROSS [position] AT OR AFTER [time]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM53PositionTime		[53] UM53PositionTime,
 
 	-- CROSS [position] BETWEEN [time] AND [time]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM54PositionTimeTime		[54] UM54PositionTimeTime,
 
 	-- CROSS [position] AT [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM55PositionSpeed		[55] UM55PositionSpeed,
 
 	-- CROSS [position] AT OR LESS THAN [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM56PositionSpeed		[56] UM56PositionSpeed,
 
 	-- CROSS [position] AT OR GREATER THAN [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM57PositionSpeed		[57] UM57PositionSpeed,
 
 	-- CROSS [position] AT [time] AT [altitude]
@@ -287,40 +287,40 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM63TimePositionAltitudeSpeed	[63] UM63TimePositionAltitudeSpeed,
 
 	-- OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM64DistanceoffsetDirection	[64] UM64DistanceoffsetDirection,
 
 	-- AT [position] OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM65PositionDistanceoffsetDirection
 	    [65] UM65PositionDistanceoffsetDirection,
 
 	-- AT [time] OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM66TimeDistanceoffsetDirection	[66] UM66TimeDistanceoffsetDirection,
 
 	-- PROCEED BACK ON ROUTE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM67NULL			[67] UM67NULL,
 
 	-- REJOIN ROUTE BY [position]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM68Position			[68] UM68Position,
 
 	-- REJOIN ROUTE BY [time]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM69Time			[69] UM69Time,
 
 	-- EXPECT BACK ON ROUTE BY [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM70Position			[70] UM70Position,
 
 	-- EXPECT BACK ON ROUTE BY [time]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM71Time			[71] UM71Time,
 
 	-- RESUME OWN NAVIGATION
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM72NULL			[72] UM72NULL,
 
 	-- [predepartureclearance]
@@ -328,23 +328,23 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM73Predepartureclearance	[73] UM73Predepartureclearance,
 
 	-- PROCEED DIRECT TO [position]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM74Position			[74] UM74Position,
 
 	-- WHEN ABLE PROCEED DIRECT TO [position]
-	--  Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	--  Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM75Position			[75] UM75Position,
 
 	-- AT [time] PROCEED DIRECT TO [position]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM76TimePosition		[76] UM76TimePosition,
 
 	-- AT [position] PROCEED DIRECT TO [position]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM77PositionPosition		[77] UM77PositionPosition,
 
 	-- AT [altitude] PROCEED DIRECT TO [position]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM78AltitudePosition		[78] UM78AltitudePosition,
 
 	-- CLEARED TO [position] VIA [routeclearance]
@@ -360,7 +360,7 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM81Procedurename		[81] UM81Procedurename,
 
 	-- CLEARED TO DEVIATE UP TO [distanceoffset] [direction] OF ROUTE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM82DistanceoffsetDirection	[82] UM82DistanceoffsetDirection,
 
 	-- AT [position] CLEARED [routeclearance]
@@ -372,26 +372,26 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM84PositionProcedurename	[84] UM84PositionProcedurename,
 
 	-- EXPECT [routeclearance]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM85Routeclearance		[85] UM85Routeclearance,
 
 	-- AT [position] EXPECT [routeclearance]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM86PositionRouteclearance	[86] UM86PositionRouteclearance,
 
-	-- EXPECT DIRECT TO [position]	Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- EXPECT DIRECT TO [position]	Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM87Position			[87] UM87Position,
 
 	-- AT [position] EXPECT DIRECT TO [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM88PositionPosition		[88] UM88PositionPosition,
 
 	-- AT [time] EXPECT DIRECT TO [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM89TimePosition		[89] UM89TimePosition,
 
 	-- AT [altitude] EXPECT DIRECT TO [position]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM90AltitudePosition		[90] UM90AltitudePosition,
 
 	-- HOLD AT [position] MAINTAIN [altitude] INBOUND
@@ -404,23 +404,23 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM92PositionAltitude		[92] UM92PositionAltitude,
 
 	-- EXPECT FURTHER CLEARANCE AT [time]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM93Time			[93] UM93Time,
 
 	-- TURN [direction] HEADING [degrees]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM94DirectionDegrees		[94] UM94DirectionDegrees,
 
 	-- TURN [direction] GROUND TRACK [degrees]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM95DirectionDegrees		[95] UM95DirectionDegrees,
 
 	-- FLY PRESENT HEADING
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM96NULL			[96] UM96NULL,
 
 	-- AT [position] FLY HEADING [degrees]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM97PositionDegrees		[97] UM97PositionDegrees,
 
 	-- IMMEDIATELY TURN [direction] HEADING [degrees]
@@ -428,322 +428,322 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM98DirectionDegrees		[98] UM98DirectionDegrees,
 
 	-- EXPECT [procedurename]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec(EC)
+	-- Urg(L)/Alr(V)/Resp(R)/Rec(EC)
 	uM99Procedurename		[99] UM99Procedurename,
 
 	-- AT [time] EXPECT [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM100TimeSpeed			[100] UM100TimeSpeed,
 
 	-- AT [position] EXPECT [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM101PositionSpeed		[101] UM101PositionSpeed,
 
 	-- AT [altitude] EXPECT [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM102AltitudeSpeed		[102] UM102AltitudeSpeed,
 
 	-- AT [time] EXPECT [speed] TO [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM103TimeSpeedSpeed		[103] UM103TimeSpeedSpeed,
 
 	-- AT [position] EXPECT [speed] TO [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM104PositionSpeedSpeed		[104] UM104PositionSpeedSpeed,
 
 	-- AT [altitude] EXPECT [speed] TO [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM105AltitudeSpeedSpeed		[105] UM105AltitudeSpeedSpeed,
 
 	-- MAINTAIN [speed]
-	-- Urg(L)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(R)/Rec()
 	uM106Speed			[106] UM106Speed,
 
 	-- MAINTAIN PRESENT SPEED
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM107NULL			[107] UM107NULL,
 
 	-- MAINTAIN [speed] OR GREATER
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM108Speed			[108] UM108Speed,
 
 	-- MAINTAIN [speed] OR LESS
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM109Speed			[109] UM109Speed,
 
 	-- MAINTAIN [speed] TO [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM110SpeedSpeed			[110] UM110SpeedSpeed,
 
 	-- INCREASE SPEED TO [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM111Speed			[111] UM111Speed,
 
 	-- INCREASE SPEED TO [speed] OR GREATER
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM112Speed			[112] UM112Speed,
 
 	-- REDUCE SPEED TO [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM113Speed			[113] UM113Speed,
 
 	-- REDUCE SPEED TO [speed] OR LESS
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM114Speed			[114] UM114Speed,
 
 	-- DO NOT EXCEED [speed]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM115Speed			[115] UM115Speed,
 
 	-- RESUME NORMAL SPEED
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM116NULL			[116] UM116NULL,
 
 	-- CONTACT [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM117ICAOunitnameFrequency	[117] UM117ICAOunitnameFrequency,
 
 	-- AT [position] CONTACT [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM118PositionICAOunitnameFrequency
 	    [118] UM118PositionICAOunitnameFrequency,
 
 	-- AT [time] CONTACT [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM119TimeICAOunitnameFrequency	[119] UM119TimeICAOunitnameFrequency,
 
 	-- MONITOR [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM120ICAOunitnameFrequency	[120] UM120ICAOunitnameFrequency,
 
 	-- AT [position] MONITOR [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM121PositionICAOunitnameFrequency
 	    [121] UM121PositionICAOunitnameFrequency,
 
 	-- AT [time] MONITOR [icaounitname] [frequency]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM122TimeICAOunitnameFrequency	[122] UM122TimeICAOunitnameFrequency,
 
 	-- SQUAWK [beaconcode]
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM123Beaconcode			[123] UM123Beaconcode,
 
 	-- STOP SQUAWK
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM124NULL			[124] UM124NULL,
 
 	-- SQUAWK ALTITUDE
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM125NULL			[125] UM125NULL,
 
 	-- STOP ALTITUDE SQUAWK
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM126NULL			[126] UM126NULL,
 
 	-- REPORT BACK ON ROUTE
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM127NULL			[127] UM127NULL,
 
 	-- REPORT LEAVING [altitude]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM128Altitude			[128] UM128Altitude,
 
 	-- REPORT LEVEL [altitude]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM129Altitude			[129] UM129Altitude,
 
 	-- REPORT PASSING [position]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM130Position			[130] UM130Position,
 
 	-- REPORT REMAINING FUEL AND SOULS ON BOARD
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM131NULL			[131] UM131NULL,
 
 	-- CONFIRM POSITION
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM132NULL			[132] UM132NULL,
 
 	-- CONFIRM ALTITUDE
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM133NULL			[133] UM133NULL,
 
 	-- CONFIRM SPEED
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM134NULL			[134] UM134NULL,
 
 	-- CONFIRM ASSIGNED ALTITUDE
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM135NULL			[135] UM135NULL,
 
 	-- CONFIRM ASSIGNED SPEED
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM136NULL			[136] UM136NULL,
 
 	-- CONFIRM ASSIGNED ROUTE
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM137NULL			[137] UM137NULL,
 
 	-- CONFIRM TIME OVER REPORTED WAYPOINT
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM138NULL			[138] UM138NULL,
 
 	-- CONFIRM REPORTED WAYPOINT
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM139NULL			[139] UM139NULL,
 
 	-- CONFIRM NEXT WAYPOINT
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM140NULL			[140] UM140NULL,
 
 	-- CONFIRM NEXT WAYPOINT ETA
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM141NULL			[141] UM141NULL,
 
 	-- CONFIRM ENSUING WAYPOINT
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM142NULL			[142] UM142NULL,
 
 	-- CONFIRM REQUEST
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM143NULL			[143] UM143NULL,
 
 	-- CONFIRM SQUAWK
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM144NULL			[144] UM144NULL,
 
 	-- CONFIRM HEADING
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM145NULL			[145] UM145NULL,
 
 	-- CONFIRM GROUND TRACK
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM146NULL			[146] UM146NULL,
 
 	-- REQUEST POSITION REPORT
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM147NULL			[147] UM147NULL,
 
 	-- WHEN CAN YOU ACCEPT [altitude]
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM148Altitude			[148] UM148Altitude,
 
 	-- CAN YOU ACCEPT [altitude] AT [position]
-	-- Urg(N)/Alr(A)/Resp(A/N)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(A/N)/Rec()
 	uM149AltitudePosition 		[149] UM149AltitudePosition,
 
 	-- CAN YOU ACCEPT [altitude] AT [time]
-	-- Urg(N)/Alr(A)/Resp(A/N)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(A/N)/Rec()
 	uM150AltitudeTime		[150] UM150AltitudeTime,
 
 	-- WHEN CAN YOU ACCEPT [speed]
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM151Speed			[151] UM151Speed,
 
 	-- WHEN CAN YOU ACCEPT [distanceoffset] [direction] OFFSET
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM152DistanceoffsetDirection	[152] UM152DistanceoffsetDirection,
 
 	-- ALTIMETER [altimeter]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM153Altimeter			[153] UM153Altimeter,
 
 	-- RADAR SERVICES TERMINATED
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM154NULL			[154] UM154NULL,
 
 	-- RADAR CONTACT [position]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM155Position			[155] UM155Position,
 
 	-- RADAR CONTACT LOST
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM156NULL			[156] UM156NULL,
 
 	-- CHECK STUCK MICROPHONE [frequency]
-	-- Urg(U)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(U)/Alr(A)/Resp(R)/Rec()
 	uM157Frequency			[157] UM157Frequency,
 
 	-- ATIS [atiscode]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM158Atiscode			[158] UM158Atiscode,
 
 	-- ERROR [errorinformation]
-	-- Urg(U)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(U)/Alr(A)/Resp(NE)/Rec()
 	uM159Errorinformation		[159] UM159Errorinformation,
 
 	-- NEXT DATA AUTHORITY [icaofacilitydesignation]
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM160ICAOfacilitydesignation	[160] UM160ICAOfacilitydesignation,
 
 	-- END SERVICE
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM161NULL			[161] UM161NULL,
 
 	-- SERVICE UNAVAILABLE
-	-- Urg(L)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(NE)/Rec()
 	uM162NULL			[162] UM162NULL,
 
 	-- [icaofacilitydesignation] [tp4table]
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM163ICAOfacilitydesignationTp4table
 	    [163] UM163ICAOfacilitydesignationTp4table,
 
 	-- WHEN READY
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM164NULL			[164] UM164NULL,
 
 	-- THEN
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM165NULL			[165] UM165NULL,
 
 	-- DUE TO TRAFFIC
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM166NULL			[166] UM166NULL,
 
 	-- DUE TO AIRSPACE RESTRICTION
-	-- Urg(L)/Alr(N)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(N)/Resp(NE)/Rec()
 	uM167NULL			[167] UM167NULL,
 
 	-- DISREGARD
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM168NULL			[168] UM168NULL,
 
 	-- [freetext]
-	-- Urg(N)/Alr(V)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(V)/Resp(R)/Rec()
 	uM169Freetext			[169] UM169Freetext,
 
 	-- [freetext]
-	-- Urg(D)/Alr(A/D)/Resp( R )/Rec( )
+	-- Urg(D)/Alr(A/D)/Resp(R)/Rec()
 	uM170Freetext			[170] UM170Freetext,
 
 	-- CLIMB AT [verticalrate] MINIMUM
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM171Verticalrate		[171] UM171Verticalrate,
 
 	-- CLIMB AT [verticalrate] MAXIMUM
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM172Verticalrate		[172] UM172Verticalrate,
 
 	-- DESCEND AT [verticalrate] MINIMUM
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM173Verticalrate		[173] UM173Verticalrate,
 
 	-- DESCEND AT [verticalrate] MAXIMUM
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM174Verticalrate		[174] UM174Verticalrate,
 
 	-- REPORT REACHING [altitude]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM175Altitude			[175] UM175Altitude,
 
 	-- MAINTAIN OWN SEPARATION AND VMC
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM176NULL			[176] UM176NULL,
 
 	-- AT PILOTS DISCRETION
-	-- Urg(L)/Alr(V)/Resp(NE )/Rec( )
+	-- Urg(L)/Alr(V)/Resp(NE)/Rec()
 	uM177NULL			[177] UM177NULL,
 
 	-- [trackdetailmsg-deleted]
@@ -751,19 +751,19 @@ ATCuplinkmsgelementid ::= CHOICE
 	uM178NULL			[178] UM178NULL,
 
 	-- SQUAWK IDENT
-	-- Urg(N)/Alr(A)/Resp(W/U)/Rec( )
+	-- Urg(N)/Alr(A)/Resp(W/U)/Rec()
 	uM179NULL			[179] UM179NULL,
 
 	-- REPORT REACHING BLOCK [altitude] TO [altitude]
-	-- Urg(N)/Alr(A)/Resp( R )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(R)/Rec()
 	uM180AltitudeAltitude		[180] UM180AltitudeAltitude,
 
 	-- REPORT DISTANCE [tofrom] [position]
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM181TofromPosition		[181] UM181TofromPosition,
 
 	-- CONFIRM ATIS CODE
-	-- Urg(N)/Alr(A)/Resp(NE )/Rec( )
+	-- Urg(N)/Alr(A)/Resp(NE)/Rec()
 	uM182NULL			[182] UM182NULL
 }
 -- Note: End of ATCuplinkmsgelementid CHOICE Data Structure
@@ -963,330 +963,330 @@ ATCdownlinkmessage ::= SEQUENCE
 ATCdownlinkmsgelementid ::= CHOICE
 {
 	-- WILCO
-	-- Resp ( N )
+	-- Resp(N)
 	dM0NULL				[0] DM0NULL,
 	
 	-- UNABLE
-	-- Resp ( N )
+	-- Resp(N)
 	dM1NULL				[1] DM1NULL,
 
 	-- STANDBY
-	-- Resp ( N )
+	-- Resp(N)
 	dM2NULL				[2] DM2NULL,
 
 	-- ROGER
-	-- Resp ( N )
+	-- Resp(N)
 	dM3NULL				[3] DM3NULL,
 
 	-- AFFIRM
-	-- Resp ( N )
+	-- Resp(N)
 	dM4NULL				[4] DM4NULL,
 
 	-- NEGATIVE
-	-- Resp ( N )
+	-- Resp(N)
 	dM5NULL				[5] DM5NULL,
 
 	-- REQUEST [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM6Altitude			[6] DM6Altitude,
 
 	-- REQUEST BLOCK [altitude] TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM7AltitudeAltitude		[7] DM7AltitudeAltitude,
 
 	-- REQUEST CRUISE CLIMB TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM8Altitude			[8] DM8Altitude,
 
 	-- REQUEST CLIMB TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM9Altitude			[9] DM9Altitude,
 
 	-- REQUEST DESCENT TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM10Altitude			[10] DM10Altitude,
 
 	-- AT [position] REQUEST CLIMB TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM11PositionAltitude		[11] DM11PositionAltitude,
 
 	-- AT [position] REQUEST DESCENT TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM12PositionAltitude		[12] DM12PositionAltitude,
 
 	-- AT [time] REQUEST CLIMB TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM13TimeAltitude		[13] DM13TimeAltitude,
 
 	-- AT [time] REQUEST DESCENT TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM14TimeAltitude		[14] DM14TimeAltitude,
 
 	-- REQUEST OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM15DistanceoffsetDirection	[15] DM15DistanceoffsetDirection,
 
 	-- AT [position] REQUEST OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM16PositionDistanceoffsetDirection
 	    [16] DM16PositionDistanceoffsetDirection,
 
 	-- AT [time] REQUEST OFFSET [distanceoffset] [direction] OF ROUTE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM17TimeDistanceoffsetDirection	[17] DM17TimeDistanceoffsetDirection,
 
 	-- REQUEST [speed]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM18Speed			[18] DM18Speed,
 
 	-- REQUEST [speed] TO [speed]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM19SpeedSpeed			[19] DM19SpeedSpeed,
 
 	-- REQUEST VOICE CONTACT
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM20NULL			[20] DM20NULL,
 
 	-- REQUEST VOICE CONTACT [frequency]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM21Frequency			[21] DM21Frequency,
 
 	-- REQUEST DIRECT TO [position]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM22Position			[22] DM22Position,
 
 	-- REQUEST [procedurename]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM23Procedurename		[23] DM23Procedurename,
 
 	-- REQUEST [routeclearance]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM24Routeclearance		[24] DM24Routeclearance,
 
 	-- REQUEST CLEARANCE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM25NULL			[25] DM25NULL,
 
 	-- REQUEST WEATHER DEVIATION TO [position] VIA [routeclearance]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM26PositionRouteclearance	[26] DM26PositionRouteclearance,
 
 	-- REQUEST WEATHER DEVIATION UP
 	-- TO [distanceoffset] [direction] OF ROUTE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM27DistanceoffsetDirection	[27] DM27DistanceoffsetDirection,
 
 	-- LEAVING [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM28Altitude			[28] DM28Altitude,
 
 	-- CLIMBING TO [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM29Altitude			[29] DM29Altitude,
 
 	-- DESCENDING TO [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM30Altitude			[30] DM30Altitude,
 
 	-- PASSING [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM31Position			[31] DM31Position,
 
 	-- PRESENT ALTITUDE [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM32Altitude			[32] DM32Altitude,
 
 	-- PRESENT POSITION [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM33Position			[33] DM33Position,
 
 	-- PRESENT SPEED [speed]
-	-- Resp ( N )
+	-- Resp(N)
 	dM34Speed			[34] DM34Speed,
 
 	-- PRESENT HEADING [degrees]
-	-- Resp ( N )
+	-- Resp(N)
 	dM35Degrees			[35] DM35Degrees,
 
 	-- PRESENT GROUND TRACK [degrees]
-	-- Resp ( N )
+	-- Resp(N)
 	dM36Degrees			[36] DM36Degrees,
 
 	-- LEVEL [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM37Altitude			[37] DM37Altitude,
 
 	-- ASSIGNED ALTITUDE [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM38Altitude			[38] DM38Altitude,
 
 	-- ASSIGNED SPEED [speed]
-	-- Resp ( N )
+	-- Resp(N)
 	dM39Speed			[39] DM39Speed,
 
 	-- ASSIGNED ROUTE [routeclearance]
-	-- Resp ( N )
+	-- Resp(N)
 	dM40Routeclearance		[40] DM40Routeclearance,
 
 	-- BACK ON ROUTE
-	-- Resp ( N )
+	-- Resp(N)
 	dM41NULL			[41] DM41NULL,
 
 	-- NEXT WAYPOINT [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM42Position			[42] DM42Position,
 
 	-- NEXT WAYPOINT ETA [time]
-	-- Resp ( N )
+	-- Resp(N)
 	dM43Time			[43] DM43Time,
 
 	-- ENSUING WAYPOINT [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM44Position			[44] DM44Position,
 
 	-- REPORTED WAYPOINT [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM45Position			[45] DM45Position,
 
 	-- REPORTED WAYPOINT [time]
-	-- Resp ( N )
+	-- Resp(N)
 	dM46Time			[46] DM46Time,
 
 	-- SQUAWKING [beaconcode]
-	-- Resp ( N )
+	-- Resp(N)
 	dM47Beaconcode			[47] DM47Beaconcode,
 
 	-- POSITION REPORT [positionreport]
-	-- Resp ( N )
+	-- Resp(N)
 	dM48Positionreport		[48] DM48Positionreport,
 
 	-- WHEN CAN WE EXPECT [speed]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM49Speed			[49] DM49Speed,
 
 	-- WHEN CAN WE EXPECT [speed] TO [speed]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM50SpeedSpeed			[50] DM50SpeedSpeed,
 
 	-- WHEN CAN WE EXPECT BACK ON ROUTE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM51NULL			[51] DM51NULL,
 
 	-- WHEN CAN WE EXPECT LOWER ALTITUDE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM52NULL			[52] DM52NULL,
 
 	-- WHEN CAN WE EXPECT HIGHER ALTITUDE
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM53NULL			[53] DM53NULL,
 
 	-- WHEN CAN WE EXPECT CRUISE CLIMB TO [altitude]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM54Altitude			[54] DM54Altitude,
 
 	-- PAN PAN PAN
-	-- Resp ( N )
+	-- Resp(N)
 	dM55NULL			[55] DM55NULL,
 
 	-- MAYDAY MAYDAY MAYDAY
-	-- Resp ( N )
+	-- Resp(N)
 	dM56NULL			[56] DM56NULL,
 
 	-- [remainingfuel] OF FUEL REMAINING AND
 	-- [remainingsouls] SOULS ON BOARD
-	-- Resp ( N )
+	-- Resp(N)
 	dM57RemainingfuelRemainingsouls	[57] DM57RemainingfuelRemainingsouls,
 
 	-- CANCEL EMERGENCY
-	-- Resp ( N )
+	-- Resp(N)
 	dM58NULL			[58] DM58NULL,
 
 	-- DIVERTING TO [position] VIA [routeclearance]
-	-- Resp ( N )
+	-- Resp(N)
 	dM59PositionRouteclearance	[59] DM59PositionRouteclearance,
 
 	-- OFFSETTING [distanceoffset] [direction] OF ROUTE
-	-- Resp ( N )
+	-- Resp(N)
 	dM60DistanceoffsetDirection	[60] DM60DistanceoffsetDirection,
 
 	-- DESCENDING TO [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM61Altitude			[61] DM61Altitude,
 
 	-- ERROR [errorinformation]
-	-- Resp ( N )
+	-- Resp(N)
 	dM62Errorinformation		[62] DM62Errorinformation,
 
 	-- NOT CURRENT DATA AUTHORITY
-	-- Resp ( N )
+	-- Resp(N)
 	dM63NULL			[63] DM63NULL,
 
 	-- CURRENT DATA AUTHORITY [icaofacilitydesignation]
-	-- Resp ( N )
+	-- Resp(N)
 	dM64ICAOfacilitydesignation	[64] DM64ICAOfacilitydesignation,
 
 	-- DUE TO WEATHER
-	-- Resp ( N )
+	-- Resp(N)
 	dM65NULL			[65] DM65NULL,
 
 	-- DUE TO AIRCRAFT PERFORMANCE
-	-- Resp ( N )
+	-- Resp(N)
 	dM66NULL			[66] DM66NULL,
 
 	-- Note: The ATS Provider System peer will assign an Urgency of Low
 	-- for messsage element [67].
 	-- [freetext]
-	-- Resp ( N )
+	-- Resp(N)
 	dM67Freetext			[67] DM67Freetext,
 
 	-- Note: The ATS Provider System peer will assign an Urgency of
 	-- Distress for message element [68].
 	-- [freetext]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM68Freetext			[68] DM68Freetext,
 
 	-- REQUEST VMC DESCENT
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM69NULL			[69] DM69NULL,
 
 	-- REQUEST HEADING [degrees]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM70Degrees			[70] DM70Degrees,
 
 	-- REQUEST GROUND TRACK [degrees]
-	-- Resp ( Y )
+	-- Resp(Y)
 	dM71Degrees			[71] DM71Degrees,
 
 	-- REACHING [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM72Altitude			[72] DM72Altitude,
 
 	-- [versionnumber]
-	-- Resp ( N )
+	-- Resp(N)
 	dM73Versionnumber		[73] DM73Versionnumber,
 
 	-- MAINTAIN OWN SEPARATION AND VMC
-	-- Resp ( N )
+	-- Resp(N)
 	dM74NULL			[74] DM74NULL,
 
 	-- AT PILOTS DISCRETION
-	-- Resp ( N )
+	-- Resp(N)
 	dM75NULL			[75] DM75NULL,
 
 	-- REACHING BLOCK [altitude] TO [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM76AltitudeAltitude		[76] DM76AltitudeAltitude,
 
 	-- ASSIGNED BLOCK [altitude] TO [altitude]
-	-- Resp ( N )
+	-- Resp(N)
 	dM77AltitudeAltitude		[77] DM77AltitudeAltitude,
 
 	-- AT [time] [distance] [tofrom] [position]
-	-- Resp ( N )
+	-- Resp(N)
 	dM78TimeDistanceTofromPosition	[78] DM78TimeDistanceTofromPosition,
 
 	-- ATIS [atiscode]
-	-- Resp ( N )
+	-- Resp(N)
 	dM79Atiscode			[79] DM79Atiscode,
 
 	-- DEVIATING [distanceoffset] [direction] OF ROUTE

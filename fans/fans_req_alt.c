@@ -141,12 +141,12 @@ draw_main_page(fans_t *box)
 	CPDLC_ASSERT(box != NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALT/ALT BLOCK");
-	fans_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0], NULL,
-	    true, false);
+	fans_put_alt(box, LSK1_ROW, 0, false, &box->alt_req.alt[0].alt,
+	    NULL, true, false);
 	fans_put_str(box, LSK1_ROW, 5, false, FMS_COLOR_WHITE,
 	    FMS_FONT_LARGE, "/");
-	fans_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1], NULL,
-	    false, false);
+	fans_put_alt(box, LSK1_ROW, 6, false, &box->alt_req.alt[1].alt,
+	    NULL, false, false);
 
 	fans_req_draw_due(box, false);
 

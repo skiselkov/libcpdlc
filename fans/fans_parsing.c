@@ -168,11 +168,12 @@ fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
-		int l = fans_print_alt(outarg, str, READ_FUNC_BUF_SZ, false);
+		int l = fans_print_alt(&outarg->alt, str, READ_FUNC_BUF_SZ,
+		    false);
 		if (outarg[1].alt.alt != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
-			fans_print_alt(&outarg[1], &str[l],
+			fans_print_alt(&(outarg[1].alt), &str[l],
 			    READ_FUNC_BUF_SZ - l, false);
 		}
 	}
@@ -255,12 +256,12 @@ fans_read_spd_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 	outarg = ((void *)box) + offset;
 
 	if (outarg->alt.alt != 0) {
-		int l = fans_print_spd(outarg, str, READ_FUNC_BUF_SZ, false,
-		    false);
+		int l = fans_print_spd(&outarg->spd, str, READ_FUNC_BUF_SZ,
+		    false, false);
 		if (outarg[1].spd.spd != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
-			fans_print_spd(&outarg[1], &str[l],
+			fans_print_spd(&(outarg[1].spd), &str[l],
 			    READ_FUNC_BUF_SZ - l, false, false);
 		}
 	}
@@ -352,44 +353,44 @@ fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
 	offset = (uintptr_t)userinfo;
 	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
 	outarg = ((void *)box) + offset;
-	memset(outarg, 0, 2 * sizeof (cpdlc_arg_t));
+	memset(outarg, 0, 2 * sizeof (*outarg));
 
 	return (FANS_ERR_NONE);
 }
 
 int
-fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units)
+fans_print_alt(const cpdlc_alt_t *alt, char *str, size_t cap, bool units)
 {
-	CPDLC_ASSERT(arg != NULL);
-	if (arg->alt.fl) {
+	CPDLC_ASSERT(alt != NULL);
+	if (alt->fl) {
 		return (snprintf(str, cap, "FL%d",
-		    (int)round(arg->alt.alt / 100.0)));
+		    (int)round(alt->alt / 100.0)));
 	}
-	return (snprintf(str, cap, "%d%s", arg->alt.alt, units ? "FT" : ""));
+	return (snprintf(str, cap, "%d%s", alt->alt, units ? "FT" : ""));
 }
 
 int
-fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool pretty,
+fans_print_spd(const cpdlc_spd_t *spd, char *str, size_t cap, bool pretty,
     bool units)
 {
-	CPDLC_ASSERT(arg != NULL);
-	if (arg->spd.mach) {
+	CPDLC_ASSERT(spd != NULL);
+	if (spd->mach) {
 		if (pretty) {
 			return (snprintf(str, cap, ".%02d MACH",
-			    arg->spd.spd / 10));
+			    spd->spd / 10));
 		} else if (units) {
 			return (snprintf(str, cap, "M.%02d",
-			    arg->spd.spd / 10));
+			    spd->spd / 10));
 		} else {
-			return (snprintf(str, cap, ".%02d", arg->spd.spd / 10));
+			return (snprintf(str, cap, ".%02d", spd->spd / 10));
 		}
 	} else {
 		if (pretty && units)
-			return (snprintf(str, cap, "%03d KT", arg->spd.spd));
+			return (snprintf(str, cap, "%03d KT", spd->spd));
 		else if (units)
-			return (snprintf(str, cap, "%03dKT", arg->spd.spd));
+			return (snprintf(str, cap, "%03dKT", spd->spd));
 		else
-			return (snprintf(str, cap, "%03d", arg->spd.spd));
+			return (snprintf(str, cap, "%03d", spd->spd));
 	}
 }
 
@@ -406,7 +407,7 @@ fans_print_off(const fms_off_t *off, char *buf, size_t cap)
 }
 
 void
-fans_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
+fans_print_pos(const cpdlc_pos_t *pos, char *buf, size_t bufsz,
     pos_print_style_t style)
 {
 	CPDLC_ASSERT(pos != NULL);
@@ -415,41 +416,47 @@ fans_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
 	if (!pos->set) {
 		if (style == POS_PRINT_PRETTY) {
 			switch (pos->type) {
-			case FMS_POS_NAVAID:
-			case FMS_POS_ARPT:
+			case CPDLC_POS_NAVAID:
+			case CPDLC_POS_AIRPORT:
 				cpdlc_strlcpy(buf, "____", bufsz);
 				break;
-			case FMS_POS_FIX:
+			case CPDLC_POS_FIXNAME:
 				cpdlc_strlcpy(buf, "_____", bufsz);
 				break;
-			case FMS_POS_LAT_LON:
+			case CPDLC_POS_LAT_LON:
 				snprintf(buf, bufsz, "___`__.__ ____`__.__");
 				break;
-			case FMS_POS_PBD:
+			case CPDLC_POS_PBD:
 				snprintf(buf, bufsz, "___/___/___");
 				break;
+			default:
+				CPDLC_VERIFY_MSG(0, "Invalid position type %x",
+				    pos->type);
 			}
 		} else {
 			buf[0] = '\0';
 		}
 		return;
 	}
-
 	switch (pos->type) {
-	case FMS_POS_NAVAID:
-	case FMS_POS_ARPT:
-		cpdlc_strlcpy(buf, pos->name, bufsz);
+	case CPDLC_POS_NAVAID:
+		cpdlc_strlcpy(buf, pos->navaid, bufsz);
 		break;
-	case FMS_POS_FIX:
-		cpdlc_strlcpy(buf, pos->name, bufsz);
+	case CPDLC_POS_AIRPORT:
+		cpdlc_strlcpy(buf, pos->airport, bufsz);
 		break;
-	case FMS_POS_LAT_LON: {
-		int lat = fabs(pos->lat);
-		int lon = fabs(pos->lon);
-		char ns = (pos->lat >= 0 ? 'N' : 'S');
-		char ew = (pos->lon >= 0 ? 'E' : 'W');
-		double lat_mins = fabs(pos->lat - trunc(pos->lat)) * 60;
-		double lon_mins = fabs(pos->lon - trunc(pos->lon)) * 60;
+	case CPDLC_POS_FIXNAME:
+		cpdlc_strlcpy(buf, pos->fixname, bufsz);
+		break;
+	case CPDLC_POS_LAT_LON: {
+		int lat = fabs(pos->lat_lon.lat);
+		int lon = fabs(pos->lat_lon.lon);
+		char ns = (pos->lat_lon.lat >= 0 ? 'N' : 'S');
+		char ew = (pos->lat_lon.lon >= 0 ? 'E' : 'W');
+		double lat_mins = fabs(pos->lat_lon.lat -
+		    trunc(pos->lat_lon.lat)) * 60;
+		double lon_mins = fabs(pos->lat_lon.lon -
+		    trunc(pos->lat_lon.lon)) * 60;
 
 		if (style == POS_PRINT_PRETTY) {
 			snprintf(buf, bufsz, "%c%02d`%05.2f %c%03d`%05.2f",
@@ -465,9 +472,13 @@ fans_print_pos(const fms_pos_t *pos, char *buf, size_t bufsz,
 		}
 		break;
 	}
-	case FMS_POS_PBD:
-		snprintf(buf, bufsz, "%s/%03d/%d", pos->name, pos->brg,
-		    pos->dist);
+	case CPDLC_POS_PBD:
+		snprintf(buf, bufsz, "%s/%03d/%.*f", pos->pbd.fixname,
+		    pos->pbd.degrees, pos->pbd.dist_nm < 99.95 ? 1 : 0,
+		    pos->pbd.dist_nm);
+		break;
+	case CPDLC_POS_UNKNOWN:
+		cpdlc_strlcpy(buf, pos->str, bufsz);
 		break;
 	}
 }
@@ -533,36 +544,31 @@ strip_spaces(char *buf)
 }
 
 fans_err_t
-fans_parse_pos(const char *buf, fms_pos_t *pos)
+fans_parse_pos(const char *buf, cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(buf != NULL);
 	CPDLC_ASSERT(pos != NULL);
 
-	if (strlen(buf) == 0) {
-		pos->set = false;
+	if (strlen(buf) == 0)
 		return (FANS_ERR_NONE);
-	}
 
 	switch (pos->type) {
-	case FMS_POS_NAVAID:
+	case CPDLC_POS_NAVAID:
 		if (strlen(buf) > 4)
 			return (FANS_ERR_INVALID_ENTRY);
-		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-		pos->set = true;
+		cpdlc_strlcpy(pos->navaid, buf, sizeof (pos->navaid));
 		break;
-	case FMS_POS_ARPT:
+	case CPDLC_POS_AIRPORT:
 		if (!is_valid_icao_code(buf))
 			return (FANS_ERR_INVALID_ENTRY);
-		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-		pos->set = true;
+		cpdlc_strlcpy(pos->airport, buf, sizeof (pos->airport));
 		break;
-	case FMS_POS_FIX:
+	case CPDLC_POS_FIXNAME:
 		if (strlen(buf) > 5)
 			return (FANS_ERR_INVALID_ENTRY);
-		cpdlc_strlcpy(pos->name, buf, sizeof (pos->name));
-		pos->set = true;
+		cpdlc_strlcpy(pos->fixname, buf, sizeof (pos->fixname));
 		break;
-	case FMS_POS_LAT_LON: {
+	case CPDLC_POS_LAT_LON: {
 		char inbuf[32], lat_buf[16], lon_buf[16];
 		const char *lat_str, *lon_str;
 		double lat_sign = 1, lon_sign = 1;
@@ -590,16 +596,16 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 		cpdlc_strlcpy(lon_buf, &lon_str[1], sizeof (lon_buf));
 		if (!parse_deg_mins(lat_buf, 2, &degs, &mins))
 			return (FANS_ERR_INVALID_ENTRY);
-		pos->lat = lat_sign * (degs + (mins / 60));
+		pos->lat_lon.lat = lat_sign * (degs + (mins / 60));
 		if (!parse_deg_mins(lon_buf, 3, &degs, &mins))
 			return (FANS_ERR_INVALID_ENTRY);
-		pos->lon = lon_sign * (degs + (mins / 60));
-		pos->set = true;
+		pos->lat_lon.lon = lon_sign * (degs + (mins / 60));
 
 		break;
 	}
-	case FMS_POS_PBD: {
-		int brg, dist;
+	case CPDLC_POS_PBD: {
+		int brg;
+		double dist_nm;
 		const char *s1, *s2;
 
 		s1 = strchr(buf, '/');
@@ -609,17 +615,18 @@ fans_parse_pos(const char *buf, fms_pos_t *pos)
 			return (FANS_ERR_INVALID_ENTRY);
 		}
 		if (sscanf(&s1[1], "%d", &brg) != 1 ||
-		    sscanf(&s2[1], "%d", &dist) != 1 ||
-		    brg < 0 || brg > 360 || dist < 1 || dist > 999) {
+		    sscanf(&s2[1], "%lf", &dist_nm) != 1 ||
+		    brg <= 0 || brg > 360 || dist_nm < 0.1 || dist_nm > 999) {
 			return (FANS_ERR_INVALID_ENTRY);
 		}
-
-		cpdlc_strlcpy(pos->name, buf, (s1 - buf) + 1);
-		pos->brg = brg % 360;
-		pos->dist = dist;
-		pos->set = true;
+		cpdlc_strlcpy(pos->pbd.fixname, buf,
+		    MIN(sizeof (pos->pbd.fixname), (unsigned)(s1 - buf) + 1));
+		pos->pbd.degrees = brg;
+		pos->pbd.dist_nm = dist_nm;
 		break;
 	}
+	case CPDLC_POS_UNKNOWN:
+		CPDLC_VERIFY_MSG(0, "Invalid position type %x", pos->type);
 	}
 
 	return (FANS_ERR_NONE);

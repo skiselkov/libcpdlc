@@ -295,13 +295,13 @@ typedef enum {
 	CPDLC_DM52_WHEN_CAN_WE_EXPECT_LOWER_ALT,
 	CPDLC_DM53_WHEN_CAN_WE_EXPECT_HIGHER_ALT,
 	CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt,
-	CPDLC_DM55_UNUSED,
-	CPDLC_DM56_UNUSED,
-	CPDLC_DM57_UNUSED,
-	CPDLC_DM58_UNUSED,
-	CPDLC_DM59_UNUSED,
-	CPDLC_DM60_UNUSED,
-	CPDLC_DM61_UNUSED,
+	CPDLC_DM55_PAN_PAN_PAN,
+	CPDLC_DM56_MAYDAY_MAYDAY_MAYDAY,
+	CPDLC_DM57_RMNG_FUEL_AND_POB,
+	CPDLC_DM58_CANCEL_EMERG,
+	CPDLC_DM59_DIVERTING_TO_pos_VIA_route,
+	CPDLC_DM60_OFFSETTING_dist_dir_OF_ROUTE,
+	CPDLC_DM61_DESCENDING_TO_alt,
 	CPDLC_DM62_ERROR_errorinfo,
 	CPDLC_DM63_NOT_CURRENT_DATA_AUTHORITY,
 	CPDLC_DM64_CURRENT_DATA_AUTHORITY_id,
@@ -360,7 +360,9 @@ typedef enum {
 	CPDLC_ARG_FREQUENCY,
 	CPDLC_ARG_DEGREES,
 	CPDLC_ARG_BARO,
-	CPDLC_ARG_FREETEXT
+	CPDLC_ARG_FREETEXT,
+	CPDLC_ARG_PERSONS,
+	CPDLC_ARG_POSREPORT
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -378,7 +380,7 @@ typedef enum {
 } cpdlc_dir_t;
 
 #define	CPDLC_NULL_SPD		((cpdlc_spd_t){0, 0})
-#define	CPDLC_IS_NULL_SPD(spd)	((spd).spd == 0)
+#define	CPDLC_IS_NULL_SPD(_sp)	((_sp).spd == 0)
 
 typedef struct {
 	bool			mach;
@@ -386,7 +388,7 @@ typedef struct {
 } cpdlc_spd_t;
 
 #define	CPDLC_NULL_ALT		((cpdlc_alt_t){false, false, -9999})
-#define	CPDLC_IS_NULL_ALT(a)	((a).alt <= -9999)
+#define	CPDLC_IS_NULL_ALT(a)	((a).alt <= -2000)
 
 typedef struct {
 	bool			fl;	/* flight level? */
@@ -446,17 +448,23 @@ typedef enum {
 	CPDLC_POS_NAVAID,
 	CPDLC_POS_AIRPORT,
 	CPDLC_POS_LAT_LON,
-	CPDLC_POS_PBD
+	CPDLC_POS_PBD,
+	CPDLC_POS_UNKNOWN
 } cpdlc_pos_type_t;
 
+#define	CPDLC_NULL_POS		((cpdlc_pos_t){false})
+#define	CPDLC_IS_NULL_POS(pos)	(!(pos)->set)
+
 typedef struct {
+	bool			set;
 	cpdlc_pos_type_t	type;
 	union {
-		char		fixname[8];
-		char		navaid[8];
-		char		airport[8];
-		cpdlc_lat_lon_t	lat_lon;
-		cpdlc_pbd_t	pbd;
+		char		fixname[8];	/* CPDLC_POS_FIXNAME */
+		char		navaid[8];	/* CPDLC_POS_NAVAID */
+		char		airport[8];	/* CPDLC_POS_AIRPORT */
+		cpdlc_lat_lon_t	lat_lon;	/* CPDLC_POS_LAT_LON */
+		cpdlc_pbd_t	pbd;		/* CPDLC_POS_PBD */
+		char		str[16];	/* CPDLC_POS_UNKNOWN */
 	};
 } cpdlc_pos_t;
 
@@ -601,13 +609,94 @@ typedef struct {
 	cpdlc_trk_detail_t	trk_detail;
 } cpdlc_route_t;
 
+#define	CPDLC_NULL_WIND		((cpdlc_wind_t){0, 0})
+#define	CPDLC_IS_NULL_WIND(wind) ((wind).dir == 0)
+
+typedef struct {
+	unsigned		dir;		/* Degrees, 1-360 */
+	unsigned		spd;		/* Knots */
+} cpdlc_wind_t;
+
+typedef enum {
+	CPDLC_TURB_NONE,
+	CPDLC_TURB_LIGHT,
+	CPDLC_TURB_MOD,
+	CPDLC_TURB_SEV
+} cpdlc_turb_t;
+
+typedef enum {
+	CPDLC_ICING_NONE,
+	CPDLC_ICING_TRACE,
+	CPDLC_ICING_LIGHT,
+	CPDLC_ICING_MOD,
+	CPDLC_ICING_SEV
+} cpdlc_icing_t;
+
+#define	CPDLC_NULL_TEMP		-100
+#define	CPDLC_IS_NULL_TEMP(temp) ((temp) <= -100)
+
+#define	CPDLC_NULL_POS_REP	\
+	((cpdlc_pos_rep_t){ \
+		CPDLC_NULL_POS,		/* cur_pos */ \
+		CPDLC_NULL_TIME,	/* time_cur_pos */ \
+		CPDLC_NULL_ALT,		/* alt */ \
+		CPDLC_NULL_POS,		/* fix_next */ \
+		CPDLC_NULL_TIME,	/* time_fix_next */ \
+		CPDLC_NULL_POS,		/* fix_next_p1 */ \
+		CPDLC_NULL_TIME,	/* time_dest */ \
+		CPDLC_NULL_TIME,	/* rmng_fuel */ \
+		CPDLC_NULL_TEMP,	/* temp */ \
+		CPDLC_NULL_WIND,	/* wind */ \
+		CPDLC_TURB_NONE,	/* turb */ \
+		CPDLC_ICING_NONE,	/* icing */ \
+		CPDLC_NULL_SPD,		/* spd */ \
+		CPDLC_NULL_SPD,		/* spd_gnd */ \
+		false,			/* vvi_set */ \
+		0,			/* vvi */ \
+		0,			/* trk */ \
+		0,			/* hdg_true */ \
+		false,			/* dist_set */ \
+		0,			/* dist_nm */ \
+		{},			/* remarks */ \
+		CPDLC_NULL_POS,		/* rpt_wpt_pos */ \
+		CPDLC_NULL_TIME,	/* rpt_wpt_time */ \
+		CPDLC_NULL_ALT		/* rpt_wpt_alt */ \
+	})
+
+typedef struct {
+	cpdlc_pos_t		cur_pos;	/* Required */
+	cpdlc_time_t		time_cur_pos;	/* Required */
+	cpdlc_alt_t		cur_alt;	/* Required */
+	cpdlc_pos_t		fix_next;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		time_fix_next;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_pos_t		fix_next_p1;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		time_dest;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_time_t		rmng_fuel;	/* Optional, CPDLC_NULL_TIME */
+	int			temp;		/* Optional, CPDLC_NULL_TEMP */
+	cpdlc_wind_t		wind;		/* Optional, CPDLC_NULL_WIND */
+	cpdlc_turb_t		turb;		/* Optional, CPDLC_TURB_NONE */
+	cpdlc_icing_t		icing;		/* Optional, CPDLC_ICING_NONE */
+	cpdlc_spd_t		spd;		/* Optional, CPDLC_NULL_SPD */
+	cpdlc_spd_t		spd_gnd;	/* Optional, CPDLC_NULL_SPD */
+	bool			vvi_set;
+	int			vvi;		/* Optional, vvi_set=false */
+	unsigned		trk;		/* Optional, trk=0 */
+	unsigned		hdg_true;	/* Optional, hdg_true=0 */
+	bool			dist_set;
+	float			dist_nm;	/* Optional, dist_set=false */
+	char			remarks[256];	/* Optional, empty */
+	cpdlc_pos_t		rpt_wpt_pos;	/* Optional, CPDLC_NULL_POS */
+	cpdlc_time_t		rpt_wpt_time;	/* Optional, CPDLC_NULL_TIME */
+	cpdlc_alt_t		rpt_wpt_alt;	/* Optional, CPDLC_NULL_ALT */
+} cpdlc_pos_rep_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
 	cpdlc_time_t		time;
-	char			pos[24];
+	cpdlc_pos_t		pos;
 	cpdlc_dir_t		dir;
-	float			dist;	/* nautical miles */
+	double			dist;	/* nautical miles */
 	int			vvi;	/* feet per minute */
 	bool			tofrom;	/* true = to, false = from */
 	cpdlc_route_t		*route;
@@ -624,9 +713,11 @@ typedef union {
 	} deg;
 	struct {
 		bool		hpa;
-		float		val;
+		double		val;
 	} baro;
 	char			*freetext;
+	unsigned		pob;
+	cpdlc_pos_rep_t		pos_rep;
 } cpdlc_arg_t;
 
 enum {

@@ -49,9 +49,9 @@ bool fans_scratchpad_xfer_multi(fans_t *box, void *userinfo,
     bool *read_back);
 bool fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg,
     bool *read_back);
-bool fans_scratchpad_xfer_pos(fans_t *box, fms_pos_t *pos,
+bool fans_scratchpad_xfer_pos(fans_t *box, cpdlc_pos_t *pos,
     unsigned fms_page, pos_pick_done_cb_t done_cb, bool *read_back);
-bool fans_scratchpad_xfer_pos_impl(fans_t *box, fms_pos_t *pos,
+bool fans_scratchpad_xfer_pos_impl(fans_t *box, cpdlc_pos_t *pos,
     bool *read_back);
 bool fans_scratchpad_xfer_uint(fans_t *box, unsigned *value, bool *set,
     unsigned minval, unsigned maxval, bool *read_back);
@@ -59,10 +59,10 @@ bool fans_scratchpad_xfer_time(fans_t *box, fms_time_t *usertime,
     const fms_time_t *autotime, bool *read_back);
 bool fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
     const fms_off_t *autooff, bool *read_back);
-bool fans_scratchpad_xfer_alt(fans_t *box, cpdlc_arg_t *useralt,
-    const cpdlc_arg_t *autoalt, bool *read_back);
-bool fans_scratchpad_xfer_spd(fans_t *box, cpdlc_arg_t *userspd,
-    const cpdlc_arg_t *autospd, bool *read_back);
+bool fans_scratchpad_xfer_alt(fans_t *box, cpdlc_alt_t *useralt,
+    const cpdlc_alt_t *autoalt, bool *read_back);
+bool fans_scratchpad_xfer_spd(fans_t *box, cpdlc_spd_t *userspd,
+    const cpdlc_spd_t *autospd, bool *read_back);
 bool fans_scratchpad_xfer_temp(fans_t *box, fms_temp_t *usertemp,
     const fms_temp_t *autotemp, bool *read_back);
 bool fans_scratchpad_xfer_wind(fans_t *box, fms_wind_t *wind,

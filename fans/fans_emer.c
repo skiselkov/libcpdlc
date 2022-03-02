@@ -37,17 +37,26 @@
 static void
 verify_emer(fans_t *box)
 {
-	char buf[512];
-	unsigned l = 0;
-	int seg = 0;
+//	unsigned l = 0;
+//	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	cpdlc_arg_t des;
+	cpdlc_alt_t des;
 	fms_time_t fuel;
 
-	if (box->emer.pan)
-		APPEND_SNPRINTF(buf, l, "PAN PAN PAN.");
-	else
-		APPEND_SNPRINTF(buf, l, "MAYDAY MAYDAY MAYDAY.");
+	if (box->emer.pan) {
+		cpdlc_msg_add_seg(msg, true, CPDLC_DM55_PAN_PAN_PAN, 0);
+	} else {
+		cpdlc_msg_add_seg(msg, true,
+		    CPDLC_DM56_MAYDAY_MAYDAY_MAYDAY, 0);
+	}
+	fuel = (box->emer.fuel.set ? box->emer.fuel : box->emer.fuel_auto);
+	if (fuel.set || box->emer.souls_set) {
+		int seg_nr = cpdlc_msg_add_seg(msg, true,
+		    CPDLC_DM57_RMNG_FUEL_AND_POB, 0);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fuel.hrs, &fuel.mins);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 1, &box->emer.souls, NULL);
+	}
+#if 0
 	switch (box->emer.reason) {
 	case EMER_REASON_NONE:
 		break;
@@ -71,44 +80,31 @@ verify_emer(fans_t *box)
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	}
-	des = (box->emer.des.alt.alt != 0 ? box->emer.des : box->emer.des_auto);
-	if (des.alt.alt != 0) {
-		char altbuf[128];
-		fans_print_alt(&des, altbuf, sizeof (altbuf), true);
-		APPEND_SNPRINTF(buf, l, " DESCENDING TO %s.", altbuf);
+#endif
+	if (box->emer.divert.set) {
+		const cpdlc_route_t dct = {};
+		int seg_nr = cpdlc_msg_add_seg(msg, true,
+		    CPDLC_DM59_DIVERTING_TO_pos_VIA_route, 0);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &box->emer.divert, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &dct, NULL);
 	}
 	if (box->emer.off.nm != 0) {
-		APPEND_SNPRINTF(buf, l, " OFFSETTING %.0f NM %c OF ROUTE.",
-		    box->emer.off.nm,
-		    box->emer.off.dir == CPDLC_DIR_LEFT ? 'L' : 'R');
+		int seg_nr = cpdlc_msg_add_seg(msg, true,
+		    CPDLC_DM60_OFFSETTING_dist_dir_OF_ROUTE, 0);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &box->emer.off.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 1, &box->emer.off.dir, NULL);
 	}
-	fuel = (box->emer.fuel.set ? box->emer.fuel : box->emer.fuel_auto);
-	if (fuel.set) {
-		if (fuel.hrs != 0)
-			APPEND_SNPRINTF(buf, l, " %d HRS", fuel.hrs);
-		/* Handles the 00:00 fuel figure */
-		if (fuel.mins != 0 || fuel.hrs == 0)
-			APPEND_SNPRINTF(buf, l, " %d MINS", fuel.mins);
-		APPEND_SNPRINTF(buf, l, " OF FUEL REMAINING");
-
-		if (box->emer.souls_set)
-			APPEND_SNPRINTF(buf, l, " AND");
-		else
-			APPEND_SNPRINTF(buf, l, ".");
+	des = (!CPDLC_IS_NULL_ALT(box->emer.des) ? box->emer.des :
+	    box->emer.des_auto);
+	if (!CPDLC_IS_NULL_ALT(des)) {
+		int seg_nr = cpdlc_msg_add_seg(msg, true,
+		    CPDLC_DM61_DESCENDING_TO_alt, 0);
+		const bool fl = false;
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fl, &des);
 	}
-	if (box->emer.souls_set)
-		APPEND_SNPRINTF(buf, l, " %d SOULS ON BOARD.", box->emer.souls);
-	if (box->emer.divert.set) {
-		char posbuf[16];
-
-		fans_print_pos(&box->emer.divert, posbuf, sizeof (posbuf),
-		    POS_PRINT_NORM);
-		APPEND_SNPRINTF(buf, l, " DIVERTING TO %s VIA DCT.", posbuf);
-	}
-
-	seg = cpdlc_msg_add_seg(msg, true,
-	    CPDLC_DM68_FREETEXT_DISTRESS_text, 0);
-	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
+//	seg = cpdlc_msg_add_seg(msg, true,
+//	    CPDLC_DM68_FREETEXT_DISTRESS_text, 0);
+//	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
 
 	box->req_common.distress = true;
 	fans_req_add_common(box, msg);
@@ -117,11 +113,11 @@ verify_emer(fans_t *box)
 }
 
 static void
-set_divert(fans_t *box, const fms_pos_t *pos)
+set_divert(fans_t *box, const cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
-	memcpy(&box->emer.divert, pos, sizeof (*pos));
+	box->emer.divert = *pos;
 }
 
 static void
@@ -203,8 +199,8 @@ fans_emer_init_cb(fans_t *box)
 	    &box->emer.fuel_auto.mins);
 	if (fans_is_valid_alt(cur_alt) && fans_is_valid_alt(sel_alt) &&
 	    cur_alt >= sel_alt + LVL_ALT_THRESH) {
-		box->emer.des_auto.alt.fl = sel_alt_fl;
-		box->emer.des_auto.alt.alt = sel_alt;
+		box->emer.des_auto.fl = sel_alt_fl;
+		box->emer.des_auto.alt = sel_alt;
 	}
 	box->emer.souls_set = fans_get_souls(box, &box->emer.souls);
 }
@@ -276,4 +272,12 @@ fans_emer_key_cb(fans_t *box, fms_key_t key)
 	}
 
 	return (true);
+}
+
+void
+fans_emer_reset(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+	box->emer.des = CPDLC_NULL_ALT;
+	box->emer.divert = CPDLC_NULL_POS;
 }

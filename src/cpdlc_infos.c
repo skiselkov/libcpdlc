@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -1972,7 +1972,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_type = CPDLC_DM48_POS_REPORT_posreport,
 	.text = "POSITION REPORT [posreport]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
+	.args = { CPDLC_ARG_POSREPORT },
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2052,6 +2052,56 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	    CPDLC_UM18_AT_pos_EXPCT_CRZ_CLB_TO_alt,
 	    CPDLC_UM34_CRZ_CLB_TO_alt
 	},
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM55_PAN_PAN_PAN,
+	.text = "PAN PAN PAN",
+	.resp = CPDLC_RESP_N
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM56_MAYDAY_MAYDAY_MAYDAY,
+	.text = "MAYDAY MAYDAY MAYDAY",
+	.resp = CPDLC_RESP_N
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM57_RMNG_FUEL_AND_POB,
+	.text = "[fuel] OF FUEL REMAINING AND [persons] PERSONS ON BOARD",
+	.resp = CPDLC_RESP_N,
+	.num_args = 2,
+	.args = { CPDLC_ARG_TIME, CPDLC_ARG_PERSONS }
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM58_CANCEL_EMERG,
+	.text = "CANCEL EMERGENCY",
+	.resp = CPDLC_RESP_N
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM59_DIVERTING_TO_pos_VIA_route,
+	.text = "DIVERTING TO [pos] VIA [route]",
+	.resp = CPDLC_RESP_N,
+	.num_args = 2,
+	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_ROUTE },
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM60_OFFSETTING_dist_dir_OF_ROUTE,
+	.text = "OFFSETTING [dist] [dir] OF ROUTE",
+	.resp = CPDLC_RESP_N,
+	.num_args = 2,
+	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+    },
+    {
+	.is_dl = true,
+	.msg_type = CPDLC_DM61_DESCENDING_TO_alt,
+	.text = "DESCENDING TO [alt]",
+	.resp = CPDLC_RESP_N,
+	.num_args = 1,
+	.args = { CPDLC_ARG_ALTITUDE },
     },
     {
 	.is_dl = true,

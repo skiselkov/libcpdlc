@@ -73,14 +73,14 @@ fans_err_t fans_delete_wind(fans_t *box, void *userinfo);
 
 fans_err_t fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo);
 
-int fans_print_alt(const cpdlc_arg_t *arg, char *str, size_t cap, bool units);
-int fans_print_spd(const cpdlc_arg_t *arg, char *str, size_t cap, bool pretty,
+int fans_print_alt(const cpdlc_alt_t *alt, char *str, size_t cap, bool units);
+int fans_print_spd(const cpdlc_spd_t *spd, char *str, size_t cap, bool pretty,
     bool units);
 int fans_print_off(const fms_off_t *off, char *buf, size_t cap);
 
-void fans_print_pos(const fms_pos_t *pos, char *buf, size_t cap,
+void fans_print_pos(const cpdlc_pos_t *pos, char *buf, size_t cap,
     pos_print_style_t style);
-fans_err_t fans_parse_pos(const char *buf, fms_pos_t *pos);
+fans_err_t fans_parse_pos(const char *buf, cpdlc_pos_t *pos);
 
 static inline bool
 fans_is_valid_alt(int alt_ft)

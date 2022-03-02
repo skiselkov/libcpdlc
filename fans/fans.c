@@ -447,18 +447,18 @@ put_str_with_units(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_alt(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *useralt, const cpdlc_arg_t *autoalt,
+    const cpdlc_alt_t *useralt, const cpdlc_alt_t *autoalt,
     bool req, bool units)
 {
 	CPDLC_ASSERT(box != NULL);
-	DATA_PICK(const cpdlc_arg_t *, alt,
-	    useralt != NULL && useralt->alt.alt != 0, useralt, autoalt);
+	DATA_PICK(const cpdlc_alt_t *, alt,
+	    useralt != NULL && !CPDLC_IS_NULL_ALT(*useralt), useralt, autoalt);
 
-	if (alt != NULL && alt->alt.alt != 0) {
+	if (alt != NULL && !CPDLC_IS_NULL_ALT(*alt)) {
 		char buf[8];
 
 		fans_print_alt(alt, buf, sizeof (buf), false);
-		if (units && !alt->alt.fl) {
+		if (units && !alt->fl) {
 			put_str_with_units(box, row, col, align_right,
 			    color, font, "FT", "%s", buf);
 		} else {
@@ -473,16 +473,17 @@ fans_put_alt(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_spd(fans_t *box, int row, int col, bool align_right,
-    const cpdlc_arg_t *userspd, const cpdlc_arg_t *autospd,
+    const cpdlc_spd_t *userspd, const cpdlc_spd_t *autospd,
     bool req, bool pretty, bool units)
 {
 	char buf[12];
 
 	CPDLC_ASSERT(box != NULL);
-	DATA_PICK(const cpdlc_arg_t *, spd, userspd->spd.spd != 0,
+	DATA_PICK(const cpdlc_spd_t *, spd,
+	    userspd != NULL && !CPDLC_IS_NULL_SPD(*userspd),
 	    userspd, autospd);
 
-	if (spd != NULL && spd->spd.spd != 0) {
+	if (spd != NULL && !CPDLC_IS_NULL_SPD(*spd)) {
 		fans_print_spd(spd, buf, sizeof (buf), pretty, units);
 		fans_put_str(box, row, col, align_right, color, font,
 		    "%s", buf);
@@ -550,7 +551,7 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 
 void
 fans_put_pos(fans_t *box, int row, int col, bool align_right,
-    const fms_pos_t *userpos, const fms_pos_t *autopos, bool req)
+    const cpdlc_pos_t *userpos, const cpdlc_pos_t *autopos, bool req)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(userpos != NULL);
@@ -676,6 +677,8 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	if (box->funcs.can_insert_mod != NULL)
 		CPDLC_ASSERT(box->funcs.insert_mod != NULL);
 
+	fans_reset(box);
+
 	return (box);
 }
 
@@ -697,6 +700,15 @@ fans_free(fans_t *box)
 	cpdlc_msglist_free(box->msglist);
 	cpdlc_client_free(box->cl);
 	free(box);
+}
+
+void
+fans_reset(fans_t *box)
+{
+	CPDLC_ASSERT(box != NULL);
+
+	fans_emer_reset(box);
+	fans_pos_rep_reset(box);
 }
 
 cpdlc_client_t *
@@ -1232,14 +1244,14 @@ fans_get_cur_pos(const fans_t *box, double *lat, double *lon)
 }
 
 bool
-fans_get_cur_spd(const fans_t *box, cpdlc_arg_t *spd)
+fans_get_cur_spd(const fans_t *box, cpdlc_spd_t *spd)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(spd != NULL);
 	memset(spd, 0, sizeof (*spd));
 	if (box->funcs.get_cur_spd != NULL && box->funcs.get_cur_spd(
-	    box->userinfo, &spd->spd.mach, &spd->spd.spd)) {
-		spd->spd.spd = MIN(spd->spd.spd, 999);
+	    box->userinfo, &spd->mach, &spd->spd)) {
+		spd->spd = MIN(spd->spd, 999);
 		return (true);
 	}
 	return (false);
@@ -1422,18 +1434,16 @@ fans_get_souls(const fans_t *box, unsigned *souls)
 }
 
 void
-fans_wptinfo2pos(const fms_wpt_info_t *info, fms_pos_t *pos)
+fans_wptinfo2pos(const fms_wpt_info_t *info, cpdlc_pos_t *pos)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(pos != NULL);
 
 	memset(pos, 0, sizeof (*pos));
 	if (info->wpt_name[0] != '\0') {
-		pos->set = true;
-		pos->type = FMS_POS_FIX;
-		cpdlc_strlcpy(pos->name, info->wpt_name, sizeof (pos->name));
-	} else {
-		pos->set = false;
+		pos->type = CPDLC_POS_FIXNAME;
+		cpdlc_strlcpy(pos->fixname, info->wpt_name,
+		    sizeof (pos->fixname));
 	}
 }
 
@@ -1452,28 +1462,28 @@ fans_wptinfo2time(const fms_wpt_info_t *info, fms_time_t *tim)
 }
 
 void
-fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_arg_t *alt)
+fans_wptinfo2alt(const fms_wpt_info_t *info, cpdlc_alt_t *alt)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(alt != NULL);
 
-	memset(alt, 0, sizeof (*alt));
+	*alt = CPDLC_NULL_ALT;
 	if (info->alt_set) {
-		alt->alt.fl = info->alt_fl;
-		alt->alt.alt = info->alt_ft;
+		alt->fl = info->alt_fl;
+		alt->alt = info->alt_ft;
 	}
 }
 
 void
-fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_arg_t *spd)
+fans_wptinfo2spd(const fms_wpt_info_t *info, cpdlc_spd_t *spd)
 {
 	CPDLC_ASSERT(info != NULL);
 	CPDLC_ASSERT(spd != NULL);
 
-	memset(spd, 0, sizeof (*spd));
+	*spd = CPDLC_NULL_SPD;
 	if (info->spd_set) {
-		spd->spd.mach = info->spd_mach;
-		spd->spd.spd = info->spd;
+		spd->mach = info->spd_mach;
+		spd->spd = info->spd;
 	}
 }
 

@@ -66,6 +66,9 @@ extern "C" {
 #ifndef	MAX
 #define	MAX(x, y)	((x) > (y) ? (x) : (y))
 #endif
+#ifndef	ABS
+#define	ABS(x)		((x) >= 0 ? (x) : -(x))
+#endif
 
 #if	defined(__GNUC__) || defined(__clang__)
 #define	PRINTF_ATTR(x)		__attribute__((format(printf, x, x + 1)))
