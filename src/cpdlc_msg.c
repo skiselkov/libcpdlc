@@ -198,9 +198,9 @@ serialize_lat_lon(const cpdlc_lat_lon_t *lat_lon, bool readable,
 	if (readable) {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
 		    "%c%02.0f%04.1f%c%03.0f%04.1f ",
-		    lat_lon->lat >= 0 ? 'N' : 'S', trunc(lat_lon->lat),
+		    lat_lon->lat >= 0 ? 'N' : 'S', trunc(ABS(lat_lon->lat)),
 		    fabs(lat_lon->lat - trunc(lat_lon->lat)),
-		    lat_lon->lon >= 0 ? 'E' : 'W', trunc(lat_lon->lon),
+		    lat_lon->lon >= 0 ? 'E' : 'W', trunc(ABS(lat_lon->lon)),
 		    fabs(lat_lon->lon - trunc(lat_lon->lon)));
 	} else {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
@@ -540,11 +540,15 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
     unsigned cap)
 {
 	unsigned n = 0;
+	char posbuf[128];
 
 	CPDLC_ASSERT(rep != NULL);
 	CPDLC_ASSERT(buf != NULL);
 
-	APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+	serialize_pos(&rep->cur_pos, true, posbuf, sizeof (posbuf));
+	APPEND_SNPRINTF(n, buf, cap, "%s", posbuf);
+
+	APPEND_SNPRINTF(n, buf, cap, "AT %02d%02dZ ",
 	    rep->time_cur_pos.hrs, rep->time_cur_pos.mins);
 	encode_alt(&rep->cur_alt, true, &n, &buf, &cap);
 	APPEND_SNPRINTF(n, buf, cap, " ");
@@ -565,24 +569,20 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 	if (rep->trk != 0)
 		APPEND_SNPRINTF(n, buf, cap, "TRK %03d ", rep->trk);
 	if (rep->rpt_wpt_pos.set) {
-		char posbuf[128];
-
 		serialize_pos(&rep->rpt_wpt_pos, true, posbuf, sizeof (posbuf));
 		APPEND_SNPRINTF(n, buf, cap, "RPT %s ", posbuf);
 		if (!CPDLC_IS_NULL_TIME(rep->rpt_wpt_time)) {
-			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02dZ ",
 			    rep->rpt_wpt_time.hrs, rep->rpt_wpt_time.mins);
 		}
 		if (!CPDLC_IS_NULL_ALT(rep->rpt_wpt_alt))
 			encode_alt(&rep->rpt_wpt_alt, true, &n, &buf, &cap);
 	}
 	if (rep->fix_next.set) {
-		char posbuf[128];
-
 		serialize_pos(&rep->fix_next, true, posbuf, sizeof (posbuf));
 		APPEND_SNPRINTF(n, buf, cap, "NEXT %s ", posbuf);
 		if (!CPDLC_IS_NULL_TIME(rep->time_fix_next)) {
-			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02d ",
+			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02dZ ",
 			    rep->time_fix_next.hrs, rep->time_fix_next.mins);
 		}
 		if (rep->dist_set) {
@@ -591,16 +591,15 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 		}
 	}
 	if (rep->fix_next_p1.set) {
-		char posbuf[128];
 		serialize_pos(&rep->fix_next_p1, true, posbuf, sizeof (posbuf));
 		APPEND_SNPRINTF(n, buf, cap, "NEXT+1 %s ", posbuf);
 	}
 	if (!CPDLC_IS_NULL_TIME(rep->time_dest)) {
-		APPEND_SNPRINTF(n, buf, cap, "DEST %02d%02d ",
+		APPEND_SNPRINTF(n, buf, cap, "DEST %02d%02dZ ",
 		    rep->time_dest.hrs, rep->time_dest.mins);
 	}
 	if (!CPDLC_IS_NULL_TIME(rep->rmng_fuel)) {
-		APPEND_SNPRINTF(n, buf, cap, "FUEL %02d%02d ",
+		APPEND_SNPRINTF(n, buf, cap, "FUEL %02dH%02dM ",
 		    rep->rmng_fuel.hrs, rep->rmng_fuel.mins);
 	}
 	if (!CPDLC_IS_NULL_TEMP(rep->temp))
@@ -609,12 +608,10 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 		APPEND_SNPRINTF(n, buf, cap, "WIND %03d/%d ",
 		    rep->wind.dir, rep->wind.spd);
 	}
-	if (rep->turb != CPDLC_TURB_NONE) {
+	if (rep->turb != CPDLC_TURB_NONE)
 		APPEND_SNPRINTF(n, buf, cap, "TURB %s ", turb2str(rep->turb));
-	}
-	if (rep->icing != CPDLC_ICING_NONE) {
+	if (rep->icing != CPDLC_ICING_NONE)
 		APPEND_SNPRINTF(n, buf, cap, "ICG %s ", icing2str(rep->icing));
-	}
 }
 
 static void
