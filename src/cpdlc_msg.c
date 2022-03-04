@@ -1449,7 +1449,7 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 			MALFORMED_MSG("Malformed route: too many route infos");
 			return (false);
 		}
-		info = &route->info[route->num_info++];
+		info = &route->info[route->num_info];
 		info->type = CPDLC_ROUTE_UNKNOWN;
 		cpdlc_strlcpy(info->str, comp, sizeof (info->str));
 		route->num_info++;
