@@ -1628,20 +1628,25 @@ parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
 	CPDLC_ASSERT(reason != NULL);
 
 	if (strchr(buf, ':') == NULL) {
+		pos->set = true;
 		pos->type = CPDLC_POS_UNKNOWN;
 		cpdlc_strlcpy(pos->str, buf, sizeof (pos->str));
 		return (true);
 	}
 	if (strncmp(buf, "FIX:", 4) == 0) {
+		pos->set = true;
 		pos->type = CPDLC_POS_FIXNAME;
 		cpdlc_strlcpy(pos->fixname, &buf[4], sizeof (pos->fixname));
 	} else if (strncmp(buf, "NAV:", 4) == 0) {
+		pos->set = true;
 		pos->type = CPDLC_POS_NAVAID;
 		cpdlc_strlcpy(pos->navaid, &buf[4], sizeof (pos->navaid));
 	} else if (strncmp(buf, "ARPT:", 5) == 0) {
+		pos->set = true;
 		pos->type = CPDLC_POS_AIRPORT;
 		cpdlc_strlcpy(pos->airport, &buf[5], sizeof (pos->airport));
 	} else if (strncmp(buf, "LATLON:", 7) == 0) {
+		pos->set = true;
 		pos->type = CPDLC_POS_LAT_LON;
 		if (sscanf(&buf[7], "%lf,%lf", &pos->lat_lon.lat,
 		    &pos->lat_lon.lon) != 2 ||
@@ -1651,6 +1656,7 @@ parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
 			return (false);
 		}
 	} else if (strncmp(buf, "PBD:", 4) == 0) {
+		pos->set = true;
 		pos->type = CPDLC_POS_PBD;
 		if (!deserialize_pbd(&buf[4], &pos->pbd)) {
 			MALFORMED_MSG("Error deserializing "
@@ -1658,8 +1664,7 @@ parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
 			return (false);
 		}
 	} else {
-		MALFORMED_MSG("Position spec \"%s\" has unknown type",
-		    buf);
+		MALFORMED_MSG("Position spec \"%s\" has unknown type", buf);
 	}
 	return (true);
 }

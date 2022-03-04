@@ -169,10 +169,12 @@ put_report_info(fans_t *box, const fans_report_t *report, int row, bool is_list)
 		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM130_REPORT_PASSING_pos:
+		fans_print_pos(&arg1->pos, arg1_str, sizeof (arg1_str),
+		    POS_PRINT_COMPACT);
 		fans_put_str(box, LSK_HEADER_ROW(row), 0, false,
 		    FMS_COLOR_CYAN, FMS_FONT_SMALL, "PASSING POSITION");
-		fans_put_pos(box, row, data_off, false, &arg1->pos,
-		    NULL, false);
+		fans_put_str(box, row, data_off, false, data_color,
+		    FMS_FONT_SMALL, "%s", arg1_str);
 		break;
 	case CPDLC_UM175_REPORT_REACHING_alt:
 		fans_print_alt(&arg1->alt, arg1_str, sizeof (arg1_str), false);
@@ -472,8 +474,10 @@ update_passing_pos(const fans_t *box, fans_report_t *report)
 	 * We've passed a waypoint once becomes our FROM waypoint.
 	 */
 	return (fans_get_prev_wpt(box, &wpt) &&
-	    report->seg->args[0].pos.type == CPDLC_POS_FIXNAME &&
-	    strcmp(wpt.wpt_name, report->seg->args[0].pos.fixname) == 0);
+	    ((report->seg->args[0].pos.type == CPDLC_POS_FIXNAME &&
+	    strcmp(wpt.wpt_name, report->seg->args[0].pos.fixname) == 0) ||
+	    (report->seg->args[0].pos.type == CPDLC_POS_UNKNOWN &&
+	    strcmp(wpt.wpt_name, report->seg->args[0].pos.str) == 0)));
 }
 
 static void
