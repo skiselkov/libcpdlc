@@ -1638,9 +1638,9 @@ parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
 	} else if (strncmp(buf, "NAV:", 4) == 0) {
 		pos->type = CPDLC_POS_NAVAID;
 		cpdlc_strlcpy(pos->navaid, &buf[4], sizeof (pos->navaid));
-	} else if (strncmp(buf, "ARPT:", 4) == 0) {
+	} else if (strncmp(buf, "ARPT:", 5) == 0) {
 		pos->type = CPDLC_POS_AIRPORT;
-		cpdlc_strlcpy(pos->airport, &buf[4], sizeof (pos->airport));
+		cpdlc_strlcpy(pos->airport, &buf[5], sizeof (pos->airport));
 	} else if (strncmp(buf, "LATLON:", 7) == 0) {
 		pos->type = CPDLC_POS_LAT_LON;
 		if (sscanf(&buf[7], "%lf,%lf", &pos->lat_lon.lat,
