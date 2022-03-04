@@ -588,7 +588,7 @@ typedef struct {
 		/* CPDLC_ROUTE_AWY */
 		char			awy[8];
 		/* CPDLC_ROUTE_UNKNOWN */
-		char			str[16];
+		char			str[24];
 	};
 } cpdlc_route_info_t;
 
