@@ -97,7 +97,7 @@ verify_alt_req(fans_t *box)
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 1,
 		    &box->alt_req.alt[0].fl, &box->alt_req.alt[0].alt);
-	} else if (box->alt_req.alt[1].alt != 0) {
+	} else if (!CPDLC_IS_NULL_ALT(box->alt_req.alt[1])) {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM7_REQ_BLOCK_alt_TO_alt, 0);
 		for (int i = 0; i < 2; i++) {

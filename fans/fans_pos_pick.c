@@ -115,11 +115,19 @@ fans_pos_pick_key_cb(fans_t *box, fms_key_t key)
 		if (fans_scratchpad_xfer_pos_impl(box, &box->pos_pick.pos,
 		    &read_back) && !read_back) {
 			fans_scratchpad_clear(box);
+			if (box->pos_pick.pos.set) {
+				CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
+				box->pos_pick.done_cb(box, &box->pos_pick.pos);
+				fans_set_page(box, box->pos_pick.ret_page,
+				    false);
+			}
 		}
 	} else if (key == FMS_KEY_LSK_L6) {
 		CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
-		if (box->pos_pick.pos.set || box->pos_pick.was_set)
+		if (box->pos_pick.pos.set || box->pos_pick.was_set) {
+			CPDLC_ASSERT(box->pos_pick.done_cb != NULL);
 			box->pos_pick.done_cb(box, &box->pos_pick.pos);
+		}
 		fans_set_page(box, box->pos_pick.ret_page, false);
 	} else {
 		return (false);
