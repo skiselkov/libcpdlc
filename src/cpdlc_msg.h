@@ -551,7 +551,15 @@ typedef struct {
 	cpdlc_rta_t		rta[32];
 } cpdlc_route_add_info_t;
 
+typedef enum {
+	CPDLC_PROC_UNKNOWN,
+	CPDLC_PROC_ARRIVAL,
+	CPDLC_PROC_APPROACH,
+	CPDLC_PROC_DEPARTURE
+} cpdlc_proc_type_t;
+
 typedef struct {
+	cpdlc_proc_type_t	type;
 	char			name[8];
 	char			trans[8];
 } cpdlc_proc_t;
@@ -700,7 +708,7 @@ typedef union {
 	int			vvi;	/* feet per minute */
 	bool			tofrom;	/* true = to, false = from */
 	cpdlc_route_t		*route;
-	char			proc[16];
+	cpdlc_proc_t		proc;
 	unsigned		squawk;
 	struct {
 		char		icao[8];

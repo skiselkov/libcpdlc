@@ -83,6 +83,7 @@ void
 fans_req_spd_init_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
+	memset(&box->req_common, 0, sizeof (box->req_common));
 	memset(&box->spd_req, 0, sizeof (box->spd_req));
 }
 

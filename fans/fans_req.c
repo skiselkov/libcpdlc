@@ -117,8 +117,10 @@ fans_req_add_common(fans_t *box, cpdlc_msg_t *msg, const char *extra_prepend)
 	    box->req_common.freetext[2][0] != '\0' ||
 	    box->req_common.freetext[3][0] != '\0' ||
 	    extra_prepend != NULL) {
+		unsigned prepend_len = (extra_prepend != NULL ?
+		    strlen(extra_prepend) : 0) + 1;
 		unsigned bufsz = sizeof (box->req_common.freetext) +
-		    REQ_FREETEXT_LINES + strlen(extra_prepend) + 1 + 1;
+		    REQ_FREETEXT_LINES + prepend_len + 1;
 		char buf[bufsz];
 		unsigned seg;
 

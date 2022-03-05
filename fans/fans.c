@@ -97,6 +97,7 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 		.has_return = true
 	},
 	[FMS_PAGE_REQ_ALT] = {
+		.init_cb = fans_req_alt_init_cb,
 		.draw_cb = fans_req_alt_draw_cb,
 		.key_cb = fans_req_alt_key_cb
 	},
@@ -125,6 +126,7 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 		.key_cb = fans_req_vmc_key_cb
 	},
 	[FMS_PAGE_REQ_WCW] = {
+		.init_cb = fans_req_wcw_init_cb,
 		.draw_cb = fans_req_wcw_draw_cb,
 		.key_cb = fans_req_wcw_key_cb
 	},
@@ -675,8 +677,6 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 	if (box->funcs.can_insert_mod != NULL)
 		CPDLC_ASSERT(box->funcs.insert_mod != NULL);
 
-	fans_reset(box);
-
 	return (box);
 }
 
@@ -698,16 +698,6 @@ fans_free(fans_t *box)
 	cpdlc_msglist_free(box->msglist);
 	cpdlc_client_free(box->cl);
 	free(box);
-}
-
-void
-fans_reset(fans_t *box)
-{
-	CPDLC_ASSERT(box != NULL);
-
-	fans_req_alt_reset(box);
-	fans_req_wcw_reset(box);
-	fans_pos_rep_reset(box);
 }
 
 cpdlc_client_t *
@@ -1175,9 +1165,9 @@ fans_put_step_at(fans_t *box, const fms_step_at_t *step_at)
 		fans_put_str(box, LSK1_ROW, 0, true, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, "POSv");
 		fans_put_lsk_title(box, FMS_KEY_LSK_R2, "POS");
-		if (strlen(step_at->pos) != 0) {
+		if (step_at->pos.set) {
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
-			    FMS_FONT_LARGE, "%s", step_at->pos);
+			    FMS_FONT_LARGE, "%s", step_at->pos.fixname);
 		} else {
 			fans_put_str(box, LSK2_ROW, 0, true, FMS_COLOR_WHITE,
 			    FMS_FONT_LARGE, "_____");
@@ -1207,9 +1197,17 @@ fans_key_step_at(fans_t *box, fms_key_t key, fms_step_at_t *step_at)
 				return;
 			}
 		} else {
-			if (!fans_scratchpad_xfer(box, step_at->pos,
-			    sizeof (step_at->pos), true, &read_back)) {
+			if (!fans_scratchpad_xfer(box, step_at->pos.fixname,
+			    sizeof (step_at->pos.fixname), true, &read_back)) {
 				return;
+			}
+			if (!read_back) {
+				if (strlen(step_at->pos.fixname) != 0) {
+					step_at->pos.set = true;
+					step_at->pos.type = CPDLC_POS_FIXNAME;
+				} else {
+					step_at->pos = CPDLC_NULL_POS;
+				}
 			}
 		}
 		if (!read_back)
@@ -1223,7 +1221,7 @@ fans_step_at_can_send(const fms_step_at_t *step_at)
 	CPDLC_ASSERT(step_at != NULL);
 	return (step_at->type == STEP_AT_NONE ||
 	    (step_at->type == STEP_AT_TIME && step_at->tim.set) ||
-	    (step_at->type == STEP_AT_POS && strlen(step_at->pos) != 0));
+	    (step_at->type == STEP_AT_POS && step_at->pos.set));
 }
 
 bool

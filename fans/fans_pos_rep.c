@@ -265,7 +265,17 @@ fans_pos_rep_init_cb(fans_t *box)
 	CPDLC_ASSERT(box != NULL);
 	/* The POS REP page can send freetext as well */
 	memset(&box->req_common, 0, sizeof (box->req_common));
-	fans_pos_rep_reset(box);
+
+	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
+
+	box->pos_rep.rpt_wpt = CPDLC_NULL_POS;
+	box->pos_rep.wpt_alt = CPDLC_NULL_ALT;
+	box->pos_rep.wpt_spd = CPDLC_NULL_SPD;
+	box->pos_rep.nxt_fix = CPDLC_NULL_POS;
+	box->pos_rep.nxt_fix1 = CPDLC_NULL_POS;
+	box->pos_rep.cur_pos = CPDLC_NULL_POS;
+	box->pos_rep.alt = CPDLC_NULL_ALT;
+	box->pos_rep.clb_des = CPDLC_NULL_ALT;
 }
 
 static bool
@@ -482,21 +492,4 @@ fans_pos_rep_key_cb(fans_t *box, fms_key_t key)
 	}
 
 	return (true);
-}
-
-void
-fans_pos_rep_reset(fans_t *box)
-{
-	CPDLC_ASSERT(box != NULL);
-
-	memset(&box->pos_rep, 0, sizeof (box->pos_rep));
-
-	box->pos_rep.rpt_wpt = CPDLC_NULL_POS;
-	box->pos_rep.wpt_alt = CPDLC_NULL_ALT;
-	box->pos_rep.wpt_spd = CPDLC_NULL_SPD;
-	box->pos_rep.nxt_fix = CPDLC_NULL_POS;
-	box->pos_rep.nxt_fix1 = CPDLC_NULL_POS;
-	box->pos_rep.cur_pos = CPDLC_NULL_POS;
-	box->pos_rep.alt = CPDLC_NULL_ALT;
-	box->pos_rep.clb_des = CPDLC_NULL_ALT;
 }

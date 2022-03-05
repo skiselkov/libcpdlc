@@ -35,7 +35,6 @@ extern "C" {
 void fans_pos_rep_init_cb(fans_t *box);
 void fans_pos_rep_draw_cb(fans_t *box);
 bool fans_pos_rep_key_cb(fans_t *box, fms_key_t key);
-void fans_pos_rep_reset(fans_t *box);
 
 #ifdef	__cplusplus
 }

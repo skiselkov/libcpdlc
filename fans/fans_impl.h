@@ -101,7 +101,7 @@ typedef enum {
 
 typedef struct {
 	step_at_type_t	type;
-	char		pos[8];
+	cpdlc_pos_t	pos;
 	fms_time_t	tim;
 } fms_step_at_t;
 
@@ -308,7 +308,7 @@ struct fans_s {
 	} req_common;
 	struct {
 		cpdlc_msg_t	*msg;
-		char		title[8];
+		char		title[12];
 		unsigned	ret_page;
 		bool		is_req;
 	} verify;

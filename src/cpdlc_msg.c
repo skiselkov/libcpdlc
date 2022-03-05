@@ -493,11 +493,11 @@ encode_spd(const cpdlc_spd_t *spd, bool readable, unsigned *n_bytes_p,
 	if (spd->mach) {
 		if (spd->spd < 1000) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%sM.%03d", readable ? "" : " ", spd->spd);
+			    "%sM.%02d", readable ? "" : " ", spd->spd / 10);
 		} else {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%sM%d.%03d", readable ? "" : " ",
-			    spd->spd / 1000, spd->spd % 1000);
+			    "%sM%d.%02d", readable ? "" : " ",
+			    spd->spd / 1000, (spd->spd % 1000) / 10);
 		}
 	} else {
 		if (readable) {
@@ -507,6 +507,38 @@ encode_spd(const cpdlc_spd_t *spd, bool readable, unsigned *n_bytes_p,
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 			    " %d", spd->spd);
 		}
+	}
+}
+
+static void
+encode_proc(const cpdlc_proc_t *proc, bool readable, unsigned *n_bytes_p,
+    char **buf_p, unsigned *cap_p)
+{
+	CPDLC_ASSERT(proc != NULL);
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	switch (proc->type) {
+	case CPDLC_PROC_UNKNOWN:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
+		    readable ? "" : " ", proc->name);
+		break;
+	case CPDLC_PROC_ARRIVAL:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s%s%s",
+		    readable ? "" : " STAR:", proc->trans,
+		    proc->trans[0] != '\0' ? "." : "", proc->name);
+		break;
+	case CPDLC_PROC_APPROACH:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s%s%s",
+		    readable ? "" : " APP:", proc->trans,
+		    proc->trans[0] != '\0' ? "." : "", proc->name);
+		break;
+	case CPDLC_PROC_DEPARTURE:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s%s%s",
+		    readable ? "" : " SID:", proc->name,
+		    proc->trans[0] != '\0' ? "." : "", proc->trans);
+		break;
 	}
 }
 
@@ -911,15 +943,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_PROCEDURE:
-		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
-			    arg->proc);
-		} else {
-			cpdlc_escape_percent(arg->proc, textbuf,
-			    sizeof (textbuf));
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
-			    textbuf);
-		}
+		encode_proc(&arg->proc, readable, n_bytes_p, buf_p, cap_p);
 		break;
 	case CPDLC_ARG_SQUAWK:
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%04d",
@@ -1776,6 +1800,68 @@ parse_spd(const char *start, const char *end, cpdlc_spd_t *spd,
 }
 
 static bool
+parse_proc(const char *start, const char *end, cpdlc_proc_t *proc,
+    char *reason, unsigned reason_cap)
+{
+	char buf[32];
+
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
+	CPDLC_ASSERT(proc != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	cpdlc_strlcpy(buf, start, MIN(sizeof (buf),
+	    (unsigned)(end - start) + 1));
+	if (strchr(buf, ':') == NULL) {
+		proc->type = CPDLC_PROC_UNKNOWN;
+		cpdlc_strlcpy(proc->name, buf, sizeof (proc->name));
+		return (true);
+	}
+	if (strncmp(buf, "SID:", 4) == 0) {
+		char *s = strchr(&buf[4], '.');
+
+		proc->type = CPDLC_PROC_DEPARTURE;
+		if (s == NULL) {
+			cpdlc_strlcpy(proc->name, &buf[4], sizeof (proc->name));
+		} else {
+			cpdlc_strlcpy(proc->name, &buf[4],
+			    MIN(sizeof (proc->name),
+			    (unsigned)(s - &buf[4]) + 1));
+			cpdlc_strlcpy(proc->trans, &s[1], sizeof (proc->trans));
+		}
+	} else if (strncmp(buf, "APP:", 4) == 0) {
+		char *s = strchr(&buf[4], '.');
+
+		proc->type = CPDLC_PROC_APPROACH;
+		if (s == NULL) {
+			cpdlc_strlcpy(proc->name, &buf[4], sizeof (proc->name));
+		} else {
+			cpdlc_strlcpy(proc->trans, &buf[4],
+			    MIN(sizeof (proc->trans),
+			    (unsigned)(s - &buf[4]) + 1));
+			cpdlc_strlcpy(proc->name, &s[1], sizeof (proc->name));
+		}
+	} else if (strncmp(buf, "STAR:", 5) == 0) {
+		char *s = strchr(&buf[5], '.');
+
+		proc->type = CPDLC_PROC_ARRIVAL;
+		if (s == NULL) {
+			cpdlc_strlcpy(proc->name, &buf[4], sizeof (proc->name));
+		} else {
+			cpdlc_strlcpy(proc->trans, &buf[5],
+			    MIN(sizeof (proc->trans),
+			    (unsigned)(s - &buf[5]) + 1));
+			cpdlc_strlcpy(proc->name, &s[1], sizeof (proc->name));
+		}
+		
+	} else {
+		MALFORMED_MSG("Unknown procedure type \"%s\"", buf);
+		return (false);
+	}
+	return (true);
+}
+
+static bool
 parse_posreport(const char *buf, cpdlc_pos_rep_t *rep, char *reason,
     unsigned reason_cap)
 {
@@ -2160,11 +2246,8 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 		}
 		case CPDLC_ARG_PROCEDURE:
 			arg_end = find_arg_end(start, end);
-			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
-			    (uintptr_t)(arg_end - start) + 1));
-			if (cpdlc_unescape_percent(textbuf, arg->proc,
-			    sizeof (arg->proc)) == -1) {
-				MALFORMED_MSG("invalid URL escape");
+			if (!parse_proc(start, arg_end, &arg->proc, reason,
+			    reason_cap)) {
 				return (false);
 			}
 			break;
@@ -2707,7 +2790,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->route = duplicate_route(arg_val1);
 		break;
 	case CPDLC_ARG_PROCEDURE:
-		cpdlc_strlcpy(arg->proc, arg_val1, sizeof (arg->proc));
+		arg->proc = *(const cpdlc_proc_t *)arg_val1;
 		break;
 	case CPDLC_ARG_SQUAWK:
 		arg->squawk = *(unsigned *)arg_val1;
@@ -2819,8 +2902,9 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (sizeof (cpdlc_route_t));
 	case CPDLC_ARG_PROCEDURE:
 		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
-		cpdlc_strlcpy(arg_val1, arg->proc, str_cap);
-		return (strlen(arg->proc));
+		if (str_cap >= sizeof (cpdlc_proc_t))
+			*(cpdlc_proc_t *)arg_val1 = arg->proc;
+		return (sizeof (cpdlc_proc_t));
 	case CPDLC_ARG_SQUAWK:
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(unsigned *)arg_val1 = arg->squawk;

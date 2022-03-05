@@ -93,7 +93,7 @@ verify_alt_req(fans_t *box)
 			    CPDLC_DM11_AT_pos_REQ_CLB_TO_alt :
 			    CPDLC_DM12_AT_pos_REQ_DES_TO_alt, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
-			    box->alt_req.step_at.pos, NULL);
+			    &box->alt_req.step_at.pos, NULL);
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 1,
 		    &box->alt_req.alt[0].fl, &box->alt_req.alt[0].alt);
@@ -169,9 +169,10 @@ draw_main_page(fans_t *box)
 }
 
 void
-fans_req_alt_reset(fans_t *box)
+fans_req_alt_init_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
+	memset(&box->req_common, 0, sizeof (box->req_common));
 	memset(&box->alt_req, 0, sizeof (box->alt_req));
 	box->alt_req.alt[0] = CPDLC_NULL_ALT;
 	box->alt_req.alt[1] = CPDLC_NULL_ALT;

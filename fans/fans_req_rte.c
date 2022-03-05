@@ -87,6 +87,7 @@ verify_rte_req(fans_t *box)
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->rte_req.trk.hdg,
 		    &box->rte_req.trk.tru);
 	}
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "RTE REQ", FMS_PAGE_REQ_RTE, true);
 }
@@ -119,6 +120,7 @@ void
 fans_req_rte_init_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
+	memset(&box->req_common, 0, sizeof (box->req_common));
 	memset(&box->rte_req, 0, sizeof (box->rte_req));
 }
 
@@ -127,10 +129,7 @@ fans_req_rte_draw_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 
-	fans_put_page_title(box, "FANS  ROUTE REQ");
-
 	fans_set_num_subpages(box, 2);
-
 	fans_put_page_title(box, "FANS  ROUTE REQ");
 	fans_put_page_ind(box);
 

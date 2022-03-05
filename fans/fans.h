@@ -165,8 +165,6 @@ typedef enum {
 fans_t *fans_alloc(const fans_funcs_t *funcs, void *userinfo);
 void fans_free(fans_t *box);
 
-void fans_reset(fans_t *box);
-
 cpdlc_client_t *fans_get_client(const fans_t *box);
 cpdlc_msglist_t *fans_get_msglist(const fans_t *box);
 

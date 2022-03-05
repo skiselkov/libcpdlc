@@ -250,7 +250,9 @@ fans_scratchpad_xfer_hdg(fans_t *box, fms_hdg_t *hdg, bool *read_back)
 	    new_hdg <= 360) {
 		char last = buf[strlen(buf) - 1];
 		hdg->set = true;
-		hdg->hdg = new_hdg % 360;
+		if (new_hdg == 0)
+			new_hdg = 360;
+		hdg->hdg = new_hdg;
 		if (!isdigit(last)) {
 			if (last == 'T')
 				hdg->tru = true;

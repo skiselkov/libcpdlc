@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-void fans_req_wcw_reset(fans_t *box);
+void fans_req_wcw_init_cb(fans_t *box);
 void fans_req_wcw_draw_cb(fans_t *box);
 bool fans_req_wcw_key_cb(fans_t *box, fms_key_t key);
 

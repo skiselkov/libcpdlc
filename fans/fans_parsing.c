@@ -139,8 +139,8 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 	if (field_nr >= 2)
 		return (FANS_ERR_INVALID_ENTRY);
 	if (field_nr == 0) {
-		*outalt = *inalt;
-		*outalt = CPDLC_NULL_ALT;
+		outalt[0] = *inalt;
+		outalt[1] = CPDLC_NULL_ALT;
 	} else {
 		if (/* lower alt must actually be set */
 		    CPDLC_IS_NULL_ALT(outalt[0]) ||
@@ -150,7 +150,7 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 		    (outalt[0].fl && !inalt->fl)) {
 			return (FANS_ERR_INVALID_ENTRY);
 		}
-		outalt[1] = CPDLC_NULL_ALT;
+		outalt[1] = *inalt;
 	}
 
 	return (FANS_ERR_NONE);

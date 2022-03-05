@@ -129,7 +129,7 @@ draw_main_page(fans_t *box)
 }
 
 void
-fans_req_wcw_reset(fans_t *box)
+fans_req_wcw_init_cb(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	memset(&box->wcw_req, 0, sizeof (box->wcw_req));
