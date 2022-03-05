@@ -172,13 +172,12 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		    NULL, &read_back)) {
 			return (true);
 		}
-		if (read_back) {
+		if (!read_back) {
 			box->wcw_req.spd[0] = CPDLC_NULL_SPD;
 			box->wcw_req.spd[1] = CPDLC_NULL_SPD;
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
-			if (!read_back)
-				fans_scratchpad_clear(box);
+			fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->wcw_req.crz_clb = !box->wcw_req.crz_clb;
