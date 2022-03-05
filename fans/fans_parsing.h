@@ -71,7 +71,8 @@ void fans_read_wind_block(fans_t *box, void *userinfo,
     char str[READ_FUNC_BUF_SZ]);
 fans_err_t fans_delete_wind(fans_t *box, void *userinfo);
 
-fans_err_t fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo);
+fans_err_t fans_delete_cpdlc_alt_block(fans_t *box, void *userinfo);
+fans_err_t fans_delete_cpdlc_spd_block(fans_t *box, void *userinfo);
 
 int fans_print_alt(const cpdlc_alt_t *alt, char *str, size_t cap, bool units);
 int fans_print_spd(const cpdlc_spd_t *spd, char *str, size_t cap, bool pretty,

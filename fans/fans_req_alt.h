@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-void fans_req_alt_init_cb(fans_t *box);
+void fans_req_alt_reset(fans_t *box);
 void fans_req_alt_draw_cb(fans_t *box);
 bool fans_req_alt_key_cb(fans_t *box, fms_key_t key);
 

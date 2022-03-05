@@ -139,7 +139,7 @@ verify_pos_rep(fans_t *box)
 
 	seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM48_POS_REPORT_posreport, 0);
 	cpdlc_msg_seg_set_arg(msg, seg, 0, &rep, NULL);
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "POS REP", FMS_PAGE_POS_REP, true);
 }

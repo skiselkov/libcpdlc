@@ -97,10 +97,11 @@ fans_requests_key_cb(fans_t *box, fms_key_t key)
 }
 
 void
-fans_req_add_common(fans_t *box, cpdlc_msg_t *msg)
+fans_req_add_common(fans_t *box, cpdlc_msg_t *msg, const char *extra_prepend)
 {
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(msg != NULL);
+	/* extra_prepend can be NULL */
 
 	if (box->req_common.due_wx) {
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM65_DUE_TO_WX, 0);
@@ -114,15 +115,21 @@ fans_req_add_common(fans_t *box, cpdlc_msg_t *msg)
 	if (box->req_common.freetext[0][0] != '\0' ||
 	    box->req_common.freetext[1][0] != '\0' ||
 	    box->req_common.freetext[2][0] != '\0' ||
-	    box->req_common.freetext[3][0] != '\0') {
-		char buf[sizeof (box->req_common.freetext) +
-		    REQ_FREETEXT_LINES] = { 0 };
+	    box->req_common.freetext[3][0] != '\0' ||
+	    extra_prepend != NULL) {
+		unsigned bufsz = sizeof (box->req_common.freetext) +
+		    REQ_FREETEXT_LINES + strlen(extra_prepend) + 1 + 1;
+		char buf[bufsz];
 		unsigned seg;
 
+		memset(buf, 0, bufsz);
+		if (extra_prepend != NULL) {
+			strcat(buf, extra_prepend);
+			strcat(buf, " ");
+		}
 		for (int i = 0; i < REQ_FREETEXT_LINES; i++) {
-			if (box->req_common.freetext[i][0] != '\0') {
+			if (box->req_common.freetext[i][0] != '\0')
 				strcat(buf, box->req_common.freetext[i]);
-			}
 		}
 		if (box->req_common.distress) {
 			seg = cpdlc_msg_add_seg(msg, true,

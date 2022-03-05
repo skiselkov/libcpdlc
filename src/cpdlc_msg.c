@@ -197,7 +197,8 @@ serialize_lat_lon(const cpdlc_lat_lon_t *lat_lon, bool readable,
 
 	if (readable) {
 		APPEND_SNPRINTF(*len_p, *outbuf_p, *cap_p,
-		    "%c%02.0f%04.1f%c%03.0f%04.1f ",
+		    "%c%02.0f" CPDLC_DEG_SYMBOL "%04.1f "
+		    "%c%03.0f" CPDLC_DEG_SYMBOL "%04.1f ",
 		    lat_lon->lat >= 0 ? 'N' : 'S', trunc(ABS(lat_lon->lat)),
 		    fabs(lat_lon->lat - trunc(lat_lon->lat)),
 		    lat_lon->lon >= 0 ? 'E' : 'W', trunc(ABS(lat_lon->lon)),
@@ -603,7 +604,7 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 		    rep->rmng_fuel.hrs, rep->rmng_fuel.mins);
 	}
 	if (!CPDLC_IS_NULL_TEMP(rep->temp))
-		APPEND_SNPRINTF(n, buf, cap, "OAT %+d ", rep->temp);
+		APPEND_SNPRINTF(n, buf, cap, "OAT %+dC ", rep->temp);
 	if (!CPDLC_IS_NULL_WIND(rep->wind)) {
 		APPEND_SNPRINTF(n, buf, cap, "WIND %03d/%d ",
 		    rep->wind.dir, rep->wind.spd);
@@ -781,10 +782,22 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_TIME_DUR:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-		    "%s%d%s", readable ? "" : " ",
-		    arg->time.hrs * 60 + arg->time.mins,
-		    readable ? " MINUTES" : "");
+		if (readable) {
+			if (arg->time.hrs == 0) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%d MINUTES", arg->time.mins);
+			} else if (arg->time.mins == 0) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%d HOURS", arg->time.hrs);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%d HOURS %d MINUTES", arg->time.hrs,
+				    arg->time.mins);
+			}
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %d", arg->time.hrs * 60 + arg->time.mins);
+		}
 		break;
 	case CPDLC_ARG_POSITION: {
 		char posbuf[128];

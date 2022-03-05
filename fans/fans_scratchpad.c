@@ -291,7 +291,7 @@ fans_scratchpad_xfer_alt(fans_t *box, cpdlc_alt_t *useralt,
 		if (strlen(userbuf) != 0)
 			error = fans_parse_alt(userbuf, 0, useralt);
 		else
-			memset(useralt, 0, sizeof (*useralt));
+			*useralt = CPDLC_NULL_ALT;
 	}
 	fans_set_error(box, error);
 	return (error == FANS_ERR_NONE);
@@ -524,7 +524,7 @@ fans_scratchpad_xfer_spd(fans_t *box, cpdlc_spd_t *userspd,
 			if (error == FANS_ERR_NONE)
 				memcpy(userspd, &new_spd, sizeof (new_spd));
 		} else {
-			memset(userspd, 0, sizeof (*userspd));
+			*userspd = CPDLC_NULL_SPD;
 		}
 	}
 	fans_set_error(box, error);

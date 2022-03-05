@@ -36,7 +36,7 @@ static bool
 can_verify_spd_req(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
-	return (box->spd_req.spd[0].spd.spd != 0);
+	return (!CPDLC_IS_NULL_SPD(box->spd_req.spd[0]));
 }
 
 static void
@@ -45,21 +45,21 @@ verify_spd_req(fans_t *box)
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
-	if (box->spd_req.spd[1].spd.spd != 0) {
+	if (!CPDLC_IS_NULL_SPD(box->spd_req.spd[1])) {
 		seg = cpdlc_msg_add_seg(msg, true, 
 		    CPDLC_DM19_REQ_spd_TO_spd, 0);
 		for (int i = 0; i < 2; i++) {
 			cpdlc_msg_seg_set_arg(msg, seg, i,
-			    &box->spd_req.spd[i].spd.mach,
-			    &box->alt_req.alt[i].spd.spd);
+			    &box->spd_req.spd[i].mach,
+			    &box->spd_req.spd[i].spd);
 		}
 	} else {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM18_REQ_spd, 0);
 		cpdlc_msg_seg_set_arg(msg, seg, 0,
-		    &box->spd_req.spd[0].spd.mach,
-		    &box->alt_req.alt[0].spd.spd);
+		    &box->spd_req.spd[0].mach,
+		    &box->spd_req.spd[0].spd);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "SPD REQ", FMS_PAGE_REQ_SPD, true);
 }
@@ -68,12 +68,12 @@ static void
 draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "SPD/SPD BLOCK");
-	fans_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0].spd,
+	fans_put_spd(box, LSK1_ROW, 0, false, &box->spd_req.spd[0],
 	    NULL, true, false, false);
 
 	fans_put_str(box, LSK1_ROW, 3, false, FMS_COLOR_CYAN,
 	    FMS_FONT_SMALL, "/");
-	fans_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1].spd,
+	fans_put_spd(box, LSK1_ROW, 4, false, &box->spd_req.spd[1],
 	    NULL, false, false, false);
 
 	fans_req_draw_due(box, false);
@@ -117,8 +117,8 @@ fans_req_spd_key_cb(fans_t *box, fms_key_t key)
 		bool read_back;
 		if (fans_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fans_t, spd_req.spd),
-		    sizeof (cpdlc_arg_t), fans_parse_spd,
-		    fans_insert_spd_block, fans_delete_cpdlc_arg_block,
+		    sizeof (cpdlc_spd_t), fans_parse_spd,
+		    fans_insert_spd_block, fans_delete_cpdlc_spd_block,
 		    fans_read_spd_block, &read_back) && !read_back) {
 			fans_scratchpad_clear(box);
 		}

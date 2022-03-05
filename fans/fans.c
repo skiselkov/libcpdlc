@@ -97,7 +97,6 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 		.has_return = true
 	},
 	[FMS_PAGE_REQ_ALT] = {
-		.init_cb = fans_req_alt_init_cb,
 		.draw_cb = fans_req_alt_draw_cb,
 		.key_cb = fans_req_alt_key_cb
 	},
@@ -126,7 +125,6 @@ static fms_page_t fms_pages[FMS_NUM_PAGES] = {
 		.key_cb = fans_req_vmc_key_cb
 	},
 	[FMS_PAGE_REQ_WCW] = {
-		.init_cb = fans_req_wcw_init_cb,
 		.draw_cb = fans_req_wcw_draw_cb,
 		.key_cb = fans_req_wcw_key_cb
 	},
@@ -565,12 +563,12 @@ fans_put_pos(fans_t *box, int row, int col, bool align_right,
 		char buf[16];
 		fans_print_pos(autopos, buf, sizeof (buf), POS_PRINT_COMPACT);
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "<POS");
+		    FMS_FONT_LARGE, align_right ? "POS>" : "<POS");
 		fans_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_SMALL, "%s", buf);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
-		    FMS_FONT_LARGE, "<POS");
+		    FMS_FONT_LARGE, align_right ? "POS>" : "<POS");
 		fans_put_str(box, row, col + 5, align_right, FMS_COLOR_GREEN,
 		    FMS_FONT_LARGE, req ? "_________" : "---------");
 	}
@@ -707,7 +705,8 @@ fans_reset(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 
-	fans_emer_reset(box);
+	fans_req_alt_reset(box);
+	fans_req_wcw_reset(box);
 	fans_pos_rep_reset(box);
 }
 

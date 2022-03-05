@@ -2071,7 +2071,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "[fuel] OF FUEL REMAINING AND [persons] PERSONS ON BOARD",
 	.resp = CPDLC_RESP_N,
 	.num_args = 2,
-	.args = { CPDLC_ARG_TIME, CPDLC_ARG_PERSONS }
+	.args = { CPDLC_ARG_TIME_DUR, CPDLC_ARG_PERSONS }
     },
     {
 	.is_dl = true,

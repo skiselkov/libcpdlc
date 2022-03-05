@@ -230,7 +230,7 @@ struct fans_s {
 	union {
 		char		freetext[MAX_FREETEXT_LINES][FMS_COLS + 1];
 		struct {
-			cpdlc_arg_t	alt[2];
+			cpdlc_alt_t	alt[2];
 			bool		crz_clb;
 			fms_step_at_t	step_at;
 			bool		plt_discret;
@@ -241,7 +241,7 @@ struct fans_s {
 			fms_step_at_t	step_at;
 		} off_req;
 		struct {
-			cpdlc_arg_t	spd[2];
+			cpdlc_spd_t	spd[2];
 		} spd_req;
 		struct {
 			cpdlc_pos_t	dct;
@@ -256,8 +256,8 @@ struct fans_s {
 			bool		clx;
 		} clx_req;
 		struct {
-			cpdlc_arg_t	alt;
-			cpdlc_arg_t	spd[2];
+			cpdlc_alt_t	alt;
+			cpdlc_spd_t	spd[2];
 			bool		crz_clb;
 			bool		back_on_rte;
 			alt_chg_t	alt_chg;

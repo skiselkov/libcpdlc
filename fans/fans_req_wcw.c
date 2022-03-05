@@ -37,9 +37,9 @@ static bool
 can_verify_wcw_req(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
-	return (box->wcw_req.alt.alt.alt != 0 ||
-	    box->wcw_req.spd[0].spd.spd != 0 || box->wcw_req.back_on_rte ||
-	    box->wcw_req.alt_chg);
+	return (!CPDLC_IS_NULL_ALT(box->wcw_req.alt) ||
+	    !CPDLC_IS_NULL_SPD(box->wcw_req.spd[0]) ||
+	    box->wcw_req.back_on_rte || box->wcw_req.alt_chg);
 }
 
 static void
@@ -48,7 +48,7 @@ verify_wcw_req(fans_t *box)
 	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 
-	if (box->wcw_req.alt.alt.alt != 0) {
+	if (!CPDLC_IS_NULL_ALT(box->wcw_req.alt)) {
 		if (box->wcw_req.crz_clb) {
 			seg = cpdlc_msg_add_seg(msg, true,
 			    CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt, 0);
@@ -56,7 +56,7 @@ verify_wcw_req(fans_t *box)
 			int cur_alt;
 
 			if (!fans_get_cur_alt(box, &cur_alt, NULL) ||
-			    box->wcw_req.alt.alt.alt >= cur_alt) {
+			    box->wcw_req.alt.alt >= cur_alt) {
 				seg = cpdlc_msg_add_seg(msg, true, 67,
 				    CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt);
 			} else {
@@ -64,22 +64,21 @@ verify_wcw_req(fans_t *box)
 				    CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt);
 			}
 		}
-		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->wcw_req.alt.alt.fl,
-		    &box->wcw_req.alt.alt.alt);
-	} else if (box->wcw_req.spd[1].spd.spd != 0) {
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->wcw_req.alt.fl,
+		    &box->wcw_req.alt.alt);
+	} else if (!CPDLC_IS_NULL_SPD(box->wcw_req.spd[1])) {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM50_WHEN_CAN_WE_EXPCT_spd_TO_spd, 0);
 		for (int i = 0; i < 2; i++) {
 			cpdlc_msg_seg_set_arg(msg, seg, i,
-			    &box->wcw_req.spd[i].spd.mach,
-			    &box->wcw_req.spd[i].spd.spd);
+			    &box->wcw_req.spd[i].mach,
+			    &box->wcw_req.spd[i].spd);
 		}
-	} else if (box->wcw_req.spd[0].spd.spd != 0) {
+	} else if (!CPDLC_IS_NULL_SPD(box->wcw_req.spd[0])) {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM49_WHEN_CAN_WE_EXPCT_spd, 0);
 		cpdlc_msg_seg_set_arg(msg, seg, 0,
-		    &box->wcw_req.spd[0].spd.mach,
-		    &box->wcw_req.spd[0].spd.spd);
+		    &box->wcw_req.spd[0].mach, &box->wcw_req.spd[0].spd);
 	} else if (box->wcw_req.back_on_rte) {
 		seg = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM51_WHEN_CAN_WE_EXPCT_BACK_ON_ROUTE, 0);
@@ -92,7 +91,7 @@ verify_wcw_req(fans_t *box)
 		    CPDLC_DM52_WHEN_CAN_WE_EXPECT_LOWER_ALT, 0);
 	}
 
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "WHEN", FMS_PAGE_REQ_WCW, true);
 }
@@ -101,10 +100,10 @@ static void
 draw_main_page(fans_t *box)
 {
 	fans_put_lsk_title(box, FMS_KEY_LSK_L1, "ALTITUDE");
-	fans_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt.alt,
+	fans_put_alt(box, LSK1_ROW, 0, false, &box->wcw_req.alt,
 	    false, true, false);
 
-	if (box->wcw_req.alt.alt.alt >= CRZ_CLB_THRESH) {
+	if (box->wcw_req.alt.alt >= CRZ_CLB_THRESH) {
 		fans_put_lsk_title(box, FMS_KEY_LSK_L2, "CRZ CLB");
 		fans_put_altn_selector(box, LSK2_ROW, false,
 		    box->wcw_req.crz_clb, "NO", "YES", NULL);
@@ -117,11 +116,11 @@ draw_main_page(fans_t *box)
 	    "NONE", "HIGHER", "LOWER", NULL);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R1, "SPD/SPD BLOCK");
-	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0].spd,
+	fans_put_spd(box, LSK1_ROW, 4, true, &box->wcw_req.spd[0],
 	    false, false, false, false);
 	fans_put_str(box, LSK1_ROW, 3, true, FMS_COLOR_WHITE,
 	    FMS_FONT_LARGE, "/");
-	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1].spd,
+	fans_put_spd(box, LSK1_ROW, 0, true, &box->wcw_req.spd[1],
 	    false, false, false, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R2, "BACK ON RTE");
@@ -130,10 +129,13 @@ draw_main_page(fans_t *box)
 }
 
 void
-fans_req_wcw_init_cb(fans_t *box)
+fans_req_wcw_reset(fans_t *box)
 {
 	CPDLC_ASSERT(box != NULL);
 	memset(&box->wcw_req, 0, sizeof (box->wcw_req));
+	box->wcw_req.alt = CPDLC_NULL_ALT;
+	box->wcw_req.spd[0] = CPDLC_NULL_SPD;
+	box->wcw_req.spd[1] = CPDLC_NULL_SPD;
 }
 
 void
@@ -164,25 +166,15 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 	CPDLC_ASSERT(box != NULL);
 
 	if (box->subpage == 0 && key == FMS_KEY_LSK_L1) {
-		char buf[8];
-		cpdlc_arg_t arg;
-		fans_err_t err;
 		bool read_back;
 
-		memset(&arg, 0, sizeof (arg));
-		fans_print_alt(&box->wcw_req.alt.alt, buf, sizeof (buf), false);
-		if (!fans_scratchpad_xfer(box, buf, sizeof (buf), true,
-		    &read_back)) {
+		if (!fans_scratchpad_xfer_alt(box, &box->wcw_req.alt,
+		    NULL, &read_back)) {
 			return (true);
 		}
-		if (strlen(buf) == 0) {
-			box->wcw_req.alt.alt = CPDLC_NULL_ALT;
-		} else if ((err = fans_parse_alt(buf, 0, &arg)) !=
-		    FANS_ERR_NONE) {
-			fans_set_error(box, err);
-		} else {
-			box->wcw_req.alt = arg;
-			memset(box->wcw_req.spd, 0, sizeof (box->wcw_req.spd));
+		if (read_back) {
+			box->wcw_req.spd[0] = CPDLC_NULL_SPD;
+			box->wcw_req.spd[1] = CPDLC_NULL_SPD;
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
 			if (!read_back)
@@ -191,8 +183,9 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L2) {
 		box->wcw_req.crz_clb = !box->wcw_req.crz_clb;
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_L3) {
-		memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
-		memset(box->wcw_req.spd, 0, sizeof (box->wcw_req.spd));
+		box->wcw_req.alt = CPDLC_NULL_ALT;
+		box->wcw_req.spd[0] = CPDLC_NULL_SPD;
+		box->wcw_req.spd[1] = CPDLC_NULL_SPD;
 		box->wcw_req.back_on_rte = false;
 		box->wcw_req.alt_chg = (box->wcw_req.alt_chg + 1) %
 		    (ALT_CHG_LOWER + 1);
@@ -201,17 +194,18 @@ fans_req_wcw_key_cb(fans_t *box, fms_key_t key)
 		if (fans_scratchpad_xfer_multi(box,
 		    (void *)offsetof(fans_t, wcw_req.spd),
 		    sizeof (cpdlc_arg_t), fans_parse_spd,
-		    fans_insert_spd_block, fans_delete_cpdlc_arg_block,
+		    fans_insert_spd_block, fans_delete_cpdlc_spd_block,
 		    fans_read_spd_block, &read_back)) {
-			memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
+			box->wcw_req.alt = CPDLC_NULL_ALT;
 			box->wcw_req.back_on_rte = false;
 			box->wcw_req.alt_chg = ALT_CHG_NONE;
 			if (!read_back)
 				fans_scratchpad_clear(box);
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R2) {
-		memset(&box->wcw_req.alt, 0, sizeof (box->wcw_req.alt));
-		memset(box->wcw_req.spd, 0, sizeof (box->wcw_req.spd));
+		box->wcw_req.alt = CPDLC_NULL_ALT;
+		box->wcw_req.spd[0] = CPDLC_NULL_SPD;
+		box->wcw_req.spd[1] = CPDLC_NULL_SPD;
 		box->wcw_req.back_on_rte = !box->wcw_req.back_on_rte;
 		box->wcw_req.alt_chg = ALT_CHG_NONE;
 	} else if (key == FMS_KEY_LSK_L5) {

@@ -37,11 +37,10 @@
 static void
 verify_emer(fans_t *box)
 {
-//	unsigned l = 0;
-//	int seg = 0;
 	cpdlc_msg_t *msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 	cpdlc_alt_t des;
 	fms_time_t fuel;
+	char reason[64] = {};
 
 	if (box->emer.pan) {
 		cpdlc_msg_add_seg(msg, true, CPDLC_DM55_PAN_PAN_PAN, 0);
@@ -56,31 +55,29 @@ verify_emer(fans_t *box)
 		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fuel.hrs, &fuel.mins);
 		cpdlc_msg_seg_set_arg(msg, seg_nr, 1, &box->emer.souls, NULL);
 	}
-#if 0
 	switch (box->emer.reason) {
 	case EMER_REASON_NONE:
 		break;
 	case EMER_REASON_WX:
-		APPEND_SNPRINTF(buf, l, " %sDUE TO WX.",
+		snprintf(reason, sizeof (reason), "%sDUE TO WX. ",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_MED:
-		APPEND_SNPRINTF(buf, l, " MEDICAL EMERGENCY.");
+		snprintf(reason, sizeof (reason), "MEDICAL EMERGENCY. ");
 		break;
 	case EMER_REASON_CABIN_PRESS:
-		APPEND_SNPRINTF(buf, l, " %sDUE TO CABIN PRESS.",
+		snprintf(reason, sizeof (reason), "%sDUE TO CABIN PRESS. ",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_ENG_LOSS:
-		APPEND_SNPRINTF(buf, l, " %sDUE TO ENGINE LOSS.",
+		snprintf(reason, sizeof (reason), "%sDUE TO ENGINE LOSS. ",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_LOW_FUEL:
-		APPEND_SNPRINTF(buf, l, " %sDUE TO LOW FUEL.",
+		snprintf(reason, sizeof (reason), "%sDUE TO LOW FUEL. ",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	}
-#endif
 	if (box->emer.divert.set) {
 		const cpdlc_route_t dct = {};
 		int seg_nr = cpdlc_msg_add_seg(msg, true,
@@ -102,12 +99,9 @@ verify_emer(fans_t *box)
 		const bool fl = false;
 		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fl, &des);
 	}
-//	seg = cpdlc_msg_add_seg(msg, true,
-//	    CPDLC_DM68_FREETEXT_DISTRESS_text, 0);
-//	cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
 
 	box->req_common.distress = true;
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, reason[0] != '\0' ? reason : NULL);
 
 	fans_verify_msg(box, msg, "EMER MSG", FMS_PAGE_EMER, true);
 }
@@ -185,6 +179,7 @@ void
 fans_emer_init_cb(fans_t *box)
 {
 	int cur_alt, sel_alt;
+	float vvi;
 	bool sel_alt_fl;
 
 	/* The EMER page can send freetext as well */
@@ -194,15 +189,20 @@ fans_emer_init_cb(fans_t *box)
 
 	fans_get_cur_alt(box, &cur_alt, NULL);
 	fans_get_sel_alt(box, &sel_alt, &sel_alt_fl);
+	vvi = fans_get_cur_vvi(box);
 
 	box->emer.fuel_auto.set = fans_get_fuel(box, &box->emer.fuel_auto.hrs,
 	    &box->emer.fuel_auto.mins);
 	if (fans_is_valid_alt(cur_alt) && fans_is_valid_alt(sel_alt) &&
-	    cur_alt >= sel_alt + LVL_ALT_THRESH) {
+	    !isnan(vvi) && vvi <= 300 && cur_alt >= sel_alt + LVL_ALT_THRESH) {
 		box->emer.des_auto.fl = sel_alt_fl;
 		box->emer.des_auto.alt = sel_alt;
+	} else {
+		box->emer.des_auto = CPDLC_NULL_ALT;
 	}
 	box->emer.souls_set = fans_get_souls(box, &box->emer.souls);
+	box->emer.des = CPDLC_NULL_ALT;
+	box->emer.divert = CPDLC_NULL_POS;
 }
 
 void
@@ -272,12 +272,4 @@ fans_emer_key_cb(fans_t *box, fms_key_t key)
 	}
 
 	return (true);
-}
-
-void
-fans_emer_reset(fans_t *box)
-{
-	CPDLC_ASSERT(box != NULL);
-	box->emer.des = CPDLC_NULL_ALT;
-	box->emer.divert = CPDLC_NULL_POS;
 }

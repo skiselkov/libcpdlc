@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -122,6 +122,10 @@ extern "C" {
 	(((x) & 0xff00000000000000llu) << 56))
 #endif	/* BSWAP32 */
 #endif	/* !__GNUC__ && !__clang__ */
+
+#ifndef	CPDLC_DEG_SYMBOL
+#define	CPDLC_DEG_SYMBOL	"\370"
+#endif
 
 #ifdef	__cplusplus
 }

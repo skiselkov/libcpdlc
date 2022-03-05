@@ -46,7 +46,7 @@ verify_voice_req(fans_t *box)
 	} else {
 		seg = cpdlc_msg_add_seg(msg, true, CPDLC_DM20_REQ_VOICE_CTC, 0);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "VOICE", FMS_PAGE_REQ_VOICE, true);
 }

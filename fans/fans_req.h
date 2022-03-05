@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2022 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -35,7 +35,8 @@ extern "C" {
 void fans_requests_draw_cb(fans_t *box);
 bool fans_requests_key_cb(fans_t *box, fms_key_t key);
 
-void fans_req_add_common(fans_t *box, cpdlc_msg_t *msg);
+void fans_req_add_common(fans_t *box, cpdlc_msg_t *msg,
+    const char *extra_prepend);
 
 void fans_req_draw_due(fans_t *box, bool due_tfc);
 void fans_req_key_due(fans_t *box, fms_key_t key);

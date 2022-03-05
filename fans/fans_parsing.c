@@ -82,42 +82,42 @@ fans_parse_time(const char *buf, int *hrs_p, int *mins_p)
 fans_err_t
 fans_parse_alt(const char *str, unsigned field_nr, void *data)
 {
-	cpdlc_arg_t arg;
+	cpdlc_alt_t alt;
+	cpdlc_alt_t *alt_out;
 
 	CPDLC_ASSERT(str != NULL);
 	CPDLC_UNUSED(field_nr);
 	CPDLC_ASSERT(data != NULL);
-
-	memset(&arg, 0, sizeof (arg));
+	alt_out = data;
 
 	if (strlen(str) < 2)
 		return (FANS_ERR_INVALID_ENTRY);
 	if (str[0] == 'F' && str[1] == 'L') {
-		if (sscanf(&str[2], "%d", &arg.alt.alt) != 1)
+		if (sscanf(&str[2], "%d", &alt.alt) != 1)
 			return (FANS_ERR_INVALID_ENTRY);
-		arg.alt.fl = true;
-		arg.alt.alt *= 100;
+		alt.fl = true;
+		alt.alt *= 100;
 	} else if (str[0] == 'F') {
-		if (sscanf(&str[1], "%d", &arg.alt.alt) != 1)
+		if (sscanf(&str[1], "%d", &alt.alt) != 1)
 			return (FANS_ERR_INVALID_ENTRY);
-		arg.alt.fl = true;
-		arg.alt.alt *= 100;
+		alt.fl = true;
+		alt.alt *= 100;
 	} else {
-		if (sscanf(str, "%d", &arg.alt.alt) != 1)
+		if (sscanf(str, "%d", &alt.alt) != 1)
 			return (FANS_ERR_INVALID_ENTRY);
-		if (arg.alt.alt < 1000) {
-			arg.alt.fl = true;
-			arg.alt.alt *= 100;
+		if (alt.alt < 1000) {
+			alt.fl = true;
+			alt.alt *= 100;
 		} else {
 			/* Round to nearest 100 ft */
-			arg.alt.fl = false;
-			arg.alt.alt = round(arg.alt.alt / 100.0) * 100;
+			alt.fl = false;
+			alt.alt = round(alt.alt / 100.0) * 100;
 		}
 	}
-	if (arg.alt.alt < 1000 || arg.alt.alt > 60000)
+	if (alt.alt < -2000 || alt.alt > 60000)
 		return (FANS_ERR_INVALID_ENTRY);
 
-	memcpy(data, &arg, sizeof (arg));
+	*alt_out = alt;
 
 	return (FANS_ERR_NONE);
 }
@@ -126,31 +126,31 @@ fans_err_t
 fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
     void *userinfo)
 {
-	cpdlc_arg_t *inarg, *outarg;
+	cpdlc_alt_t *inalt, *outalt;
 	size_t offset;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(data != NULL);
-	inarg = data;
+	inalt = data;
 	offset = (uintptr_t)userinfo;
-	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_alt_t));
+	outalt = ((void *)box) + offset;
 
 	if (field_nr >= 2)
 		return (FANS_ERR_INVALID_ENTRY);
 	if (field_nr == 0) {
-		memcpy(outarg, inarg, sizeof (*inarg));
-		memset(&outarg[1], 0, sizeof (*inarg));
+		*outalt = *inalt;
+		*outalt = CPDLC_NULL_ALT;
 	} else {
 		if (/* lower alt must actually be set */
-		    outarg[0].alt.alt == 0 ||
+		    CPDLC_IS_NULL_ALT(outalt[0]) ||
 		    /* lower alt must really be lower */
-		    outarg[0].alt.alt >= inarg->alt.alt ||
+		    outalt[0].alt >= inalt->alt ||
 		    /* if lower alt is FL, higher must as well */
-		    (outarg[0].alt.fl && !inarg->alt.fl)) {
+		    (outalt[0].fl && !inalt->fl)) {
 			return (FANS_ERR_INVALID_ENTRY);
 		}
-		memcpy(&outarg[1], inarg, sizeof (*inarg));
+		outalt[1] = CPDLC_NULL_ALT;
 	}
 
 	return (FANS_ERR_NONE);
@@ -159,21 +159,20 @@ fans_insert_alt_block(fans_t *box, unsigned field_nr, void *data,
 void
 fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 {
-	cpdlc_arg_t *outarg;
+	cpdlc_alt_t *outalt;
 	size_t offset;
 
 	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_alt_t));
+	outalt = ((void *)box) + offset;
 
-	if (outarg->alt.alt != 0) {
-		int l = fans_print_alt(&outarg->alt, str, READ_FUNC_BUF_SZ,
-		    false);
-		if (outarg[1].alt.alt != 0) {
+	if (!CPDLC_IS_NULL_ALT(*outalt)) {
+		int l = fans_print_alt(outalt, str, READ_FUNC_BUF_SZ, false);
+		if (outalt[1].alt != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
-			fans_print_alt(&(outarg[1].alt), &str[l],
+			fans_print_alt(&outalt[1], &str[l],
 			    READ_FUNC_BUF_SZ - l, false);
 		}
 	}
@@ -182,28 +181,28 @@ fans_read_alt_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 fans_err_t
 fans_parse_spd(const char *str, unsigned field_nr, void *data)
 {
-	cpdlc_arg_t *arg;
+	cpdlc_spd_t *spd;
 
 	CPDLC_ASSERT(str != NULL);
 	CPDLC_UNUSED(field_nr);
 	CPDLC_ASSERT(data != NULL);
-	arg = data;
+	spd = data;
 
 	if (strlen(str) < 2)
 		return (FANS_ERR_INVALID_ENTRY);
 	if (str[0] == 'M' || str[0] == '.') {
-		if (sscanf(&str[1], "%d", &arg->spd.spd) != 1 ||
-		    arg->spd.spd < 10 || arg->spd.spd > 99)
+		if (sscanf(&str[1], "%d", &spd->spd) != 1 ||
+		    spd->spd < 10 || spd->spd > 99)
 			return (FANS_ERR_INVALID_ENTRY);
-		arg->spd.mach = true;
-		arg->spd.spd *= 10;
+		spd->mach = true;
+		spd->spd *= 10;
 	} else {
-		if (sscanf(str, "%d", &arg->spd.spd) != 1 ||
-		    arg->spd.spd < 10 || arg->spd.spd > 999)
+		if (sscanf(str, "%d", &spd->spd) != 1 ||
+		    spd->spd < 10 || spd->spd > 999)
 			return (FANS_ERR_INVALID_ENTRY);
-		if (arg->spd.spd < 100) {
-			arg->spd.mach = true;
-			arg->spd.spd *= 10;
+		if (spd->spd < 100) {
+			spd->mach = true;
+			spd->spd *= 10;
 		}
 	}
 
@@ -214,31 +213,31 @@ fans_err_t
 fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
     void *userinfo)
 {
-	cpdlc_arg_t *inarg, *outarg;
+	cpdlc_spd_t *inspd, *outspd;
 	size_t offset;
 
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(data != NULL);
-	inarg = data;
+	inspd = data;
 	offset = (uintptr_t)userinfo;
-	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_spd_t));
+	outspd = ((void *)box) + offset;
 
 	if (field_nr >= 2)
 		return (FANS_ERR_INVALID_ENTRY);
 	if (field_nr == 0) {
-		memcpy(outarg, inarg, sizeof (*inarg));
-		memset(&outarg[1], 0, sizeof (*inarg));
+		outspd[0] = *inspd;
+		outspd[1] = CPDLC_NULL_SPD;
 	} else {
 		if (/* both speeds must be mach or airspeed */
-		    outarg[0].spd.mach != inarg->spd.mach ||
+		    outspd[0].mach != inspd->mach ||
 		    /* lower airspeed must be set */
-		    outarg[0].spd.spd == 0 ||
+		    CPDLC_IS_NULL_SPD(outspd[0]) ||
 		    /* lower speed must really be lower */
-		    (outarg[0].spd.spd >= inarg->spd.spd)) {
+		    (outspd[0].spd >= inspd->spd)) {
 			return (FANS_ERR_INVALID_ENTRY);
 		}
-		memcpy(&outarg[1], inarg, sizeof (*inarg));
+		outspd[1] = *inspd;
 	}
 
 	return (FANS_ERR_NONE);
@@ -247,21 +246,21 @@ fans_insert_spd_block(fans_t *box, unsigned field_nr, void *data,
 void
 fans_read_spd_block(fans_t *box, void *userinfo, char str[READ_FUNC_BUF_SZ])
 {
-	cpdlc_arg_t *outarg;
+	cpdlc_spd_t *outspd;
 	size_t offset;
 
 	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_spd_t));
+	outspd = ((void *)box) + offset;
 
-	if (outarg->alt.alt != 0) {
-		int l = fans_print_spd(&outarg->spd, str, READ_FUNC_BUF_SZ,
-		    false, false);
-		if (outarg[1].spd.spd != 0) {
+	if (!CPDLC_IS_NULL_SPD(*outspd)) {
+		int l = fans_print_spd(outspd, str, READ_FUNC_BUF_SZ, false,
+		    false);
+		if (outspd[1].spd != 0) {
 			strncat(str, "/", READ_FUNC_BUF_SZ - l - 1);
 			l++;
-			fans_print_spd(&(outarg[1].spd), &str[l],
+			fans_print_spd(&outspd[1], &str[l],
 			    READ_FUNC_BUF_SZ - l, false, false);
 		}
 	}
@@ -344,16 +343,33 @@ fans_delete_wind(fans_t *box, void *userinfo)
 }
 
 fans_err_t
-fans_delete_cpdlc_arg_block(fans_t *box, void *userinfo)
+fans_delete_cpdlc_alt_block(fans_t *box, void *userinfo)
 {
-	cpdlc_arg_t *outarg;
+	cpdlc_alt_t *outalt;
 	size_t offset;
 
 	CPDLC_ASSERT(box != NULL);
 	offset = (uintptr_t)userinfo;
-	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_arg_t));
-	outarg = ((void *)box) + offset;
-	memset(outarg, 0, 2 * sizeof (*outarg));
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_alt_t));
+	outalt = ((void *)box) + offset;
+	outalt[0] = CPDLC_NULL_ALT;
+	outalt[1] = CPDLC_NULL_ALT;
+
+	return (FANS_ERR_NONE);
+}
+
+fans_err_t
+fans_delete_cpdlc_spd_block(fans_t *box, void *userinfo)
+{
+	cpdlc_spd_t *outspd;
+	size_t offset;
+
+	CPDLC_ASSERT(box != NULL);
+	offset = (uintptr_t)userinfo;
+	CPDLC_ASSERT3U(offset, <=, sizeof (*box) - 2 * sizeof (cpdlc_spd_t));
+	outspd = ((void *)box) + offset;
+	outspd[0] = CPDLC_NULL_SPD;
+	outspd[1] = CPDLC_NULL_SPD;
 
 	return (FANS_ERR_NONE);
 }
@@ -549,23 +565,27 @@ fans_parse_pos(const char *buf, cpdlc_pos_t *pos)
 	CPDLC_ASSERT(buf != NULL);
 	CPDLC_ASSERT(pos != NULL);
 
-	if (strlen(buf) == 0)
+	if (strlen(buf) == 0) {
+		pos->set = false;
 		return (FANS_ERR_NONE);
-
+	}
 	switch (pos->type) {
 	case CPDLC_POS_NAVAID:
 		if (strlen(buf) > 4)
 			return (FANS_ERR_INVALID_ENTRY);
+		pos->set = true;
 		cpdlc_strlcpy(pos->navaid, buf, sizeof (pos->navaid));
 		break;
 	case CPDLC_POS_AIRPORT:
 		if (!is_valid_icao_code(buf))
 			return (FANS_ERR_INVALID_ENTRY);
+		pos->set = true;
 		cpdlc_strlcpy(pos->airport, buf, sizeof (pos->airport));
 		break;
 	case CPDLC_POS_FIXNAME:
 		if (strlen(buf) > 5)
 			return (FANS_ERR_INVALID_ENTRY);
+		pos->set = true;
 		cpdlc_strlcpy(pos->fixname, buf, sizeof (pos->fixname));
 		break;
 	case CPDLC_POS_LAT_LON: {
@@ -599,6 +619,7 @@ fans_parse_pos(const char *buf, cpdlc_pos_t *pos)
 		pos->lat_lon.lat = lat_sign * (degs + (mins / 60));
 		if (!parse_deg_mins(lon_buf, 3, &degs, &mins))
 			return (FANS_ERR_INVALID_ENTRY);
+		pos->set = true;
 		pos->lat_lon.lon = lon_sign * (degs + (mins / 60));
 
 		break;
@@ -623,6 +644,7 @@ fans_parse_pos(const char *buf, cpdlc_pos_t *pos)
 		    MIN(sizeof (pos->pbd.fixname), (unsigned)(s1 - buf) + 1));
 		pos->pbd.degrees = brg;
 		pos->pbd.dist_nm = dist_nm;
+		pos->set = true;
 		break;
 	}
 	case CPDLC_POS_UNKNOWN:

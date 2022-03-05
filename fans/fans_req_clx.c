@@ -74,7 +74,7 @@ verify_clx_req(fans_t *box)
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "CLX REQ", FMS_PAGE_REQ_CLX, true);
 }

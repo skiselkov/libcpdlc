@@ -72,7 +72,7 @@ verify_off_req(fans_t *box)
 		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->off_req.off.dir, NULL);
 		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.nm, NULL);
 	}
-	fans_req_add_common(box, msg);
+	fans_req_add_common(box, msg, NULL);
 
 	fans_verify_msg(box, msg, "OFF REQ", FMS_PAGE_REQ_OFF, true);
 }
