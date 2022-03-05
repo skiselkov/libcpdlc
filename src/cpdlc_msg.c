@@ -367,10 +367,10 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 		    !readable ? "SID:" : "", route->sid.name,
 		    readable && route->sid.trans[0] != '\0' ? "." : "",
 		    readable ? route->sid.trans : "");
-	}
-	if (route->sid.trans[0] != '\0' && !readable) {
-		APPEND_SNPRINTF(len, outbuf, cap, "SIDTR:%s ",
-		    route->sid.trans);
+		if (route->sid.trans[0] != '\0' && !readable) {
+			APPEND_SNPRINTF(len, outbuf, cap, "SIDTR:%s ",
+			    route->sid.trans);
+		}
 	}
 	for (unsigned i = 0; i < route->num_info; i++) {
 		serialize_route_info(route, &route->info[i], readable,
@@ -382,20 +382,28 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 		    readable ? route->star.trans : "",
 		    readable && route->star.trans[0] != '\0' ? "." : "",
 		    route->star.name);
-	}
-	if (route->star.trans[0] != '\0' && !readable) {
-		APPEND_SNPRINTF(len, outbuf, cap, "STARTR:%s ",
-		    route->star.trans);
+		if (route->star.trans[0] != '\0' && !readable) {
+			APPEND_SNPRINTF(len, outbuf, cap, "STARTR:%s ",
+			    route->star.trans);
+		}
 	}
 	if (route->appch.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
 		    !readable ? "APP:" : "", readable ? route->appch.trans : "",
 		    readable && route->appch.trans[0] != '\0' ? "." : "",
 		    route->appch.name);
+		if (route->appch.trans[0] != '\0' && !readable) {
+			APPEND_SNPRINTF(len, outbuf, cap, "APPTR:%s ",
+			    route->appch.trans);
+		}
 	}
-	if (route->appch.trans[0] != '\0' && !readable) {
-		APPEND_SNPRINTF(len, outbuf, cap, "APPTR:%s ",
-		    route->appch.trans);
+	/*
+	 * Bit of a special case for human readability.
+	 * Empty route implies a DIRECT route.
+	 */
+	if (route->sid.name[0] == '\0' && route->star.name[0] == '\0' &&
+	    route->appch.name[0] == '\0' && route->num_info == 0) {
+		APPEND_SNPRINTF(len, outbuf, cap, readable ? "DIRECT" : " ");
 	}
 	if (route->dest_icao[0] != '\0' && readable)
 		APPEND_SNPRINTF(len, outbuf, cap, "%s", route->dest_icao);
@@ -541,7 +549,7 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
     unsigned cap)
 {
 	unsigned n = 0;
-	char posbuf[128];
+	char posbuf[128] = {};
 
 	CPDLC_ASSERT(rep != NULL);
 	CPDLC_ASSERT(buf != NULL);
@@ -619,7 +627,7 @@ static void
 serialize_posreport_machine(const cpdlc_pos_rep_t *rep, char *buf,
     unsigned cap)
 {
-	char wkbuf[512];
+	char wkbuf[512] = {};
 	unsigned n = 0;
 
 	CPDLC_ASSERT(rep != NULL);
@@ -762,7 +770,7 @@ void
 cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
 {
-	char textbuf[8192];
+	char textbuf[8192] = {};
 
 	switch (arg_type) {
 	case CPDLC_ARG_ALTITUDE:
@@ -800,7 +808,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_POSITION: {
-		char posbuf[128];
+		char posbuf[128] = {};
 		serialize_pos(&arg->pos, readable, posbuf, sizeof (posbuf));
 		if (readable) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
@@ -883,7 +891,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	case CPDLC_ARG_ROUTE:
 		if (arg->route != NULL) {
-			char routebuf[8192];
+			char routebuf[8192] = {};
 			if (readable) {
 				serialize_route(arg->route, true,
 				    routebuf, sizeof (routebuf));
@@ -1008,7 +1016,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_POSREPORT: {
-		char repbuf[1024];
+		char repbuf[1024] = {};
 		serialize_posreport(&arg->pos_rep, readable, repbuf,
 		    sizeof (repbuf));
 		if (readable) {
@@ -1143,7 +1151,7 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
 	if (msg->is_logon) {
-		char textbuf[64];
+		char textbuf[64] = {};
 		CPDLC_ASSERT(msg->logon_data != NULL);
 		cpdlc_escape_percent(msg->logon_data, textbuf,
 		    sizeof (textbuf));
@@ -1152,12 +1160,12 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	if (msg->is_logoff)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGOFF");
 	if (msg->from[0] != '\0') {
-		char textbuf[32];
+		char textbuf[32] = {};
 		cpdlc_escape_percent(msg->from, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", textbuf);
 	}
 	if (msg->to[0] != '\0') {
-		char textbuf[32];
+		char textbuf[32] = {};
 		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
 	}
@@ -1176,7 +1184,7 @@ readable_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 	const cpdlc_msg_info_t *info = seg->info;
 	const char *start = info->text;
 	const char *end = start + strlen(info->text);
-	char textbuf[512];
+	char textbuf[512] = {};
 
 	for (unsigned arg = 0; start < end; arg++) {
 		const char *open = strchr(start, '[');
@@ -1901,7 +1909,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	char msg_subtype = 0;
 	unsigned num_args = 0;
 	const cpdlc_msg_info_t *info;
-	char textbuf[8192];
+	char textbuf[8192] = {};
 
 	CPDLC_ASSERT(seg != NULL);
 	CPDLC_ASSERT(start != NULL);
@@ -1999,7 +2007,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			arg->time.mins = arg->time.mins % 60;
 			break;
 		case CPDLC_ARG_POSITION: {
-			char tmpbuf[128];
+			char tmpbuf[128] = {};
 
 			arg_end = find_arg_end(start, end);
 			if ((unsigned)(arg_end - start) >= sizeof (tmpbuf)) {
@@ -2283,7 +2291,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			break;
 		case CPDLC_ARG_POSREPORT: {
-			char tmpbuf[1024];
+			char tmpbuf[1024] = {};
 
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(tmpbuf, start, MIN(sizeof (tmpbuf),

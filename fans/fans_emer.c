@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../src/cpdlc_alloc.h"
 #include "../src/cpdlc_assert.h"
 
 #include "fans_emer.h"
@@ -59,33 +60,33 @@ verify_emer(fans_t *box)
 	case EMER_REASON_NONE:
 		break;
 	case EMER_REASON_WX:
-		snprintf(reason, sizeof (reason), "%sDUE TO WX. ",
+		snprintf(reason, sizeof (reason), "%sDUE TO WX.",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_MED:
-		snprintf(reason, sizeof (reason), "MEDICAL EMERGENCY. ");
+		snprintf(reason, sizeof (reason), "MEDICAL EMERGENCY.");
 		break;
 	case EMER_REASON_CABIN_PRESS:
-		snprintf(reason, sizeof (reason), "%sDUE TO CABIN PRESS. ",
+		snprintf(reason, sizeof (reason), "%sDUE TO CABIN PRESS.",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_ENG_LOSS:
-		snprintf(reason, sizeof (reason), "%sDUE TO ENGINE LOSS. ",
+		snprintf(reason, sizeof (reason), "%sDUE TO ENGINE LOSS.",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	case EMER_REASON_LOW_FUEL:
-		snprintf(reason, sizeof (reason), "%sDUE TO LOW FUEL. ",
+		snprintf(reason, sizeof (reason), "%sDUE TO LOW FUEL.",
 		    box->emer.pan ? "" : "EMERGENCY ");
 		break;
 	}
 	if (box->emer.divert.set) {
-		const cpdlc_route_t dct = {};
+		cpdlc_route_t *dct = safe_calloc(1, sizeof (*dct));
 		int seg_nr = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM59_DIVERTING_TO_pos_VIA_route, 0);
 		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &box->emer.divert, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &dct, NULL);
-	}
-	if (box->emer.off.nm != 0) {
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 1, dct, NULL);
+		free(dct);
+	} else if (box->emer.off.nm != 0) {
 		int seg_nr = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM60_OFFSETTING_dist_dir_OF_ROUTE, 0);
 		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &box->emer.off.nm, NULL);
@@ -97,7 +98,7 @@ verify_emer(fans_t *box)
 		int seg_nr = cpdlc_msg_add_seg(msg, true,
 		    CPDLC_DM61_DESCENDING_TO_alt, 0);
 		const bool fl = false;
-		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fl, &des);
+		cpdlc_msg_seg_set_arg(msg, seg_nr, 0, &fl, &des.alt);
 	}
 
 	box->req_common.distress = true;
@@ -112,6 +113,8 @@ set_divert(fans_t *box, const cpdlc_pos_t *pos)
 	CPDLC_ASSERT(box != NULL);
 	CPDLC_ASSERT(pos != NULL);
 	box->emer.divert = *pos;
+	/* Mutually exclusive with offset */
+	memset(&box->emer.off, 0, sizeof (box->emer.off));
 }
 
 static void
@@ -251,11 +254,17 @@ fans_emer_key_cb(fans_t *box, fms_key_t key)
 		if (fans_scratchpad_xfer_offset(box, &box->emer.off, NULL,
 		    &read_back) && !read_back) {
 			fans_scratchpad_clear(box);
+			/* Mutually exclusive with diversion */
+			box->emer.divert.set = false;
 		}
 	} else if (box->subpage == 0 && key == FMS_KEY_LSK_R4) {
 		if (fans_scratchpad_is_delete(box)) {
-			fans_scratchpad_clear(box);
-			memset(&box->emer.divert, 0, sizeof (box->emer.divert));
+			if (box->emer.divert.set) {
+				fans_scratchpad_clear(box);
+				box->emer.divert = CPDLC_NULL_POS;
+			} else {
+				fans_set_error(box, FANS_ERR_INVALID_DELETE);
+			}
 		} else {
 			fans_pos_pick_start(box, set_divert, FMS_PAGE_EMER,
 			    &box->emer.divert);
