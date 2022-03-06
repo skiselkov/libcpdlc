@@ -102,16 +102,16 @@ typedef enum {
 	CPDLC_UM61_CROSS_pos_AT_AND_MAINT_alt_AT_spd,
 	CPDLC_UM62_AT_time_CROSS_pos_AT_AND_MAINT_alt,
 	CPDLC_UM63_AT_time_CROSS_pos_AT_AND_MAINT_alt_AT_spd,
-	CPDLC_UM64_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_UM65_AT_pos_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_UM66_AT_time_OFFSET_dir_dist_OF_ROUTE,
+	CPDLC_UM64_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_UM65_AT_pos_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_UM66_AT_time_OFFSET_dist_dir_OF_ROUTE,
 	CPDLC_UM67_PROCEED_BACK_ON_ROUTE,
 	CPDLC_UM68_REJOIN_ROUTE_BY_pos,
 	CPDLC_UM69_REJOIN_ROUTE_BY_time,
 	CPDLC_UM70_EXPCT_BACK_ON_ROUTE_BY_pos,
 	CPDLC_UM71_EXPCT_BACK_ON_ROUTE_BY_time,
 	CPDLC_UM72_RESUME_OWN_NAV,
-	CPDLC_UM73_PDC_route,
+	CPDLC_UM73_PDC_predepclx,
 	CPDLC_UM74_DIR_TO_pos,
 	CPDLC_UM75_WHEN_ABL_DIR_TO_pos,
 	CPDLC_UM76_AT_time_DIR_TO_pos,
@@ -120,7 +120,7 @@ typedef enum {
 	CPDLC_UM79_CLR_TO_pos_VIA_route,
 	CPDLC_UM80_CLR_route,
 	CPDLC_UM81_CLR_proc,
-	CPDLC_UM82_CLR_DEVIATE_UP_TO_dir_dist_OF_ROUTE,
+	CPDLC_UM82_CLR_DEVIATE_UP_TO_dist_dir_OF_ROUTE,
 	CPDLC_UM83_AT_pos_CLR_route,
 	CPDLC_UM84_AT_pos_CLR_proc,
 	CPDLC_UM85_EXPCT_route,
@@ -190,7 +190,7 @@ typedef enum {
 	CPDLC_UM149_CAN_YOU_ACPT_alt_AT_pos,
 	CPDLC_UM150_CAN_YOU_ACPT_alt_AT_time,
 	CPDLC_UM151_WHEN_CAN_YOU_ACPT_spd,
-	CPDLC_UM152_WHEN_CAN_YOU_ACPT_dir_dist_OFFSET,
+	CPDLC_UM152_WHEN_CAN_YOU_ACPT_dist_dir_OFFSET,
 	CPDLC_UM153_ALTIMETER_baro,
 	CPDLC_UM154_RDR_SVC_TERM,
 	CPDLC_UM155_RDR_CTC_pos,
@@ -255,9 +255,9 @@ typedef enum {
 	CPDLC_DM12_AT_pos_REQ_DES_TO_alt,
 	CPDLC_DM13_AT_time_REQ_CLB_TO_alt,
 	CPDLC_DM14_AT_time_REQ_DES_TO_alt,
-	CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE,
-	CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE,
+	CPDLC_DM15_REQ_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_DM16_AT_pos_REQ_OFFSET_dist_dir_OF_ROUTE,
+	CPDLC_DM17_AT_time_REQ_OFFSET_dist_dir_OF_ROUTE,
 	CPDLC_DM18_REQ_spd,
 	CPDLC_DM19_REQ_spd_TO_spd,
 	CPDLC_DM20_REQ_VOICE_CTC,
@@ -267,7 +267,7 @@ typedef enum {
 	CPDLC_DM24_REQ_route,
 	CPDLC_DM25_REQ_PDC,
 	CPDLC_DM26_REQ_WX_DEVIATION_TO_pos_VIA_route,
-	CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE,
+	CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dist_dir_OF_ROUTE,
 	CPDLC_DM28_LEAVING_alt,
 	CPDLC_DM29_CLIMBING_TO_alt,
 	CPDLC_DM30_DESCENDING_TO_alt,
@@ -320,16 +320,16 @@ typedef enum {
 	CPDLC_DM77_ASSIGNED_BLOCK_alt_TO_alt,
 	CPDLC_DM78_AT_time_dist_tofrom_pos,
 	CPDLC_DM79_ATIS_code,
-	CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE
+	CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE
 } cpdlc_dl_msg_type_t;
 
 typedef enum {
 	CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time = 'b',
 	CPDLC_DM67c_WE_CAN_ACPT_spd_AT_time = 'c',
-	CPDLC_DM67d_WE_CAN_ACPT_dir_dist_AT_time = 'd',
+	CPDLC_DM67d_WE_CAN_ACPT_dist_dir_AT_time = 'd',
 	CPDLC_DM67e_WE_CANNOT_ACPT_alt = 'e',
 	CPDLC_DM67f_WE_CANNOT_ACPT_spd = 'f',
-	CPDLC_DM67g_WE_CANNOT_ACPT_dir_dist = 'g',
+	CPDLC_DM67g_WE_CANNOT_ACPT_dist_dir = 'g',
 	CPDLC_DM67h_WHEN_CAN_WE_EXPCT_CLB_TO_alt = 'h',
 	CPDLC_DM67i_WHEN_CAN_WE_EXPCT_DES_TO_alt = 'i',
 } cpdlc_dl_msg_subtype_t;
@@ -362,7 +362,8 @@ typedef enum {
 	CPDLC_ARG_BARO,
 	CPDLC_ARG_FREETEXT,
 	CPDLC_ARG_PERSONS,
-	CPDLC_ARG_POSREPORT
+	CPDLC_ARG_POSREPORT,
+	CPDLC_ARG_PDC
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -698,6 +699,54 @@ typedef struct {
 	cpdlc_alt_t		rpt_wpt_alt;	/* Optional, CPDLC_NULL_ALT */
 } cpdlc_pos_rep_t;
 
+typedef enum {
+	CPDLC_COM_NAV_LORAN_A,
+	CPDLC_COM_NAV_LORAN_C,
+	CPDLC_COM_NAV_DME,
+	CPDLC_COM_NAV_DECCA,
+	CPDLC_COM_NAV_ADF,
+	CPDLC_COM_NAV_GNSS,
+	CPDLC_COM_NAV_HF_RTF,
+	CPDLC_COM_NAV_INS,
+	CPDLC_COM_NAV_ILS,
+	CPDLC_COM_NAV_OMEGA,
+	CPDLC_COM_NAV_VOR,
+	CPDLC_COM_NAV_DOPPLER,
+	CPDLC_COM_NAV_RNAV,
+	CPDLC_COM_NAV_TACAN,
+	CPDLC_COM_NAV_UHF_RTF,
+	CPDLC_COM_NAV_VHF_RTF
+} cpdlc_com_nav_eqpt_st_t;
+
+typedef enum {
+	CPDLC_SSR_EQPT_NIL,
+	CPDLC_SSR_EQPT_XPDR_MODE_A,
+	CPDLC_SSR_EQPT_XPDR_MODE_AC,
+	CPDLC_SSR_EQPT_XPDR_MODE_S,
+	CPDLC_SSR_EQPT_XPDR_MODE_SPA,
+	CPDLC_SSR_EQPT_XPDR_MODE_SID,
+	CPDLC_SSR_EQPT_XPDR_MODE_SPAID
+} cpdlc_ssr_eqpt_t;
+
+typedef struct {
+	bool			com_nav_app_eqpt_avail;
+	unsigned		num_com_nav_eqpt_st;
+	cpdlc_com_nav_eqpt_st_t	com_nav_eqpt_st[16];
+	cpdlc_ssr_eqpt_t	ssr_eqpt;
+} cpdlc_acf_eqpt_code_t;
+
+typedef struct {
+	char			acf_id[8];	/* required */
+	char			acf_type[8];	/* optional */
+	cpdlc_acf_eqpt_code_t	acf_eqpt_code;	/* optional */
+	cpdlc_time_t		time_dep;	/* required */
+	cpdlc_route_t		route;		/* required */
+	cpdlc_alt_t		alt_restr;	/* optional */
+	double			freq;		/* required */
+	unsigned		squawk;		/* required */
+	unsigned		revision;	/* required */
+} cpdlc_pdc_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
@@ -726,6 +775,7 @@ typedef union {
 	char			*freetext;
 	unsigned		pob;
 	cpdlc_pos_rep_t		pos_rep;
+	cpdlc_pdc_t		*pdc;
 } cpdlc_arg_t;
 
 enum {
@@ -743,6 +793,8 @@ typedef struct {
 	const char		*text;
 	unsigned		num_args;
 	cpdlc_arg_type_t	args[CPDLC_MAX_ARGS];
+	int			asn_elem_id;
+	unsigned		asn_arg_off[CPDLC_MAX_ARGS];
 	cpdlc_resp_type_t	resp;
 	unsigned		timeout;	/* seconds */
 	unsigned		num_resp_msgs;
@@ -782,6 +834,8 @@ CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
+    unsigned cap);
+CPDLC_API unsigned cpdlc_msg_encode_asn1(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);

@@ -30,10 +30,14 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "asn1/ATCdownlinkmessage.h"
+#include "asn1/ATCuplinkmessage.h"
+
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
-#include "cpdlc_string.h"
+#include "cpdlc_hexcode.h"
 #include "cpdlc_msg.h"
+#include "cpdlc_string.h"
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
 	do { \
@@ -101,7 +105,7 @@ msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
 	CPDLC_ASSERT3S(msg_type, >=, 0);
 	if (is_dl) {
 		CPDLC_ASSERT3S(msg_type, <=,
-		    CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
+		    CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE);
 	} else {
 		CPDLC_ASSERT3S(msg_type, <=,
 		    CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text);
@@ -798,11 +802,101 @@ serialize_posreport(const cpdlc_pos_rep_t *rep, bool readable,
 		serialize_posreport_machine(rep, buf, cap);
 }
 
+static void
+encode_freq(double freq, bool readable, unsigned *n_bytes_p, char **buf_p,
+    unsigned *cap_p)
+{
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	if (readable) {
+		if (freq <= 21) {
+			/* HF */
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%.04f MHZ", freq);
+		} else {
+			/* VHF/UHF */
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    "%.03f MHZ", freq);
+		}
+	} else {
+		if (freq <= 21) {
+			/* HF */
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %.04f", freq);
+		} else {
+			/* VHF/UHF */
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+			    " %.03f", freq);
+		}
+	}
+}
+
+static void
+serialize_pdc(const cpdlc_pdc_t *pdc, bool readable,
+    unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
+{
+	char routebuf[8192] = {}, textbuf[8192] = {};
+
+	CPDLC_ASSERT(pdc != NULL);
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
+
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", pdc->acf_id);
+
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
+	    pdc->acf_type[0] != '\0' || readable ? pdc->acf_type : "-");
+
+	if (!readable) {
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+		    pdc->acf_eqpt_code.com_nav_app_eqpt_avail);
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+		    pdc->acf_eqpt_code.num_com_nav_eqpt_st);
+		for (unsigned i = 0; i < 16; i++) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+			    pdc->acf_eqpt_code.com_nav_eqpt_st[i]);
+		}
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+		    pdc->acf_eqpt_code.ssr_eqpt);
+	}
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %02d%02d",
+	    pdc->time_dep.hrs, pdc->time_dep.mins);
+	if (readable) {
+		serialize_route(&pdc->route, true, routebuf, sizeof (routebuf));
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", routebuf);
+	} else {
+		serialize_route(&pdc->route, false, routebuf,
+		    sizeof (routebuf));
+		cpdlc_escape_percent(routebuf, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s", textbuf);
+	}
+	if (!CPDLC_IS_NULL_ALT(pdc->alt_restr) && readable)
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " CLB");
+	encode_alt(&pdc->alt_restr, readable, n_bytes_p, buf_p, cap_p);
+	if (readable)
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " DPFRQ");
+	encode_freq(pdc->freq, readable, n_bytes_p, buf_p, cap_p);
+	if (readable)
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " SQUAWK");
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %04o", pdc->squawk);
+	if (!readable) {
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+		    pdc->revision);
+	}
+}
+
 void
 cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
 {
 	char textbuf[8192] = {};
+
+	CPDLC_ASSERT(arg != NULL);
+	CPDLC_ASSERT(n_bytes_p != NULL);
+	CPDLC_ASSERT(buf_p != NULL);
+	CPDLC_ASSERT(cap_p != NULL);
 
 	switch (arg_type) {
 	case CPDLC_ARG_ALTITUDE:
@@ -965,27 +1059,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	case CPDLC_ARG_FREQUENCY:
-		if (readable) {
-			if (arg->freq <= 21) {
-				/* HF */
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%.04f MHZ", arg->freq);
-			} else {
-				/* VHF/UHF */
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%.03f MHZ", arg->freq);
-			}
-		} else {
-			if (arg->freq <= 21) {
-				/* HF */
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " %.04f", arg->freq);
-			} else {
-				/* VHF/UHF */
-				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    " %.03f", arg->freq);
-			}
-		}
+		encode_freq(arg->freq, readable, n_bytes_p, buf_p, cap_p);
 		break;
 	case CPDLC_ARG_DEGREES:
 		if (readable) {
@@ -1053,6 +1127,10 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		}
 		break;
 	}
+	case CPDLC_ARG_PDC:
+		CPDLC_ASSERT(arg->pdc != NULL);
+		serialize_pdc(arg->pdc, readable, n_bytes_p, buf_p, cap_p);
+		break;
 	}
 }
 
@@ -1142,6 +1220,8 @@ cpdlc_msg_free(cpdlc_msg_t *msg)
 		for (unsigned j = 0; j < seg->info->num_args; j++) {
 			if (seg->info->args[j] == CPDLC_ARG_ROUTE)
 				free(seg->args[j].route);
+			if (seg->info->args[j] == CPDLC_ARG_PDC)
+				free(seg->args[j].pdc);
 			else if (seg->info->args[j] == CPDLC_ARG_FREETEXT)
 				free(seg->args[j].freetext);
 		}
@@ -1164,10 +1244,14 @@ pkt_type2str(cpdlc_pkt_t pkt_type)
 	}
 }
 
-unsigned
-cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
+static unsigned
+cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
+    bool asn1)
 {
 	unsigned n_bytes = 0;
+
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(buf != NULL || cap == 0);
 
 	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s/MIN=%d",
 	    pkt_type2str(msg->pkt_type), msg->min);
@@ -1193,12 +1277,31 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
 	}
-
-	for (unsigned i = 0; i < msg->num_segs; i++)
-		encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
+	if (!asn1) {
+		for (unsigned i = 0; i < msg->num_segs; i++)
+			encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
+	} else {
+		/* TODO: encode ASN1 segment */
+	}
 	APPEND_SNPRINTF(n_bytes, buf, cap, "\n");
 
 	return (n_bytes);
+}
+
+unsigned
+cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(buf != NULL || cap == 0);
+	return (cpdlc_msg_encode_common(msg, buf, cap, false));
+}
+
+unsigned
+cpdlc_msg_encode_asn1(const cpdlc_msg_t *msg, char *buf, unsigned cap)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(buf != NULL || cap == 0);
+	return (cpdlc_msg_encode_common(msg, buf, cap, true));
 }
 
 static void
@@ -1335,14 +1438,14 @@ static bool
 is_offset(bool is_dl, int msg_type)
 {
 	return ((is_dl &&
-	    (msg_type == CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE ||
-	    msg_type == CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE ||
-	    msg_type == CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE)) ||
+	    (msg_type == CPDLC_DM15_REQ_OFFSET_dist_dir_OF_ROUTE ||
+	    msg_type == CPDLC_DM16_AT_pos_REQ_OFFSET_dist_dir_OF_ROUTE ||
+	    msg_type == CPDLC_DM17_AT_time_REQ_OFFSET_dist_dir_OF_ROUTE)) ||
 	    (!is_dl &&
-	    (msg_type == CPDLC_UM64_OFFSET_dir_dist_OF_ROUTE ||
-	    msg_type == CPDLC_UM65_AT_pos_OFFSET_dir_dist_OF_ROUTE ||
-	    msg_type == CPDLC_UM66_AT_time_OFFSET_dir_dist_OF_ROUTE ||
-	    msg_type == CPDLC_UM152_WHEN_CAN_YOU_ACPT_dir_dist_OFFSET)));
+	    (msg_type == CPDLC_UM64_OFFSET_dist_dir_OF_ROUTE ||
+	    msg_type == CPDLC_UM65_AT_pos_OFFSET_dist_dir_OF_ROUTE ||
+	    msg_type == CPDLC_UM66_AT_time_OFFSET_dist_dir_OF_ROUTE ||
+	    msg_type == CPDLC_UM152_WHEN_CAN_YOU_ACPT_dist_dir_OFFSET)));
 }
 
 static bool
@@ -1485,7 +1588,7 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 {
 	CPDLC_ASSERT(route != NULL);
 	CPDLC_ASSERT(comp != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	if (strchr(comp, ':') == NULL) {
 		cpdlc_route_info_t *info;
@@ -1645,7 +1748,7 @@ parse_route(const char *buf, char *reason, unsigned reason_cap)
 	cpdlc_route_t *route = safe_calloc(1, sizeof (*route));
 
 	CPDLC_ASSERT(buf != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	comps = cpdlc_strsplit(buf, " ", true, &n_comps);
 	if (n_comps > CPDLC_ROUTE_MAX_INFO) {
@@ -1670,7 +1773,7 @@ parse_pos(cpdlc_pos_t *pos, const char *buf, char *reason, unsigned reason_cap)
 {
 	CPDLC_ASSERT(pos != NULL);
 	CPDLC_ASSERT(buf != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	if (strchr(buf, ':') == NULL) {
 		pos->set = true;
@@ -1746,7 +1849,7 @@ parse_alt(const char *start, const char *end, cpdlc_alt_t *alt,
 	CPDLC_ASSERT(start != NULL);
 	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(alt != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	if (start + 2 < end && start[0] == 'F' && start[1] == 'L') {
 		alt->fl = true;
@@ -1784,7 +1887,7 @@ parse_spd(const char *start, const char *end, cpdlc_spd_t *spd,
 	CPDLC_ASSERT(start != NULL);
 	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(spd != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	if (start + 1 < end && start[0] == 'M') {
 		spd->mach = true;
@@ -1808,7 +1911,7 @@ parse_proc(const char *start, const char *end, cpdlc_proc_t *proc,
 	CPDLC_ASSERT(start != NULL);
 	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(proc != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	cpdlc_strlcpy(buf, start, MIN(sizeof (buf),
 	    (unsigned)(end - start) + 1));
@@ -1870,7 +1973,7 @@ parse_posreport(const char *buf, cpdlc_pos_rep_t *rep, char *reason,
 
 	CPDLC_ASSERT(buf != NULL);
 	CPDLC_ASSERT(rep != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 	memset(rep, 0, sizeof (*rep));
 
 	comps = cpdlc_strsplit(buf, " ", true, &n_comps);
@@ -1987,6 +2090,105 @@ errout:
 }
 
 static bool
+parse_pdc(const char *start, const char *end, cpdlc_pdc_t *pdc,
+    char *reason, unsigned reason_cap)
+{
+	char textbuf[8192] = {}, routebuf[8192] = {};
+	cpdlc_route_t *route;
+
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
+	CPDLC_ASSERT(pdc != NULL);
+	CPDLC_ASSERT(reason != NULL);
+
+	if (sscanf(start, "%7s", pdc->acf_id) != 1) {
+		MALFORMED_MSG("error parsing PDC acf_id");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+	if (start[0] != '-' && sscanf(start, "%5s", pdc->acf_type) != 1) {
+		MALFORMED_MSG("error parsing PDC acf_type");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+	if (sscanf(start, "%d %d",
+	    (int *)&pdc->acf_eqpt_code.com_nav_app_eqpt_avail,
+	    &pdc->acf_eqpt_code.num_com_nav_eqpt_st) != 2) {
+		MALFORMED_MSG("error parsing PDC");
+		return (false);
+	}
+	for (int i = 0; i < 2; i++) {
+		SKIP_NONSPACE(start, end);
+		SKIP_SPACE(start, end);
+	}
+	for (unsigned i = 0; i < 16; i++) {
+		if (sscanf(start, "%d",
+		    (int *)&pdc->acf_eqpt_code.com_nav_eqpt_st[i]) != 1) {
+			MALFORMED_MSG("error parsing PDC");
+			return (false);
+		}
+		SKIP_NONSPACE(start, end);
+		SKIP_SPACE(start, end);
+	}
+	if (sscanf(start, "%d", (int *)&pdc->acf_eqpt_code.ssr_eqpt) != 1) {
+		MALFORMED_MSG("error parsing PDC");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (!parse_time(start, &pdc->time_dep, reason, reason_cap))
+		return (false);
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (sscanf(start, "%8191s", textbuf) != 1) {
+		MALFORMED_MSG("error parsing PDC");
+		return (false);
+	}
+	if (cpdlc_unescape_percent(textbuf, routebuf, sizeof (routebuf)) < 0) {
+		MALFORMED_MSG("error parsing PDC: malformed route escapes");
+		return (false);
+	}
+	route = parse_route(routebuf, reason, reason_cap);
+	if (route == NULL) {
+		MALFORMED_MSG("error parsing PDC: malformed route");
+		return (false);
+	}
+	pdc->route = *route;
+	free(route);
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (!parse_alt(start, end, &pdc->alt_restr, reason, reason_cap))
+		return (false);
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (sscanf(start, "%lf", &pdc->freq) != 1 || pdc->freq <= 0) {
+		MALFORMED_MSG("error parsing PDC: invalid frequency");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (sscanf(start, "%o", &pdc->squawk) != 1 || pdc->squawk > 4095) {
+		MALFORMED_MSG("error parsing PDC: invalid squawk code");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+
+	if (sscanf(start, "%d", &pdc->revision) != 1 || pdc->revision > 16) {
+		MALFORMED_MSG("error parsing PDC: invalid revision code");
+		return (false);
+	}
+	return (true);
+}
+
+static bool
 msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
     char *reason, unsigned reason_cap)
 {
@@ -2000,7 +2202,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	CPDLC_ASSERT(seg != NULL);
 	CPDLC_ASSERT(start != NULL);
 	CPDLC_ASSERT(end != NULL);
-	CPDLC_ASSERT(reason != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	if (strncmp(start, "DM", 2) == 0) {
 		is_dl = true;
@@ -2017,7 +2219,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 	}
 	msg_type = atoi(start);
 	if (msg_type < 0 ||
-	    (is_dl && msg_type > CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE) ||
+	    (is_dl && msg_type > CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE) ||
 	    (!is_dl && msg_type >
 	    CPDLC_UM208_FREETEXT_LOW_URG_LOW_ALERT_text)) {
 		MALFORMED_MSG("invalid message type");
@@ -2233,8 +2435,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				MALFORMED_MSG("invalid URL escape");
 				return (false);
 			}
-			if (arg->route != NULL)
-				free(arg->route);
+			CPDLC_ASSERT(arg->route == NULL);
 			buf = safe_malloc(l + 1);
 			cpdlc_unescape_percent(textbuf, buf, l + 1);
 			arg->route = parse_route(buf, reason, reason_cap);
@@ -2387,6 +2588,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			break;
 		}
+		case CPDLC_ARG_PDC:
+			CPDLC_ASSERT(arg->pdc == NULL);
+			arg->pdc = safe_calloc(1, sizeof (*arg->pdc));
+			if (!parse_pdc(start, end, arg->pdc, reason,
+			    reason_cap)) {
+				return (false);
+			}
+			break;
 		}
 
 		SKIP_NONSPACE(start, end);
@@ -2406,6 +2615,63 @@ end:
 	return (true);
 }
 
+static bool
+msg_decode_asn1(cpdlc_msg_t *msg, const char *start, const char *end,
+    char *reason, unsigned reason_cap)
+{
+	int is_dl;
+	char *rawbuf;
+	unsigned rawsz;
+	asn_TYPE_descriptor_t *td;
+	asn_dec_rval_t rval;
+	void *struct_ptr;
+
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(start != NULL);
+	CPDLC_ASSERT(end != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
+
+	SKIP_SPACE(start, end);
+	if (start >= end || sscanf(start, "%d", &is_dl) != 1) {
+		MALFORMED_MSG("malformed ASN.1 tuple: expected is_dl flag");
+		return (false);
+	}
+	SKIP_NONSPACE(start, end);
+	SKIP_SPACE(start, end);
+	if (start >= end) {
+		MALFORMED_MSG("malformed ASN.1 tuple: expected ASN.1 hex data");
+		return (false);
+	}
+	if ((end - start) % 2 != 0) {
+		MALFORMED_MSG("malformed ASN.1 tuple: expected even number "
+		    "of hex chars");
+		return (false);
+	}
+	rawsz = (end - start) / 2;
+	rawbuf = safe_malloc(rawsz);
+	if (!cpdlc_hex_dec(start, end - start, rawbuf, rawsz)) {
+		MALFORMED_MSG("malformed ASN.1 tuple: invalid hex chars found");
+		goto errout;
+	}
+	td = (is_dl ? &asn_DEF_ATCdownlinkmessage : &asn_DEF_ATCuplinkmessage);
+	rval = uper_decode_complete(0, td, &struct_ptr, rawbuf, rawsz);
+	if (rval.code != RC_OK) {
+		MALFORMED_MSG("error decoding ASN.1 data: error %d", rval.code);
+		goto errout;
+	}
+	if (rval.consumed < rawsz) {
+		MALFORMED_MSG("error decoding ASN.1 data: extraneous data at "
+		    "end of ASN.1 input");
+		goto errout;
+	}
+	td->free_struct(td, struct_ptr, 0);
+	free(rawbuf);
+	return (true);
+errout:
+	free(rawbuf);
+	return (false);
+}
+
 bool
 cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
     char *reason, unsigned reason_cap)
@@ -2417,6 +2683,8 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 
 	CPDLC_ASSERT(in_buf != NULL);
 	CPDLC_ASSERT(msg_p != NULL);
+	CPDLC_ASSERT(consumed != NULL);
+	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
 	term = strchr(in_buf, '\n');
 	if (term != NULL) {
@@ -2510,6 +2778,11 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 				goto errout;
 			}
 			msg->num_segs++;
+		} else if (strncmp(in_buf, "ASN1=", 5) == 0) {
+			if (!msg_decode_asn1(msg, &in_buf[5], sep, reason,
+			    reason_cap)) {
+				goto errout;
+			}
 		} else {
 			MALFORMED_MSG("unknown message header");
 			goto errout;
@@ -2657,7 +2930,7 @@ cpdlc_msg_add_seg(cpdlc_msg_t *msg, bool is_dl, unsigned msg_type,
 		CPDLC_ASSERT0(msg_subtype);
 	} else {
 		CPDLC_ASSERT3U(msg_type, <=,
-		    CPDLC_DM80_DEVIATING_dir_dist_OF_ROUTE);
+		    CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE);
 		if (msg_subtype != 0) {
 			CPDLC_ASSERT3U(msg_subtype, >=,
 			    CPDLC_DM67b_WE_CAN_ACPT_alt_AT_time);
@@ -2941,11 +3214,18 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (strlen(arg->freetext));
 	case CPDLC_ARG_PERSONS:
 		CPDLC_ASSERT(arg_val1 != NULL);
-		*(unsigned *)arg_val1 = arg->pob;
+		if (str_cap >= sizeof (unsigned))
+			*(unsigned *)arg_val1 = arg->pob;
 		return (sizeof (arg->pob));
 	case CPDLC_ARG_POSREPORT:
 		CPDLC_ASSERT(arg_val1 != NULL);
-		*(cpdlc_pos_rep_t *)arg_val1 = arg->pos_rep;
+		if (str_cap >= sizeof (arg->pos_rep))
+			*(cpdlc_pos_rep_t *)arg_val1 = arg->pos_rep;
+		return (sizeof (arg->pos_rep));
+	case CPDLC_ARG_PDC:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		if (str_cap >= sizeof (cpdlc_pdc_t))
+			*(cpdlc_pdc_t *)arg_val1 = *arg->pdc;
 		return (sizeof (arg->pos_rep));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "

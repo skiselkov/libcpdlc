@@ -54,23 +54,23 @@ verify_off_req(fans_t *box)
 	if (box->off_req.step_at.type != STEP_AT_NONE) {
 		if (box->off_req.step_at.type == STEP_AT_TIME) {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    CPDLC_DM17_AT_time_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
+			    CPDLC_DM17_AT_time_REQ_OFFSET_dist_dir_OF_ROUTE, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    &box->off_req.step_at.tim.hrs,
 			    &box->off_req.step_at.tim.mins);
 		} else {
 			seg = cpdlc_msg_add_seg(msg, true,
-			    CPDLC_DM16_AT_pos_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
+			    CPDLC_DM16_AT_pos_REQ_OFFSET_dist_dir_OF_ROUTE, 0);
 			cpdlc_msg_seg_set_arg(msg, seg, 0,
 			    &box->off_req.step_at.pos, NULL);
 		}
-		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.dir, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg, 2, &box->off_req.off.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 2, &box->off_req.off.dir, NULL);
 	} else {
 		seg = cpdlc_msg_add_seg(msg, true,
-		    CPDLC_DM15_REQ_OFFSET_dir_dist_OF_ROUTE, 0);
-		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->off_req.off.dir, NULL);
-		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.nm, NULL);
+		    CPDLC_DM15_REQ_OFFSET_dist_dir_OF_ROUTE, 0);
+		cpdlc_msg_seg_set_arg(msg, seg, 0, &box->off_req.off.nm, NULL);
+		cpdlc_msg_seg_set_arg(msg, seg, 1, &box->off_req.off.dir, NULL);
 	}
 	fans_req_add_common(box, msg, NULL);
 

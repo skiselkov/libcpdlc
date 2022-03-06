@@ -81,7 +81,7 @@ msg_is_dl_req(const cpdlc_msg_t *msg)
 	msg_type = msg->segs[0].info->msg_type;
 	return (msg->segs[0].info->is_dl &&
 	    ((msg_type >= CPDLC_DM6_REQ_alt &&
-	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dir_dist_OF_ROUTE) ||
+	    msg_type <= CPDLC_DM27_REQ_WX_DEVIATION_UP_TO_dist_dir_OF_ROUTE) ||
 	    (msg_type >= CPDLC_DM49_WHEN_CAN_WE_EXPCT_spd &&
 	    msg_type <= CPDLC_DM54_WHEN_CAN_WE_EXPECT_CRZ_CLB_TO_alt) ||
 	    msg_type == CPDLC_DM70_REQ_HDG_deg ||
