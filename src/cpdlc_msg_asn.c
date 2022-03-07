@@ -26,6 +26,7 @@
 #include "asn1/ATCuplinkmessage.h"
 #include "asn1/ATCdownlinkmessage.h"
 
+#include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
 #include "cpdlc_msg_asn.h"
 
@@ -173,15 +174,19 @@ latlon_asn2cpdlc(LatitudeLongitude_t latlon)
 }
 
 static unsigned
-get_deg(Degrees_t deg)
+decode_deg_asn(const Degrees_t *deg, bool *tru)
 {
-	switch (deg.present) {
+	switch (deg->present) {
 	default:
 		return (0);
 	case Degrees_PR_degreesmagnetic:
-		return (deg.choice.degreesmagnetic);
+		if (tru != NULL)
+			*tru = false;
+		return (deg->choice.degreesmagnetic);
 	case Degrees_PR_degreestrue:
-		return (deg.choice.degreestrue);
+		if (tru != NULL)
+			*tru = true;
+		return (deg->choice.degreestrue);
 	}
 }
 
@@ -259,8 +264,8 @@ decode_pos_asn(const Position_t *pos_in, cpdlc_pos_t *pos_out)
 		} else {
 			pos_out->pbd.lat_lon = CPDLC_NULL_LAT_LON;
 		}
-		pos_out->pbd.degrees = get_deg(
-		    pos_in->choice.placebearingdistance.degrees);
+		pos_out->pbd.degrees = decode_deg_asn(
+		    &pos_in->choice.placebearingdistance.degrees, NULL);
 		pos_out->pbd.dist_nm = decode_dist_asn(
 		    &pos_in->choice.placebearingdistance.distance);
 		break;
@@ -299,6 +304,22 @@ decode_dir_asn(const Direction_t *dir_in)
 }
 
 static double
+decode_freq_asn(const Frequency_t *freq)
+{
+	CPDLC_ASSERT(freq != NULL);
+	switch (freq->present) {
+	default:
+		return (0);
+	case Frequency_PR_frequencyhf:
+		return (freq->choice.frequencyhf / 1000.0);
+	case Frequency_PR_frequencyvhf:
+		return (freq->choice.frequencyvhf / 1000.0);
+	case Frequency_PR_frequencyuhf:
+		return (freq->choice.frequencyuhf / 1000.0);
+	}
+}
+
+static double
 decode_vvi_asn(const Verticalrate_t *vvi)
 {
 	CPDLC_ASSERT(vvi != NULL);
@@ -319,6 +340,21 @@ decode_tofrom_asn(const Tofrom_t *tofrom)
 	return (*tofrom == Tofrom_to);
 }
 
+static void
+decode_proc_asn(const Procedurename_t *proc_in, cpdlc_proc_t *proc_out)
+{
+	CPDLC_ASSERT(proc_in != NULL);
+	CPDLC_ASSERT(proc_out != NULL);
+	/* maps Proceduretype_t to our cpdlc_proc_type_t */
+	proc_out->type = proc_in->proceduretype + 1;
+	ia5strlcpy(proc_out->name, &proc_in->procedure,
+	    sizeof (proc_out->name));
+	if (proc_in->proceduretransition != NULL) {
+		ia5strlcpy(proc_out->trans, proc_in->proceduretransition,
+		    sizeof (proc_out->trans));
+	}
+}
+
 static unsigned
 decode_squawk_asn(const Beaconcode_t *squawk)
 {
@@ -329,6 +365,42 @@ decode_squawk_asn(const Beaconcode_t *squawk)
 			code = (code << 3) | (*squawk->list.array[i]);
 	}
 	return (code);
+}
+
+static void
+decode_baro_asn(const Altimeter_t *baro, double *val_out, bool *hpa_out)
+{
+	CPDLC_ASSERT(baro != NULL);
+	CPDLC_ASSERT(val_out != NULL);
+	CPDLC_ASSERT(hpa_out != NULL);
+	switch (baro->present) {
+	default:
+		break;
+	case Altimeter_PR_altimeterenglish:
+		*val_out = baro->choice.altimeterenglish / 100.0;
+		break;
+	case Altimeter_PR_altimetermetric:
+		*hpa_out = true;
+		*val_out = baro->choice.altimeterenglish / 10.0;
+		break;
+	}
+}
+
+static char *
+decode_freetext_asn(const Freetext_t *freetext_in)
+{
+	char *freetext_out;
+	CPDLC_ASSERT(freetext_in != NULL);
+	freetext_out = safe_malloc(freetext_in->size + 1);
+	ia5strlcpy(freetext_out, freetext_in, freetext_in->size + 1);
+	return (freetext_out);
+}
+
+static unsigned
+decode_persons_asn(const Remainingsouls_t *pob)
+{
+	CPDLC_ASSERT(pob != NULL);
+	return (*pob);
 }
 
 static bool
@@ -379,7 +451,11 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    decode_tofrom_asn(get_asn_arg_ptr(info, i, elem));
 			break;
 		case CPDLC_ARG_ROUTE:
+			/* TODO */
+			return (false);
 		case CPDLC_ARG_PROCEDURE:
+			decode_proc_asn(get_asn_arg_ptr(info, i, elem),
+			    &seg->args[i].proc);
 			return (false);
 		case CPDLC_ARG_SQUAWK:
 			seg->args[i].squawk =
@@ -391,12 +467,30 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    sizeof (seg->args[i].icaoname.icao));
 			break;
 		case CPDLC_ARG_FREQUENCY:
+			seg->args[i].freq = decode_freq_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
 		case CPDLC_ARG_DEGREES:
+			seg->args[i].deg.deg = decode_deg_asn(
+			    get_asn_arg_ptr(info, i, elem),
+			    &seg->args[i].deg.tru);
+			break;
 		case CPDLC_ARG_BARO:
+			decode_baro_asn(get_asn_arg_ptr(info, i, elem),
+			    &seg->args[i].baro.val,
+			    &seg->args[i].baro.hpa);
+			break;
 		case CPDLC_ARG_FREETEXT:
+			seg->args[i].freetext = decode_freetext_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
 		case CPDLC_ARG_PERSONS:
+			seg->args[i].pob = decode_persons_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
 		case CPDLC_ARG_POSREPORT:
 		case CPDLC_ARG_PDC:
+			// TODO
 			return (false);
 		}
 	}

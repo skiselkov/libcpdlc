@@ -557,10 +557,10 @@ typedef struct {
 } cpdlc_route_add_info_t;
 
 typedef enum {
-	CPDLC_PROC_UNKNOWN,
-	CPDLC_PROC_ARRIVAL,
-	CPDLC_PROC_APPROACH,
-	CPDLC_PROC_DEPARTURE
+	CPDLC_PROC_UNKNOWN = 0,
+	CPDLC_PROC_ARRIVAL = 1,
+	CPDLC_PROC_APPROACH = 2,
+	CPDLC_PROC_DEPARTURE = 3
 } cpdlc_proc_type_t;
 
 typedef struct {
