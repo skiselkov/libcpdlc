@@ -40,26 +40,41 @@
 
 #define	ASN_UPLINK_INFO_2(typename, arg1, arg2) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
-	.asn_arg_off = { \
-	    offsetof(UM ## typename ## _t, arg1), \
-	    offsetof(UM ## typename ## _t, arg2) \
+	.asn_arg_info = { \
+	    { offsetof(UM ## typename ## _t, arg1) }, \
+	    { offsetof(UM ## typename ## _t, arg2) } \
+	}
+
+#define	ASN_UPLINK_INFO_SEQ_2(typename, seq_name) \
+	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(UM ## typename ## _t, seq_name), true, 0 }, \
+	    { offsetof(UM ## typename ## _t, seq_name), true, 1 } \
+	}
+
+#define	ASN_UPLINK_INFO_1_SEQ_2(typename, arg1, seq_name) \
+	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(UM ## typename ## _t, arg1) }, \
+	    { offsetof(UM ## typename ## _t, seq_name), true, 0 }, \
+	    { offsetof(UM ## typename ## _t, seq_name), true, 1 } \
 	}
 
 #define	ASN_UPLINK_INFO_3(typename, arg1, arg2, arg3) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
-	.asn_arg_off = { \
-	    offsetof(UM ## typename ## _t, arg1), \
-	    offsetof(UM ## typename ## _t, arg2), \
-	    offsetof(UM ## typename ## _t, arg3) \
+	.asn_arg_info = { \
+	    { offsetof(UM ## typename ## _t, arg1) }, \
+	    { offsetof(UM ## typename ## _t, arg2) }, \
+	    { offsetof(UM ## typename ## _t, arg3) } \
 	}
 
 #define	ASN_UPLINK_INFO_4(typename, arg1, arg2, arg3, arg4) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
-	.asn_arg_off = { \
-	    offsetof(UM ## typename ## _t, arg1), \
-	    offsetof(UM ## typename ## _t, arg2), \
-	    offsetof(UM ## typename ## _t, arg3), \
-	    offsetof(UM ## typename ## _t, arg4) \
+	.asn_arg_info = { \
+	    { offsetof(UM ## typename ## _t, arg1) }, \
+	    { offsetof(UM ## typename ## _t, arg2) }, \
+	    { offsetof(UM ## typename ## _t, arg3) }, \
+	    { offsetof(UM ## typename ## _t, arg4) } \
 	}
 
 #define	ASN_DOWNLINK_INFO_01(typename) \
@@ -67,20 +82,25 @@
 
 #define	ASN_DOWNLINK_INFO_2(typename, arg1, arg2) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
-	.asn_arg_off = { \
-	    offsetof(DM ## typename ## _t, arg1), \
-	    offsetof(DM ## typename ## _t, arg2) \
+	.asn_arg_info = { \
+	    { offsetof(DM ## typename ## _t, arg1) }, \
+	    { offsetof(DM ## typename ## _t, arg2) } \
+	}
+
+#define	ASN_DOWNLINK_INFO_SEQ_2(typename, seq_name) \
+	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(DM ## typename ## _t, seq_name), true, 0 }, \
+	    { offsetof(DM ## typename ## _t, seq_name), true, 1 } \
 	}
 
 #define	ASN_DOWNLINK_INFO_3(typename, arg1, arg2, arg3) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
-	.asn_arg_off = { \
-	    offsetof(DM ## typename ## _t, arg1), \
-	    offsetof(DM ## typename ## _t, arg2), \
-	    offsetof(DM ## typename ## _t, arg3) \
+	.asn_arg_info = { \
+	    { offsetof(DM ## typename ## _t, arg1) }, \
+	    { offsetof(DM ## typename ## _t, arg2) }, \
+	    { offsetof(DM ## typename ## _t, arg3) } \
 	}
-
-//	ASN_DOWNLINK_INFO_2(, ,),
 
 static const cpdlc_msg_info_t ul_infos[] = {
     {
@@ -340,7 +360,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "MAINTAIN BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-//	TODO
+	ASN_UPLINK_INFO_SEQ_2(30AltitudeAltitude, list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -349,7 +369,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "CLIMB TO AND MAINTAIN BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-//	TODO
+	ASN_UPLINK_INFO_SEQ_2(31AltitudeAltitude, list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -358,7 +378,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "DESCEND TO AND MAINTAIN BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-//	TODO
+	ASN_UPLINK_INFO_SEQ_2(32AltitudeAltitude, list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -520,7 +540,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "CROSS [position] BETWEEN [altitude] AND [altitude]",
 	.num_args = 3,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_ALTITUDE , CPDLC_ARG_ALTITUDE },
-	// TODO
+	ASN_UPLINK_INFO_1_SEQ_2(50PositionAltitudeAltitude, position,
+	    altitude_seqOf.list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -556,7 +577,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "CROSS [position] BETWEEN [time] AND [time]",
 	.num_args = 3,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_TIME, CPDLC_ARG_TIME },
-	// TODO
+	ASN_UPLINK_INFO_1_SEQ_2(54PositionTimeTime, position, time_seqOf.list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -650,7 +671,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM64_OFFSET_dist_dir_OF_ROUTE,
 	.text = "OFFSET [distance offset] [direction] OF ROUTE",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_UPLINK_INFO_2(64DistanceoffsetDirection, distanceoffset, direction),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
@@ -659,7 +680,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM65_AT_pos_OFFSET_dist_dir_OF_ROUTE,
 	.text = "AT [position] OFFSET [distance offset] [direction] OF ROUTE",
 	.num_args = 3,
-	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_DISTANCE_OFFSET,
+	    CPDLC_ARG_DIRECTION },
 	ASN_UPLINK_INFO_3(65PositionDistanceoffsetDirection, position,
 	    distanceoffset, direction),
 	.resp = CPDLC_RESP_WU,
@@ -669,7 +691,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM66_AT_time_OFFSET_dist_dir_OF_ROUTE,
 	.text = "AT [time] OFFSET [distance offset] [direction] OF ROUTE",
 	.num_args = 3,
-	.args = { CPDLC_ARG_TIME, CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_TIME, CPDLC_ARG_DISTANCE_OFFSET,
+	    CPDLC_ARG_DIRECTION },
 	ASN_UPLINK_INFO_3(66TimeDistanceoffsetDirection, time,
 	    distanceoffset, direction),
 	.resp = CPDLC_RESP_WU,
@@ -766,7 +789,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "AT [position] PROCEED DIRECT TO [position]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_POSITION },
-	// TODO
+	ASN_UPLINK_INFO_SEQ_2(77PositionPosition, list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -811,7 +834,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "CLEARED TO DEVIATE UP TO [distance offset] [direction] "
 	    "OF ROUTE",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_UPLINK_INFO_2(82DistanceoffsetDirection,
 	    distanceoffset, direction),
 	.resp = CPDLC_RESP_WU,
@@ -867,7 +890,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "AT [position] EXPECT DIRECT TO [position]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_POSITION },
-	// TODO
+	ASN_UPLINK_INFO_SEQ_2(88PositionPosition, list),
 	.resp = CPDLC_RESP_R,
 	.timeout = LONG_TIMEOUT
     },
@@ -1005,7 +1028,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "AT [time] EXPECT [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_TIME, CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
-	// TODO
+	ASN_UPLINK_INFO_1_SEQ_2(103TimeSpeedSpeed, time, speed_seqOf.list),
 	.resp = CPDLC_RESP_R,
 	.timeout = LONG_TIMEOUT
     },
@@ -1014,7 +1037,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "AT [position] EXPECT [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
-	// TODO
+	ASN_UPLINK_INFO_1_SEQ_2(104PositionSpeedSpeed, position,
+	    speed_seqOf.list),
 	.resp = CPDLC_RESP_R,
 	.timeout = LONG_TIMEOUT
     },
@@ -1023,6 +1047,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "AT [altitude] EXPECT [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
+	ASN_UPLINK_INFO_1_SEQ_2(105AltitudeSpeedSpeed, altitude,
+	    speed_seqOf.list),
 	.resp = CPDLC_RESP_R,
 	.timeout = LONG_TIMEOUT
     },
@@ -1065,7 +1091,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "MAINTAIN [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
-	// TODO
+	ASN_UPLINK_INFO_SEQ_2(110SpeedSpeed, list),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -1442,7 +1468,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM152_WHEN_CAN_YOU_ACPT_dist_dir_OFFSET,
 	.text = "WHEN CAN YOU ACCEPT [distance offset] [direction] OFFSET",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_UPLINK_INFO_2(152DistanceoffsetDirection, distanceoffset,
 	    direction),
 	.resp = CPDLC_RESP_NE,
@@ -1661,7 +1687,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.text = "REPORT REACHING BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-	// TODO
+	ASN_UPLINK_INFO_SEQ_2(180AltitudeAltitude, list),
 	.resp = CPDLC_RESP_R,
 	.timeout = SHORT_TIMEOUT
     },
@@ -1892,7 +1918,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "REQUEST BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-	// TODO
+	ASN_DOWNLINK_INFO_SEQ_2(7AltitudeAltitude, list),
 	.resp = CPDLC_RESP_Y,
 	.num_resp_msgs = 1,
 	.resp_msg_types = { CPDLC_UM30_MAINT_BLOCK_alt_TO_alt }
@@ -1979,7 +2005,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_type = CPDLC_DM15_REQ_OFFSET_dist_dir_OF_ROUTE,
 	.text = "REQUEST OFFSET [distance offset] [direction] OF ROUTE",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_2(15DistanceoffsetDirection, distanceoffset,
 	    direction),
 	.resp = CPDLC_RESP_Y,
@@ -1992,7 +2018,8 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "AT [position] REQUEST OFFSET [distance offset] "
 	    "[direction] OF ROUTE",
 	.num_args = 3,
-	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_POSITION, CPDLC_ARG_DISTANCE_OFFSET,
+	    CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_3(16PositionDistanceoffsetDirection,
 	    position, distanceoffset, direction),
 	.resp = CPDLC_RESP_Y,
@@ -2005,7 +2032,8 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "AT [time] REQUEST OFFSET [distance offset] "
 	    "[direction] OF ROUTE",
 	.num_args = 3,
-	.args = { CPDLC_ARG_TIME, CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_TIME, CPDLC_ARG_DISTANCE_OFFSET,
+	    CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_3(17TimeDistanceoffsetDirection, time,
 	    distanceoffset, direction),
 	.resp = CPDLC_RESP_Y,
@@ -2029,7 +2057,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "REQUEST [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
-	// TODO
+	ASN_DOWNLINK_INFO_SEQ_2(19SpeedSpeed, list),
 	.resp = CPDLC_RESP_Y,
 	.num_resp_msgs = 1,
 	.resp_msg_types = { CPDLC_UM110_MAINT_spd_TO_spd }
@@ -2113,7 +2141,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "REQUEST WEATHER DEVIATION UP TO [distance offset] "
 	    "[direction] OF ROUTE",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_2(27DistanceoffsetDirection, distanceoffset,
 	    direction),
 	.resp = CPDLC_RESP_Y,
@@ -2328,7 +2356,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "WHEN CAN WE EXPECT [speed] TO [speed]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_SPEED, CPDLC_ARG_SPEED },
-	// TODO
+	ASN_DOWNLINK_INFO_SEQ_2(50SpeedSpeed, list),
 	.resp = CPDLC_RESP_Y,
 	.num_resp_msgs = 3,
 	.resp_msg_types = {
@@ -2437,7 +2465,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "OFFSETTING [distance offset] [direction] OF ROUTE",
 	.resp = CPDLC_RESP_N,
 	.num_args = 2,
-	.args = { CPDLC_ARG_DIRECTION, CPDLC_ARG_DISTANCE },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_2(60DistanceoffsetDirection, distanceoffset,
 	    direction),
     },
@@ -2525,7 +2553,8 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_subtype = CPDLC_DM67d_WE_CAN_ACPT_dist_dir_AT_time,
 	.text = "WE CAN ACCEPT [distance offset] [direction] AT [time]",
 	.num_args = 3,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION, CPDLC_ARG_TIME },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION,
+	    CPDLC_ARG_TIME },
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2555,7 +2584,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_subtype = CPDLC_DM67g_WE_CANNOT_ACPT_dist_dir,
 	.text = "WE CANNOT ACCEPT [distance offset] [direction]",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2654,7 +2683,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "REACHING BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-	// TODO
+	ASN_DOWNLINK_INFO_SEQ_2(76AltitudeAltitude, list),
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2663,7 +2692,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.text = "ASSIGNED BLOCK [altitude] TO [altitude]",
 	.num_args = 2,
 	.args = { CPDLC_ARG_ALTITUDE, CPDLC_ARG_ALTITUDE },
-	// TODO
+	ASN_DOWNLINK_INFO_SEQ_2(77AltitudeAltitude, list),
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2692,7 +2721,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_type = CPDLC_DM80_DEVIATING_dist_dir_OF_ROUTE,
 	.text = "DEVIATING [distance offset] [direction] OF ROUTE",
 	.num_args = 2,
-	.args = { CPDLC_ARG_DISTANCE, CPDLC_ARG_DIRECTION },
+	.args = { CPDLC_ARG_DISTANCE_OFFSET, CPDLC_ARG_DIRECTION },
 	ASN_DOWNLINK_INFO_2(80DistanceoffsetDirection, distanceoffset,
 	    direction),
 	.resp = CPDLC_RESP_N

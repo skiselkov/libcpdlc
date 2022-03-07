@@ -28,6 +28,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "cpdlc_core.h"
 
@@ -351,6 +352,7 @@ typedef enum {
 	CPDLC_ARG_POSITION,
 	CPDLC_ARG_DIRECTION,
 	CPDLC_ARG_DISTANCE,
+	CPDLC_ARG_DISTANCE_OFFSET,
 	CPDLC_ARG_VVI,
 	CPDLC_ARG_TOFROM,
 	CPDLC_ARG_ROUTE,
@@ -385,6 +387,8 @@ typedef enum {
 
 typedef struct {
 	bool			mach;
+	bool			tru;
+	bool			gnd;
 	unsigned		spd;	/* knots or 1/1000th of Mach */
 } cpdlc_spd_t;
 
@@ -787,14 +791,20 @@ enum {
 };
 
 typedef struct {
+	uintptr_t		offset;
+	bool			is_seq;
+	uintptr_t		seq_idx;
+} cpdlc_asn_arg_info_t;
+
+typedef struct {
 	bool			is_dl;
 	int			msg_type;
 	char			msg_subtype;	/* for the weird 67x messages */
 	const char		*text;
 	unsigned		num_args;
 	cpdlc_arg_type_t	args[CPDLC_MAX_ARGS];
-	int			asn_elem_id;
-	unsigned		asn_arg_off[CPDLC_MAX_ARGS];
+	unsigned		asn_elem_id;
+	cpdlc_asn_arg_info_t	asn_arg_info[CPDLC_MAX_ARGS];
 	cpdlc_resp_type_t	resp;
 	unsigned		timeout;	/* seconds */
 	unsigned		num_resp_msgs;

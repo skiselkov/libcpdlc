@@ -37,6 +37,7 @@
 #include "cpdlc_assert.h"
 #include "cpdlc_hexcode.h"
 #include "cpdlc_msg.h"
+#include "cpdlc_msg_asn.h"
 #include "cpdlc_string.h"
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
@@ -989,6 +990,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		break;
 	}
 	case CPDLC_ARG_DISTANCE:
+	case CPDLC_ARG_DISTANCE_OFFSET:
 		if (readable) {
 			if (arg->dist - (int)arg->dist == 0) {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
@@ -1146,7 +1148,6 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%c",
 		    info->msg_subtype);
 	}
-
 	for (unsigned i = 0; i < info->num_args; i++) {
 		cpdlc_encode_msg_arg(info->args[i], &seg->args[i], false,
 		    n_bytes_p, buf_p, cap_p);
@@ -2398,6 +2399,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			break;
 		case CPDLC_ARG_DISTANCE:
+		case CPDLC_ARG_DISTANCE_OFFSET:
 			arg->dist = atof(start);
 			if (arg->dist < 0 || arg->dist > 20000) {
 				MALFORMED_MSG("invalid distance (%.2f)",
@@ -2662,6 +2664,12 @@ msg_decode_asn1(cpdlc_msg_t *msg, const char *start, const char *end,
 	if (rval.consumed < rawsz) {
 		MALFORMED_MSG("error decoding ASN.1 data: extraneous data at "
 		    "end of ASN.1 input");
+		goto errout;
+	}
+	if (!cpdlc_msg_decode_asn_impl(msg, struct_ptr, is_dl)) {
+		MALFORMED_MSG("error decoding ASN.1 data: error interpreting "
+		    "parsed data structures");
+		td->free_struct(td, struct_ptr, 0);
 		goto errout;
 	}
 	td->free_struct(td, struct_ptr, 0);
@@ -3048,6 +3056,7 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		arg->dir = *(cpdlc_dir_t *)arg_val1;
 		break;
 	case CPDLC_ARG_DISTANCE:
+	case CPDLC_ARG_DISTANCE_OFFSET:
 		arg->dist = *(double *)arg_val1;
 		CPDLC_ASSERT3F(arg->dist, >=, 0);
 		break;
@@ -3154,6 +3163,7 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		*(cpdlc_dir_t *)arg_val1 = arg->dir;
 		return (sizeof (arg->dir));
 	case CPDLC_ARG_DISTANCE:
+	case CPDLC_ARG_DISTANCE_OFFSET:
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(double *)arg_val1 = arg->dist;
 		return (arg->dist);
@@ -3175,8 +3185,7 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (sizeof (cpdlc_route_t));
 	case CPDLC_ARG_PROCEDURE:
 		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
-		if (str_cap >= sizeof (cpdlc_proc_t))
-			*(cpdlc_proc_t *)arg_val1 = arg->proc;
+		*(cpdlc_proc_t *)arg_val1 = arg->proc;
 		return (sizeof (cpdlc_proc_t));
 	case CPDLC_ARG_SQUAWK:
 		CPDLC_ASSERT(arg_val1 != NULL);
@@ -3214,18 +3223,15 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		return (strlen(arg->freetext));
 	case CPDLC_ARG_PERSONS:
 		CPDLC_ASSERT(arg_val1 != NULL);
-		if (str_cap >= sizeof (unsigned))
-			*(unsigned *)arg_val1 = arg->pob;
+		*(unsigned *)arg_val1 = arg->pob;
 		return (sizeof (arg->pob));
 	case CPDLC_ARG_POSREPORT:
 		CPDLC_ASSERT(arg_val1 != NULL);
-		if (str_cap >= sizeof (arg->pos_rep))
-			*(cpdlc_pos_rep_t *)arg_val1 = arg->pos_rep;
+		*(cpdlc_pos_rep_t *)arg_val1 = arg->pos_rep;
 		return (sizeof (arg->pos_rep));
 	case CPDLC_ARG_PDC:
 		CPDLC_ASSERT(arg_val1 != NULL);
-		if (str_cap >= sizeof (cpdlc_pdc_t))
-			*(cpdlc_pdc_t *)arg_val1 = *arg->pdc;
+		*(cpdlc_pdc_t *)arg_val1 = *arg->pdc;
 		return (sizeof (arg->pos_rep));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
