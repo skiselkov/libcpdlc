@@ -1054,8 +1054,12 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    sizeof (textbuf));
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
-			cpdlc_escape_percent(arg->icaoname.name, textbuf,
-			    sizeof (textbuf));
+			if (arg->icaoname.name[0] != '\0') {
+				cpdlc_escape_percent(arg->icaoname.name,
+				    textbuf, sizeof (textbuf));
+			} else {
+				cpdlc_strlcpy(textbuf, "-", sizeof (textbuf));
+			}
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
 			    textbuf);
 		}
@@ -1132,6 +1136,12 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 	case CPDLC_ARG_PDC:
 		CPDLC_ASSERT(arg->pdc != NULL);
 		serialize_pdc(arg->pdc, readable, n_bytes_p, buf_p, cap_p);
+		break;
+	case CPDLC_ARG_TP4TABLE:
+		if (!readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+			    arg->tp4);
+		}
 		break;
 	}
 }
@@ -2488,7 +2498,10 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			arg_end = find_arg_end(start, end);
 			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (cpdlc_unescape_percent(textbuf, arg->icaoname.name,
+			if (strcmp(textbuf, "-") == 0) {
+				arg->icaoname.name[0] = '\0';
+			} else if (cpdlc_unescape_percent(textbuf,
+			    arg->icaoname.name,
 			    sizeof (arg->icaoname.name)) == -1) {
 				MALFORMED_MSG("invalid percent escapes");
 				return (false);
@@ -2598,6 +2611,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
+		case CPDLC_ARG_TP4TABLE:
+			if (sscanf(start, "%d", (int *)&arg->tp4) != 1 ||
+			    (arg->tp4 != CPDLC_TP4_LABEL_A &&
+			    arg->tp4 != CPDLC_TP4_LABEL_B)) {
+				MALFORMED_MSG("malformed TP4table");
+				return (false);
+			}
+			break;
 		}
 
 		SKIP_NONSPACE(start, end);
@@ -2622,11 +2643,11 @@ msg_decode_asn1(cpdlc_msg_t *msg, const char *start, const char *end,
     char *reason, unsigned reason_cap)
 {
 	int is_dl;
-	char *rawbuf;
+	uint8_t *rawbuf;
 	unsigned rawsz;
 	asn_TYPE_descriptor_t *td;
 	asn_dec_rval_t rval;
-	void *struct_ptr;
+	void *struct_ptr = NULL;
 
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(start != NULL);
@@ -3233,6 +3254,10 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(cpdlc_pdc_t *)arg_val1 = *arg->pdc;
 		return (sizeof (arg->pos_rep));
+	case CPDLC_ARG_TP4TABLE:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(cpdlc_tp4table_t *)arg_val1 = arg->tp4;
+		return (sizeof (arg->tp4));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
 	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,

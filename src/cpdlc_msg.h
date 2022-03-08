@@ -365,7 +365,8 @@ typedef enum {
 	CPDLC_ARG_FREETEXT,
 	CPDLC_ARG_PERSONS,
 	CPDLC_ARG_POSREPORT,
-	CPDLC_ARG_PDC
+	CPDLC_ARG_PDC,
+	CPDLC_ARG_TP4TABLE
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -479,7 +480,7 @@ typedef struct {
 	bool			spd_cstr_present;
 	cpdlc_spd_t		spd_cstr;
 	unsigned		num_alt_cstr;
-	cpdlc_alt_cstr_t	alt_cstr;
+	cpdlc_alt_cstr_t	alt_cstr[2];
 } cpdlc_atk_wpt_t;
 
 typedef enum {
@@ -517,7 +518,8 @@ typedef struct {
 typedef struct {
 	cpdlc_pos_t		pos;	/* required */
 	cpdlc_spd_t		spd_low;/* optional, CPDLC_NULL_SPD */
-	cpdlc_alt_t		alt;	/* optional, CPDLC_NULL_ALT */
+	bool			alt_present;
+	cpdlc_alt_cstr_t	alt;	/* optional */
 	cpdlc_spd_t		spd_high;/* optional, CPDLC_NULL_SPD */
 	cpdlc_dir_t		dir;	/* optional, CPDLC_DIR_EITHER */
 	unsigned		degrees;/* optional, 0 */
@@ -544,8 +546,15 @@ typedef struct {
 } cpdlc_rta_t;
 
 typedef struct {
+	bool			rpt_lat;
+	double			degrees;	/* lat/lon, degrees */
+	unsigned		deg_incr;	/* optional, 0=unset */
+} cpdlc_rpt_pts_t;
+
+typedef struct {
 	unsigned		num_atk_wpt;
 	cpdlc_atk_wpt_t		atk_wpt[8];
+	cpdlc_rpt_pts_t		rpt_pts;
 	unsigned		num_intc_from;
 	cpdlc_intc_from_t	intc_from[4];
 	unsigned		num_hold_at_wpt;
@@ -751,6 +760,11 @@ typedef struct {
 	unsigned		revision;	/* required */
 } cpdlc_pdc_t;
 
+typedef enum {
+	CPDLC_TP4_LABEL_A,
+	CPDLC_TP4_LABEL_B
+} cpdlc_tp4table_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
@@ -780,6 +794,7 @@ typedef union {
 	unsigned		pob;
 	cpdlc_pos_rep_t		pos_rep;
 	cpdlc_pdc_t		*pdc;
+	cpdlc_tp4table_t	tp4;
 } cpdlc_arg_t;
 
 enum {
@@ -824,16 +839,24 @@ typedef enum {
 } cpdlc_pkt_t;
 
 typedef struct {
-	cpdlc_pkt_t	pkt_type;
-	unsigned	min;
-	unsigned	mrn;
-	char		from[CPDLC_CALLSIGN_LEN];
-	char		to[CPDLC_CALLSIGN_LEN];
-	bool		is_logon;
-	bool		is_logoff;
-	char		*logon_data;
-	unsigned	num_segs;
-	cpdlc_msg_seg_t	segs[CPDLC_MAX_MSG_SEGS];
+	bool			set;
+	unsigned		hrs;
+	unsigned		mins;
+	unsigned		secs;
+} cpdlc_timestamp_t;
+
+typedef struct {
+	cpdlc_pkt_t		pkt_type;
+	unsigned		min;
+	unsigned		mrn;
+	cpdlc_timestamp_t	ts;
+	char			from[CPDLC_CALLSIGN_LEN];
+	char			to[CPDLC_CALLSIGN_LEN];
+	bool			is_logon;
+	bool			is_logoff;
+	char			*logon_data;
+	unsigned		num_segs;
+	cpdlc_msg_seg_t		segs[CPDLC_MAX_MSG_SEGS];
 } cpdlc_msg_t;
 
 extern const cpdlc_msg_info_t *cpdlc_ul_infos;

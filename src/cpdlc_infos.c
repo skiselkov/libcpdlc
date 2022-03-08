@@ -36,70 +36,87 @@
 #define	SHORT_TIMEOUT		100	/* seconds */
 
 #define	ASN_UPLINK_INFO_01(typename) \
-	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename
+	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename) }, \
+	}
 
 #define	ASN_UPLINK_INFO_2(typename, arg1, arg2) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(UM ## typename ## _t, arg1) }, \
-	    { offsetof(UM ## typename ## _t, arg2) } \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg1) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg2) } \
 	}
 
 #define	ASN_UPLINK_INFO_SEQ_2(typename, seq_name) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(UM ## typename ## _t, seq_name), true, 0 }, \
-	    { offsetof(UM ## typename ## _t, seq_name), true, 1 } \
+	    { offsetof(ATCuplinkmsgelementid_t, \
+		choice.uM ## typename.seq_name), true, 0 }, \
+	    { offsetof(ATCuplinkmsgelementid_t, \
+		choice.uM ## typename.seq_name), true, 1 } \
 	}
 
 #define	ASN_UPLINK_INFO_1_SEQ_2(typename, arg1, seq_name) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(UM ## typename ## _t, arg1) }, \
-	    { offsetof(UM ## typename ## _t, seq_name), true, 0 }, \
-	    { offsetof(UM ## typename ## _t, seq_name), true, 1 } \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg1) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, \
+		choice.uM ## typename.seq_name), true, 0 }, \
+	    { offsetof(ATCuplinkmsgelementid_t, \
+		choice.uM ## typename.seq_name), true, 1 } \
 	}
 
 #define	ASN_UPLINK_INFO_3(typename, arg1, arg2, arg3) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(UM ## typename ## _t, arg1) }, \
-	    { offsetof(UM ## typename ## _t, arg2) }, \
-	    { offsetof(UM ## typename ## _t, arg3) } \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg1) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg2) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg3) } \
 	}
 
 #define	ASN_UPLINK_INFO_4(typename, arg1, arg2, arg3, arg4) \
 	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(UM ## typename ## _t, arg1) }, \
-	    { offsetof(UM ## typename ## _t, arg2) }, \
-	    { offsetof(UM ## typename ## _t, arg3) }, \
-	    { offsetof(UM ## typename ## _t, arg4) } \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg1) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg2) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg3) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg4) } \
 	}
 
 #define	ASN_DOWNLINK_INFO_01(typename) \
-	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename
+	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(ATCdownlinkmsgelementid_t, choice.dM ## typename) }, \
+	}
 
 #define	ASN_DOWNLINK_INFO_2(typename, arg1, arg2) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(DM ## typename ## _t, arg1) }, \
-	    { offsetof(DM ## typename ## _t, arg2) } \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg1) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg2) } \
 	}
 
 #define	ASN_DOWNLINK_INFO_SEQ_2(typename, seq_name) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(DM ## typename ## _t, seq_name), true, 0 }, \
-	    { offsetof(DM ## typename ## _t, seq_name), true, 1 } \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.seq_name), true, 0 }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.seq_name), true, 1 } \
 	}
 
 #define	ASN_DOWNLINK_INFO_3(typename, arg1, arg2, arg3) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
 	.asn_arg_info = { \
-	    { offsetof(DM ## typename ## _t, arg1) }, \
-	    { offsetof(DM ## typename ## _t, arg2) }, \
-	    { offsetof(DM ## typename ## _t, arg3) } \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg1) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg2) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg3) } \
 	}
 
 static const cpdlc_msg_info_t ul_infos[] = {
@@ -1562,8 +1579,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM163_FACILITY_designation_tp4table,
 	.text = "[icao facility designation] [tp4Table]",
 	.num_args = 2,
-	.args = { CPDLC_ARG_ICAONAME, CPDLC_ARG_FREETEXT },
-	// TODO
+	.args = { CPDLC_ARG_ICAONAME, CPDLC_ARG_TP4TABLE },
 	ASN_UPLINK_INFO_2(163ICAOfacilitydesignationTp4table,
 	    iCAOfacilitydesignation, tp4table),
 	.resp = CPDLC_RESP_NE

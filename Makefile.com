@@ -58,14 +58,18 @@ SRCPREFIX=../src
 COMPREFIX=../common
 FANS=../fans
 
+ASN_SRC_OBJS = $(patsubst %.c, %.o, $(wildcard $(SRCPREFIX)/asn1/*.c))
+
 CORE_SRC_OBJS=\
 	$(SRCPREFIX)/cpdlc_assert.o \
 	$(SRCPREFIX)/cpdlc_client.o \
+	$(SRCPREFIX)/cpdlc_hexcode.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
 	$(SRCPREFIX)/cpdlc_msg.o \
+	$(SRCPREFIX)/cpdlc_msg_asn.o \
 	$(SRCPREFIX)/cpdlc_msglist.o \
 	$(SRCPREFIX)/cpdlc_string.o \
-	$(SRCPREFIX)/minilist.o \
+	$(SRCPREFIX)/minilist.o
 
 FANS_OBJS=\
 	$(FANS)/fans.o \
