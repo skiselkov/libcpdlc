@@ -127,6 +127,12 @@ extern "C" {
 #define	CPDLC_DEG_SYMBOL	"\370"
 #endif
 
+#if	defined(__STDC_LIB_EXT1__) || IBM
+#define	cpdlc_gmtime_r(__tim__, __tm__)	_gmtime64_s((__tm__), (__tim__))
+#else
+#define	cpdlc_gmtime_r			gmtime_r
+#endif
+
 #ifdef	__cplusplus
 }
 #endif

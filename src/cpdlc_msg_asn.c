@@ -174,11 +174,11 @@ latlon_asn2cpdlc(const LatitudeLongitude_t *latlon)
 
 	dir = (lat.latitudedirection == Latitudedirection_north ? 1 : -1);
 	mins = (lat.minuteslatlon != NULL ? (*lat.minuteslatlon) / 10.0 : 0);
-	ll.lat = dir * (lat.latitudedegrees + mins);
+	ll.lat = dir * (lat.latitudedegrees + mins / 60.0);
 
 	dir = (lon.longitudedirection == Longitudedirection_east ? 1 : -1);
 	mins = (lon.minuteslatlon != NULL ? (*lon.minuteslatlon) / 10.0 : 0);
-	ll.lon = dir * (lon.longitudedegrees + mins);
+	ll.lon = dir * (lon.longitudedegrees + mins / 60.0);
 
 	return (ll);
 }

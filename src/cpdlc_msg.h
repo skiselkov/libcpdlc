@@ -620,6 +620,7 @@ typedef struct {
 	char			orig_icao[8];
 	char			dest_icao[8];
 	char			orig_rwy[8];
+	char			dest_rwy[8];
 	cpdlc_proc_t		sid;
 	cpdlc_proc_t		star;
 	cpdlc_proc_t		appch;
@@ -872,8 +873,8 @@ CPDLC_API unsigned cpdlc_msg_encode_asn1(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
-CPDLC_API bool cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg,
-    int *consumed, char *reason, unsigned reason_cap);
+CPDLC_API bool cpdlc_msg_decode(const char *in_buf, bool is_dl,
+    cpdlc_msg_t **msg, int *consumed, char *reason, unsigned reason_cap);
 
 void cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type,
     const cpdlc_arg_t *arg, bool readable, unsigned *n_bytes_p,

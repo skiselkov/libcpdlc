@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 #include "asn1/ATCdownlinkmessage.h"
 #include "asn1/ATCuplinkmessage.h"
@@ -357,16 +358,18 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 
 	if (route->orig_icao[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s ",
-		    !readable ? "ADEP:" : "", route->orig_icao);
+		    !readable ? "ORIG:" : "", route->orig_icao);
 	}
 	if (route->dest_icao[0] != '\0' && !readable) {
-		APPEND_SNPRINTF(len, outbuf, cap, "ADES:%s ",
+		APPEND_SNPRINTF(len, outbuf, cap, "DEST:%s ",
 		    route->dest_icao);
 	}
 	if (route->orig_rwy[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s ",
-		    readable ? "RW" : "DEPRWY:", route->orig_rwy);
+		    readable ? "RW" : "ORWY:", route->orig_rwy);
 	}
+	if (route->dest_rwy[0] != '\0' && !readable)
+		APPEND_SNPRINTF(len, outbuf, cap, "DRWY:%s ", route->dest_rwy);
 	if (route->sid.name[0] != '\0') {
 		APPEND_SNPRINTF(len, outbuf, cap, "%s%s%s%s ",
 		    !readable ? "SID:" : "", route->sid.name,
@@ -402,6 +405,8 @@ serialize_route(const cpdlc_route_t *route, bool readable,
 			    route->appch.trans);
 		}
 	}
+	if (route->dest_rwy[0] != '\0' && readable)
+		APPEND_SNPRINTF(len, outbuf, cap, "RW%s ", route->dest_rwy);
 	/*
 	 * Bit of a special case for human readability.
 	 * Empty route implies a DIRECT route.
@@ -1164,12 +1169,29 @@ encode_seg(const cpdlc_msg_seg_t *seg, unsigned *n_bytes_p, char **buf_p,
 	}
 }
 
+static cpdlc_timestamp_t
+make_timestamp(void)
+{
+	time_t now = time(NULL);
+	struct tm tm;
+	cpdlc_timestamp_t ts;
+
+	cpdlc_gmtime_r(&now, &tm);
+	ts.set = true;
+	ts.hrs = tm.tm_hour;
+	ts.mins = tm.tm_min;
+	ts.secs = tm.tm_sec;
+
+	return (ts);
+}
+
 cpdlc_msg_t *
 cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 {
 	cpdlc_msg_t *msg = safe_calloc(1, sizeof (cpdlc_msg_t));
 
 	CPDLC_ASSERT3U(pkt_type, <=, CPDLC_PKT_PONG);
+	msg->ts = make_timestamp();
 	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
 	msg->pkt_type = pkt_type;
 
@@ -1264,9 +1286,12 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(buf != NULL || cap == 0);
 
-	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s/MIN=%d",
-	    pkt_type2str(msg->pkt_type), msg->min);
+	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s",
+	    pkt_type2str(msg->pkt_type));
 
+	APPEND_SNPRINTF(n_bytes, buf, cap, "/TS=%02d%02d%02d",
+	    msg->ts.hrs, msg->ts.mins, msg->ts.secs);
+	APPEND_SNPRINTF(n_bytes, buf, cap, "/MIN=%d", msg->min);
 	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
 	if (msg->is_logon) {
@@ -1614,15 +1639,18 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 		route->num_info++;
 		return (true);
 	}
-	if (strncmp(comp, "ADEP:", 5) == 0) {
+	if (strncmp(comp, "ORIG:", 5) == 0) {
 		cpdlc_strlcpy(route->orig_icao, &comp[5],
 		    sizeof (route->orig_icao));
-	} else if (strncmp(comp, "ADES:", 5) == 0) {
+	} else if (strncmp(comp, "DEST:", 5) == 0) {
 		cpdlc_strlcpy(route->dest_icao, &comp[5],
 		    sizeof (route->dest_icao));
-	} else if (strncmp(comp, "DEPRWY:", 7) == 0) {
+	} else if (strncmp(comp, "ORWY:", 7) == 0) {
 		cpdlc_strlcpy(route->orig_rwy, &comp[7],
 		    sizeof (route->orig_rwy));
+	} else if (strncmp(comp, "DRWY:", 7) == 0) {
+		cpdlc_strlcpy(route->dest_rwy, &comp[7],
+		    sizeof (route->dest_rwy));
 	} else if (strncmp(comp, "SID:", 4) == 0) {
 		cpdlc_strlcpy(route->sid.name, &comp[4],
 		    sizeof (route->sid.name));
@@ -2639,10 +2667,9 @@ end:
 }
 
 static bool
-msg_decode_asn1(cpdlc_msg_t *msg, const char *start, const char *end,
-    char *reason, unsigned reason_cap)
+msg_decode_asn1(bool is_dl, cpdlc_msg_t *msg, const char *start,
+    const char *end, char *reason, unsigned reason_cap)
 {
-	int is_dl;
 	uint8_t *rawbuf;
 	unsigned rawsz;
 	asn_TYPE_descriptor_t *td;
@@ -2654,17 +2681,6 @@ msg_decode_asn1(cpdlc_msg_t *msg, const char *start, const char *end,
 	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
-	SKIP_SPACE(start, end);
-	if (start >= end || sscanf(start, "%d", &is_dl) != 1) {
-		MALFORMED_MSG("malformed ASN.1 tuple: expected is_dl flag");
-		return (false);
-	}
-	SKIP_NONSPACE(start, end);
-	SKIP_SPACE(start, end);
-	if (start >= end) {
-		MALFORMED_MSG("malformed ASN.1 tuple: expected ASN.1 hex data");
-		return (false);
-	}
 	if ((end - start) % 2 != 0) {
 		MALFORMED_MSG("malformed ASN.1 tuple: expected even number "
 		    "of hex chars");
@@ -2702,8 +2718,8 @@ errout:
 }
 
 bool
-cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
-    char *reason, unsigned reason_cap)
+cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
+    int *consumed, char *reason, unsigned reason_cap)
 {
 	const char *start, *term;
 	cpdlc_msg_t *msg;
@@ -2754,6 +2770,22 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 				goto errout;
 			}
 			pkt_type_seen = true;
+		} else if (strncmp(in_buf, "TS=", 3) == 0) {
+			unsigned tsval;
+			if (sscanf(&in_buf[3], "%u", &tsval) != 1) {
+				MALFORMED_MSG("cannot parse TS value");
+				goto errout;
+			}
+			msg->ts.set = true;
+			msg->ts.hrs = (tsval / 10000) % 100;
+			msg->ts.mins = (tsval / 100) % 100;
+			msg->ts.secs = tsval % 100;
+			if (msg->ts.hrs >= 24 || msg->ts.mins >= 60 ||
+			    msg->ts.secs >= 60) {
+				MALFORMED_MSG("invalid TS value");
+				goto errout;
+			}
+			msg->ts.set = true;
 		} else if (strncmp(in_buf, "MIN=", 4) == 0) {
 			if (sscanf(&in_buf[4], "%u", &msg->min) != 1) {
 				MALFORMED_MSG("invalid MIN value");
@@ -2800,16 +2832,15 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 			if (!msg_decode_seg(seg, &in_buf[4], sep, reason,
 			    reason_cap))
 				goto errout;
-			if (msg->num_segs > 0 && msg->segs[0].info->is_dl !=
-			    seg->info->is_dl) {
+			if (msg->num_segs > 0 && seg->info->is_dl != is_dl) {
 				MALFORMED_MSG("can't mix DM and UM message "
 				    "segments");
 				goto errout;
 			}
 			msg->num_segs++;
 		} else if (strncmp(in_buf, "ASN1=", 5) == 0) {
-			if (!msg_decode_asn1(msg, &in_buf[5], sep, reason,
-			    reason_cap)) {
+			if (!msg_decode_asn1(is_dl, msg, &in_buf[5], sep,
+			    reason, reason_cap)) {
 				goto errout;
 			}
 		} else {
@@ -2822,6 +2853,10 @@ cpdlc_msg_decode(const char *in_buf, cpdlc_msg_t **msg_p, int *consumed,
 
 	if (!pkt_type_seen) {
 		MALFORMED_MSG("missing PKT header");
+		goto errout;
+	}
+	if (!msg->ts.set) {
+		MALFORMED_MSG("missing TS header");
 		goto errout;
 	}
 	if (!validate_message(msg, reason, reason_cap))

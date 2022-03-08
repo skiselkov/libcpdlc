@@ -1838,8 +1838,8 @@ conn_process_input(conn_t *conn)
 		char error[128] = { 0 };
 
 		if (!cpdlc_msg_decode(
-		    (const char *)&conn->inbuf[consumed_total], &msg,
-		    &consumed, error, sizeof (error))) {
+		    (const char *)&conn->inbuf[consumed_total], !conn->is_atc,
+		    &msg, &consumed, error, sizeof (error))) {
 			logMsg("Error decoding message from client %s: %s",
 			    conn->addr_str, error);
 			return (false);
