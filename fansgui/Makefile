@@ -70,7 +70,8 @@ LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
 
 CFLAGS += -std=c99 -W -Wall -Wextra $(BOGUS_WARNINGS) -Werror -O2 -g -DDEBUG \
     -DLIBCPDLC_VERSION='"$(LIBCPDLC_VERSION)"' $(PLATFORM_DEFS) \
-    -D_GNU_SOURCE -I$(SRCPREFIX) -I$(SRCPREFIX)/asn1 -I$(ACFUTILS)/src \
+    -D_GNU_SOURCE -DEMIT_ASN_DEBUG=1 \
+    -I$(SRCPREFIX) -I$(SRCPREFIX)/asn1 -I$(ACFUTILS)/src \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --cflags)
 

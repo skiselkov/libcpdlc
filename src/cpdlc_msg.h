@@ -358,7 +358,8 @@ typedef enum {
 	CPDLC_ARG_ROUTE,
 	CPDLC_ARG_PROCEDURE,
 	CPDLC_ARG_SQUAWK,
-	CPDLC_ARG_ICAONAME,
+	CPDLC_ARG_ICAO_ID,
+	CPDLC_ARG_ICAO_NAME,
 	CPDLC_ARG_FREQUENCY,
 	CPDLC_ARG_DEGREES,
 	CPDLC_ARG_BARO,
@@ -766,6 +767,31 @@ typedef enum {
 	CPDLC_TP4_LABEL_B
 } cpdlc_tp4table_t;
 
+typedef enum {
+	CPDLC_FAC_FUNC_CENTER,
+	CPDLC_FAC_FUNC_APPROACH,
+	CPDLC_FAC_FUNC_TOWER,
+	CPDLC_FAC_FUNC_FINAL,
+	CPDLC_FAC_FUNC_GROUND,
+	CPDLC_FAC_FUNC_CLX,
+	CPDLC_FAC_FUNC_DEPARTURE,
+	CPDLC_FAC_FUNC_CONTROL
+} cpdlc_fac_func_t;
+
+typedef struct {
+	bool			is_name;
+	union {
+		char		icao_id[8];
+		char		name[24];
+	};
+	cpdlc_fac_func_t        func;
+} cpdlc_icao_name_t;
+
+typedef struct {
+	bool			hpa;
+	double			val;
+} cpdlc_altimeter_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
@@ -778,19 +804,14 @@ typedef union {
 	cpdlc_route_t		*route;
 	cpdlc_proc_t		proc;
 	unsigned		squawk;
-	struct {
-		char		icao[8];
-		char		name[32];
-	} icaoname;
+	char			icao_id[8];
+	cpdlc_icao_name_t	icao_name;
 	double			freq;
 	struct {
 		unsigned	deg;
 		bool		tru;
 	} deg;
-	struct {
-		bool		hpa;
-		double		val;
-	} baro;
+	cpdlc_altimeter_t	baro;
 	char			*freetext;
 	unsigned		pob;
 	cpdlc_pos_rep_t		pos_rep;

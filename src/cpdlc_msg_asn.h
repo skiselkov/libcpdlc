@@ -32,6 +32,8 @@
 extern "C" {
 #endif
 
+bool cpdlc_msg_encode_asn_impl(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
+    char **buf_p, unsigned *cap_p);
 bool cpdlc_msg_decode_asn_impl(cpdlc_msg_t *msg, const void *struct_ptr,
     bool is_dl);
 

@@ -1050,23 +1050,31 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%04d",
 		    readable ? "" : " ", arg->squawk);
 		break;
-	case CPDLC_ARG_ICAONAME:
+	case CPDLC_ARG_ICAO_ID:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%s",
+		    readable ? "" : " ", arg->icao_id);
+		break;
+	case CPDLC_ARG_ICAO_NAME:
 		if (readable) {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s %s",
-			    arg->icaoname.icao, arg->icaoname.name);
+			if (arg->icao_name.is_name) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%s", arg->icao_name.name);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    "%s", arg->icao_name.icao_id);
+			}
 		} else {
-			cpdlc_escape_percent(arg->icaoname.icao, textbuf,
-			    sizeof (textbuf));
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
-			    textbuf);
-			if (arg->icaoname.name[0] != '\0') {
-				cpdlc_escape_percent(arg->icaoname.name,
+			if (arg->icao_name.is_name) {
+				cpdlc_escape_percent(arg->icao_name.name,
 				    textbuf, sizeof (textbuf));
 			} else {
-				cpdlc_strlcpy(textbuf, "-", sizeof (textbuf));
+				cpdlc_escape_percent(arg->icao_name.icao_id,
+				    textbuf, sizeof (textbuf));
 			}
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s",
-			    textbuf);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s:%s",
+			    arg->icao_name.is_name ? "NAME:" : "ID:", textbuf);
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+			    arg->icao_name.func);
 		}
 		break;
 	case CPDLC_ARG_FREQUENCY:
@@ -1313,12 +1321,13 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
 	}
-	if (!asn1) {
+//	if (!asn1) {
 		for (unsigned i = 0; i < msg->num_segs; i++)
 			encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
-	} else {
-		/* TODO: encode ASN1 segment */
-	}
+//	} else {
+		CPDLC_UNUSED(asn1);
+		cpdlc_msg_encode_asn_impl(msg, &n_bytes, &buf, &cap);
+//	}
 	APPEND_SNPRINTF(n_bytes, buf, cap, "\n");
 
 	return (n_bytes);
@@ -1503,16 +1512,6 @@ find_arg_end(const char *start, const char *end)
 	while (start < end && !isspace(start[0]))
 		start++;
 	return (start);
-}
-
-static bool
-contains_spaces(const char *str)
-{
-	for (int i = 0, n = strlen(str); i < n; i++) {
-		if (isspace(str[i]))
-			return (true);
-	}
-	return (false);
 }
 
 static const char *
@@ -2499,39 +2498,51 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
-		case CPDLC_ARG_ICAONAME:
-			/* The ICAO identifier goes first */
+		case CPDLC_ARG_ICAO_ID:
 			arg_end = find_arg_end(start, end);
-			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
+			cpdlc_strlcpy(arg->icao_id, start,
+			    MIN(sizeof (arg->icao_id),
 			    (uintptr_t)(arg_end - start) + 1));
-			if (cpdlc_unescape_percent(textbuf, arg->icaoname.icao,
-			    sizeof (arg->icaoname.icao)) == -1) {
-				MALFORMED_MSG("invalid URL escape");
-				return (false);
+			break;
+		case CPDLC_ARG_ICAO_NAME:
+			/* Parse facility name/ID */
+			arg_end = find_arg_end(start, end);
+			if (strncmp(start, "ID:", 3) == 0) {
+				cpdlc_strlcpy(textbuf, &start[3],
+				    MIN(sizeof (textbuf),
+				    (uintptr_t)(arg_end - &start[3]) + 1));
+			} else if (strncmp(start, "NAME:", 5) == 0) {
+				cpdlc_strlcpy(textbuf, &start[5],
+				    MIN(sizeof (textbuf),
+				    (uintptr_t)(arg_end - &start[5]) + 1));
+				arg->icao_name.is_name = true;
+			} else {
+				cpdlc_strlcpy(textbuf, start,
+				    MIN(sizeof (textbuf),
+				    (uintptr_t)(arg_end - start) + 1));
+				arg->icao_name.is_name = true;
 			}
-			if (contains_spaces(arg->icaoname.icao)) {
-				MALFORMED_MSG("icaoname cannot contain "
-				    "whitespace");
-				return (false);
+			if (arg->icao_name.is_name) {
+				if (cpdlc_unescape_percent(textbuf,
+				    arg->icao_name.name,
+				    sizeof (arg->icao_name.name)) == -1) {
+					MALFORMED_MSG("invalid URL escape");
+					return (false);
+				}
+			} else {
+				if (cpdlc_unescape_percent(textbuf,
+				    arg->icao_name.icao_id,
+				    sizeof (arg->icao_name.icao_id)) == -1) {
+					MALFORMED_MSG("invalid URL escape");
+					return (false);
+				}
 			}
-			/* Followed by whitespace */
 			SKIP_NONSPACE(start, end);
 			SKIP_SPACE(start, end);
-			if (start == end) {
-				MALFORMED_MSG("icaoname must be followed by "
-				    "descriptive name");
-				return (false);
-			}
-			/* And finally a percent-escaped descriptive name */
-			arg_end = find_arg_end(start, end);
-			cpdlc_strlcpy(textbuf, start, MIN(sizeof (textbuf),
-			    (uintptr_t)(arg_end - start) + 1));
-			if (strcmp(textbuf, "-") == 0) {
-				arg->icaoname.name[0] = '\0';
-			} else if (cpdlc_unescape_percent(textbuf,
-			    arg->icaoname.name,
-			    sizeof (arg->icaoname.name)) == -1) {
-				MALFORMED_MSG("invalid percent escapes");
+			/* Parse facility function */
+			if (sscanf(start, "%u", &arg->icao_name.func) != 1 ||
+			    arg->icao_name.func > CPDLC_FAC_FUNC_CONTROL) {
+				MALFORMED_MSG("invalid ICAO facility function");
 				return (false);
 			}
 			break;
@@ -2706,7 +2717,7 @@ msg_decode_asn1(bool is_dl, cpdlc_msg_t *msg, const char *start,
 	if (!cpdlc_msg_decode_asn_impl(msg, struct_ptr, is_dl)) {
 		MALFORMED_MSG("error decoding ASN.1 data: error interpreting "
 		    "parsed data structures");
-		td->free_struct(td, struct_ptr, 0);
+		ASN_STRUCT_FREE(*td, struct_ptr);
 		goto errout;
 	}
 	td->free_struct(td, struct_ptr, 0);
@@ -3133,12 +3144,11 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_SQUAWK:
 		arg->squawk = *(unsigned *)arg_val1;
 		break;
-	case CPDLC_ARG_ICAONAME:
-		CPDLC_ASSERT(arg_val2 != NULL);
-		cpdlc_strlcpy(arg->icaoname.icao, arg_val1,
-		    sizeof (arg->icaoname.icao));
-		cpdlc_strlcpy(arg->icaoname.name, arg_val2,
-		    sizeof (arg->icaoname.name));
+	case CPDLC_ARG_ICAO_ID:
+		cpdlc_strlcpy(arg->icao_id, arg_val1, sizeof (arg->icao_id));
+		break;
+	case CPDLC_ARG_ICAO_NAME:
+		arg->icao_name = *(cpdlc_icao_name_t *)arg_val1;
 		break;
 	case CPDLC_ARG_FREQUENCY:
 		arg->freq = *(double *)arg_val1;
@@ -3247,11 +3257,14 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(unsigned *)arg_val1 = arg->squawk;
 		return (sizeof (arg->squawk));
-	case CPDLC_ARG_ICAONAME:
-		CPDLC_ASSERT(arg_val1 != NULL || str_cap == 0);
-		cpdlc_strlcpy(arg_val1, arg->icaoname.icao, str_cap);
-		cpdlc_strlcpy(arg_val2, arg->icaoname.name, str_cap);
-		return (strlen(arg->icaoname.name));
+	case CPDLC_ARG_ICAO_ID:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		cpdlc_strlcpy(arg_val1, arg->icao_id, str_cap);
+		return (strlen(arg->icao_id));
+	case CPDLC_ARG_ICAO_NAME:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(cpdlc_icao_name_t *)arg_val1 = arg->icao_name;
+		return (sizeof (arg->icao_name));
 	case CPDLC_ARG_FREQUENCY:
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(double *)arg_val1 = arg->freq;
