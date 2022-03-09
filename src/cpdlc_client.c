@@ -1185,7 +1185,7 @@ process_input(cpdlc_client_t *cl)
 
 		/* Try to decode a message from our accumulated input. */
 		CPDLC_ASSERT3S(consumed_total, <=, cl->inbuf_sz);
-		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], false,
+		if (!cpdlc_msg_decode(&cl->inbuf[consumed_total], cl->is_atc,
 		    &msg, &consumed, error, sizeof (error))) {
 			cl->logon_status = CPDLC_LOGON_NONE;
 			cpdlc_strlcpy(cl->logon_failure, error,

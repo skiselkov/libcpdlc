@@ -1651,28 +1651,34 @@ parse_route_info(cpdlc_route_t *route, const char *comp,
 	} else if (strncmp(comp, "DEST:", 5) == 0) {
 		cpdlc_strlcpy(route->dest_icao, &comp[5],
 		    sizeof (route->dest_icao));
-	} else if (strncmp(comp, "ORWY:", 7) == 0) {
+	} else if (strncmp(comp, "ORWY:", 5) == 0) {
 		cpdlc_strlcpy(route->orig_rwy, &comp[7],
 		    sizeof (route->orig_rwy));
-	} else if (strncmp(comp, "DRWY:", 7) == 0) {
+	} else if (strncmp(comp, "DRWY:", 5) == 0) {
 		cpdlc_strlcpy(route->dest_rwy, &comp[7],
 		    sizeof (route->dest_rwy));
 	} else if (strncmp(comp, "SID:", 4) == 0) {
+		route->sid.type = CPDLC_PROC_DEPARTURE;
 		cpdlc_strlcpy(route->sid.name, &comp[4],
 		    sizeof (route->sid.name));
 	} else if (strncmp(comp, "SIDTR:", 6) == 0) {
+		route->sid.type = CPDLC_PROC_DEPARTURE;
 		cpdlc_strlcpy(route->sid.trans, &comp[6],
 		    sizeof (route->sid.trans));
 	} else if (strncmp(comp, "STAR:", 5) == 0) {
+		route->star.type = CPDLC_PROC_ARRIVAL;
 		cpdlc_strlcpy(route->star.name, &comp[5],
 		    sizeof (route->star.name));
 	} else if (strncmp(comp, "STARTR:", 7) == 0) {
+		route->star.type = CPDLC_PROC_ARRIVAL;
 		cpdlc_strlcpy(route->star.trans, &comp[7],
 		    sizeof (route->star.trans));
 	} else if (strncmp(comp, "APP:", 4) == 0) {
+		route->appch.type = CPDLC_PROC_APPROACH;
 		cpdlc_strlcpy(route->appch.name, &comp[4],
 		    sizeof (route->appch.name));
 	} else if (strncmp(comp, "APPTR:", 6) == 0) {
+		route->appch.type = CPDLC_PROC_APPROACH;
 		cpdlc_strlcpy(route->appch.trans, &comp[6],
 		    sizeof (route->appch.trans));
 	} else if (strncmp(comp, "FIX:", 4) == 0) {
