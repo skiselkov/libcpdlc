@@ -2115,7 +2115,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.is_dl = true,
 	.msg_type = CPDLC_DM23_REQ_proc,
 	.text = "REQUEST [procedure name]",
-	.num_args = 3,
+	.num_args = 1,
 	.args = { CPDLC_ARG_PROCEDURE },
 	ASN_DOWNLINK_INFO_01(23Procedurename),
 	.resp = CPDLC_RESP_Y,

@@ -415,7 +415,7 @@ fans_print_off(const fms_off_t *off, char *buf, size_t cap)
 {
 	CPDLC_ASSERT(off != NULL);
 	if (off->nm != 0) {
-		return (snprintf(buf, cap, "%c%.1f",
+		return (snprintf(buf, cap, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm));
 	}
 	cpdlc_strlcpy(buf, "", cap);

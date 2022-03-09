@@ -542,7 +542,7 @@ fans_put_temp(fans_t *box, int row, int col, bool align_right,
 	DATA_PICK(const fms_temp_t *, temp, usertemp->set, usertemp, autotemp);
 	if (temp != NULL && temp->set) {
 		fans_put_str(box, row, col, align_right, color,
-		    font, "%+d", temp->temp);
+		    font, temp->temp != 0 ? "%+d" : "%d", temp->temp);
 	} else {
 		fans_put_str(box, row, col, align_right, FMS_COLOR_WHITE,
 		    FMS_FONT_LARGE, req ? "___" : "---");
@@ -586,7 +586,7 @@ fans_put_off(fans_t *box, int row, int col, bool align_right,
 	if (off != NULL && off->nm != 0) {
 		CPDLC_ASSERT(off->dir == CPDLC_DIR_LEFT ||
 		    off->dir == CPDLC_DIR_RIGHT);
-		fans_put_str(box, row, col, align_right, color, font, "%c%.1f",
+		fans_put_str(box, row, col, align_right, color, font, "%c%.0f",
 		    off->dir == CPDLC_DIR_LEFT ? 'L' : 'R', off->nm);
 	} else {
 		fans_put_str(box, row, col, align_right,

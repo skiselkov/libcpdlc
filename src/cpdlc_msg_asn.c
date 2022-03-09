@@ -42,6 +42,7 @@
 
 #define	MET2FEET(x)	((x) * 3.2808398950131)	/* meters to feet */
 #define	FEET2MET(x)	((x) / 3.2808398950131)	/* meters to feet */
+#define	FAH2C(f)	(((f) - 32) * 0.555555)
 
 #define	SEQ_ADD(seq_name, elem) \
 	do { \
@@ -65,7 +66,6 @@ static void
 ia5strlcpy_out(IA5String_t *out, const char *in)
 {
 	CPDLC_ASSERT(out != NULL);
-	CPDLC_ASSERT(out->buf != NULL);
 	CPDLC_ASSERT(in != NULL);
 	out->size = strlen(in);
 	out->buf = safe_malloc(out->size);
@@ -151,7 +151,8 @@ get_asn_arg_ptr_wr(const cpdlc_msg_info_t *info, unsigned nr, void *elem)
 	if (info->asn_arg_info[nr].is_seq) {
 		A_SEQUENCE_OF(void) *seq =
 		    elem + info->asn_arg_info[nr].offset;
-		void *data = seq->array[info->asn_arg_info[nr].seq_idx];
+		void *data = (seq->array != NULL ?
+		    seq->array[info->asn_arg_info[nr].seq_idx] : NULL);
 		if (data == NULL) {
 			data = safe_calloc(1, arg_type2asn_sz(info->args[nr]));
 			ASN_SEQUENCE_ADD(seq, data);
@@ -189,7 +190,7 @@ latlon_cpdlc2asn(const cpdlc_lat_lon_t *ll_in, LatitudeLongitude_t *ll_out)
 
 	ll_out->latitude.latitudedirection = (ll_in->lat >= 0 ?
 	    Latitudedirection_north : Latitudedirection_south);
-	ll_out->latitude.latitudedegrees = trunc(ll_in->lat);
+	ll_out->latitude.latitudedegrees = floor(fabs(ll_in->lat));
 	CPDLC_ASSERT(ll_out->latitude.minuteslatlon == NULL);
 	ll_out->latitude.minuteslatlon = safe_calloc(1,
 	    sizeof (*ll_out->latitude.minuteslatlon));
@@ -198,7 +199,7 @@ latlon_cpdlc2asn(const cpdlc_lat_lon_t *ll_in, LatitudeLongitude_t *ll_out)
 
 	ll_out->longitude.longitudedirection = (ll_in->lon >= 0 ?
 	    Longitudedirection_east : Longitudedirection_west);
-	ll_out->longitude.longitudedegrees = trunc(ll_in->lon);
+	ll_out->longitude.longitudedegrees = floor(fabs(ll_in->lon));
 	CPDLC_ASSERT(ll_out->longitude.minuteslatlon == NULL);
 	ll_out->longitude.minuteslatlon = safe_calloc(1,
 	    sizeof (*ll_out->longitude.minuteslatlon));
@@ -338,24 +339,30 @@ encode_pos_asn(const cpdlc_pos_t *pos_in, Position_t *pos_out)
 	}
 	switch (pos_in->type) {
 	case CPDLC_POS_FIXNAME:
+		pos_out->present = Position_PR_fixname;
 		ia5strlcpy_out(&pos_out->choice.fixname, pos_in->fixname);
 		break;
 	case CPDLC_POS_NAVAID:
+		pos_out->present = Position_PR_navaid;
 		ia5strlcpy_out(&pos_out->choice.navaid, pos_in->navaid);
 		break;
 	case CPDLC_POS_AIRPORT:
+		pos_out->present = Position_PR_airport;
 		ia5strlcpy_out(&pos_out->choice.airport, pos_in->navaid);
 		break;
 	case CPDLC_POS_LAT_LON:
+		pos_out->present = Position_PR_latitudeLongitude;
 		latlon_cpdlc2asn(&pos_in->lat_lon,
 		    &pos_out->choice.latitudeLongitude);
 		break;
 	case CPDLC_POS_PBD:
+		pos_out->present = Position_PR_placebearingdistance;
 		encode_pbd_asn(&pos_in->pbd,
 		    &pos_out->choice.placebearingdistance);
 		break;
 	case CPDLC_POS_UNKNOWN:
-		pos_out->present = Position_PR_NOTHING;
+		pos_out->present = Position_PR_fixname;
+		ia5strlcpy_out(&pos_out->choice.fixname, pos_in->str);
 		break;
 	}
 }
@@ -485,7 +492,7 @@ encode_freq_asn(double freq, Frequency_t *freq_out)
 {
 	CPDLC_ASSERT(freq_out != NULL);
 
-	if (freq <= 21) {
+	if (freq <= 28) {
 		freq_out->present = Frequency_PR_frequencyhf;
 		freq_out->choice.frequencyhf = round(freq * 1000);
 	} else if (freq <= 155) {
@@ -710,6 +717,150 @@ encode_route_asn(const cpdlc_route_t *route_in, Routeclearance_t *route_out)
 }
 
 static void
+encode_temp_asn(int temp_in, Temperature_t *temp_out)
+{
+	CPDLC_ASSERT(temp_out != NULL);
+	temp_out->present = Temperature_PR_temperaturec;
+	temp_out->choice.temperaturec = temp_in;
+}
+
+static void
+encode_winds_asn(const cpdlc_wind_t *wind_in, Winds_t *wind_out)
+{
+	CPDLC_ASSERT(wind_in != NULL);
+	CPDLC_ASSERT(wind_out != NULL);
+	wind_out->winddirection = wind_in->dir;
+	wind_out->windspeed.present = Windspeed_PR_windspeedenglish;
+	wind_out->windspeed.choice.windspeedenglish = wind_in->spd;
+}
+
+static void
+encode_posreport_asn(const cpdlc_pos_rep_t *pos_rep_in,
+    Positionreport_t *pos_rep_out)
+{
+	CPDLC_ASSERT(pos_rep_in != NULL);
+	CPDLC_ASSERT(pos_rep_out != NULL);
+
+	encode_pos_asn(&pos_rep_in->cur_pos, &pos_rep_out->positioncurrent);
+	encode_time_asn(&pos_rep_in->time_cur_pos,
+	    &pos_rep_out->timeatpositioncurrent);
+	encode_alt_asn(&pos_rep_in->cur_alt, &pos_rep_out->altitude);
+	if (!CPDLC_IS_NULL_POS(pos_rep_in->fix_next)) {
+		pos_rep_out->fixnext =
+		    safe_calloc(1, sizeof (*pos_rep_out->fixnext));
+		encode_pos_asn(&pos_rep_in->fix_next, pos_rep_out->fixnext);
+	}
+	if (!CPDLC_IS_NULL_TIME(pos_rep_in->time_fix_next)) {
+		pos_rep_out->timeetaatfixnext =
+		    safe_calloc(1, sizeof (*pos_rep_out->timeetaatfixnext));
+		encode_time_asn(&pos_rep_in->time_fix_next,
+		    pos_rep_out->timeetaatfixnext);
+	}
+	if (!CPDLC_IS_NULL_POS(pos_rep_in->fix_next_p1)) {
+		pos_rep_out->fixnextplusone =
+		    safe_calloc(1, sizeof (*pos_rep_out->fixnextplusone));
+		encode_pos_asn(&pos_rep_in->fix_next_p1,
+		    pos_rep_out->fixnextplusone);
+	}
+	if (!CPDLC_IS_NULL_TIME(pos_rep_in->time_dest)) {
+		pos_rep_out->timeetadestination =
+		    safe_calloc(1, sizeof (*pos_rep_out->timeetadestination));
+		encode_time_asn(&pos_rep_in->time_dest,
+		    pos_rep_out->timeetadestination);
+	}
+	if (!CPDLC_IS_NULL_TIME(pos_rep_in->rmng_fuel)) {
+		pos_rep_out->remainingfuel =
+		    safe_calloc(1, sizeof (*pos_rep_out->remainingfuel));
+		pos_rep_out->remainingfuel->timehours =
+		    pos_rep_in->rmng_fuel.hrs;
+		pos_rep_out->remainingfuel->timeminutes =
+		    pos_rep_in->rmng_fuel.mins;
+	}
+	if (!CPDLC_IS_NULL_TEMP(pos_rep_in->temp)) {
+		pos_rep_out->temperature =
+		    safe_calloc(1, sizeof (*pos_rep_out->temperature));
+		encode_temp_asn(pos_rep_in->temp, pos_rep_out->temperature);
+	}
+	if (!CPDLC_IS_NULL_WIND(pos_rep_in->wind)) {
+		pos_rep_out->winds =
+		    safe_calloc(1, sizeof (*pos_rep_out->winds));
+		encode_winds_asn(&pos_rep_in->wind, pos_rep_out->winds);
+	}
+	if (pos_rep_in->turb != CPDLC_TURB_NONE) {
+		pos_rep_out->turbulence =
+		    safe_calloc(1, sizeof (*pos_rep_out->turbulence));
+		*pos_rep_out->turbulence = pos_rep_in->turb - 1;
+	}
+	if (pos_rep_in->icing != CPDLC_ICING_NONE) {
+		pos_rep_out->icing =
+		    safe_calloc(1, sizeof (*pos_rep_out->icing));
+		*pos_rep_out->icing = pos_rep_in->icing - 1;
+	}
+	if (!CPDLC_IS_NULL_SPD(pos_rep_in->spd)) {
+		pos_rep_out->speed =
+		    safe_calloc(1, sizeof (*pos_rep_out->speed));
+		encode_spd_asn(&pos_rep_in->spd, pos_rep_out->speed);
+	}
+	if (!CPDLC_IS_NULL_SPD(pos_rep_in->spd_gnd) &&
+	    pos_rep_in->spd_gnd.gnd) {
+		pos_rep_out->speedground =
+		    safe_calloc(1, sizeof (*pos_rep_out->speedground));
+		*pos_rep_out->speedground =
+		    round(pos_rep_in->spd_gnd.spd / 10.0);
+	}
+	if (pos_rep_in->vvi_set) {
+		pos_rep_out->verticalchange =
+		    safe_calloc(1, sizeof (*pos_rep_out->verticalchange));
+		pos_rep_out->verticalchange->verticaldirection =
+		    (pos_rep_in->vvi >= 0 ? Verticaldirection_up :
+		    Verticaldirection_down);
+		encode_vvi_asn(pos_rep_in->vvi,
+		    &pos_rep_out->verticalchange->verticalrate);
+	}
+	if (pos_rep_in->trk != 0) {
+		pos_rep_out->trackangle =
+		    safe_calloc(1, sizeof (*pos_rep_out->trackangle));
+		encode_degrees_asn(pos_rep_in->trk, false,
+		    pos_rep_out->trackangle);
+	}
+	if (pos_rep_in->hdg_true != 0) {
+		pos_rep_out->trueheading =
+		    safe_calloc(1, sizeof (*pos_rep_out->trueheading));
+		encode_degrees_asn(pos_rep_in->hdg_true, true,
+		    pos_rep_out->trueheading);
+	}
+	if (pos_rep_in->dist_set) {
+		pos_rep_out->distance =
+		    safe_calloc(1, sizeof (*pos_rep_out->distance));
+		encode_dist_asn(pos_rep_in->dist_nm, pos_rep_out->distance);
+	}
+	if (pos_rep_in->remarks[0] != '\0') {
+		pos_rep_out->supplementaryinformation = safe_calloc(1,
+		    sizeof (*pos_rep_out->supplementaryinformation));
+		ia5strlcpy_out(pos_rep_out->supplementaryinformation,
+		    pos_rep_in->remarks);
+	}
+	if (!CPDLC_IS_NULL_POS(pos_rep_in->rpt_wpt_pos)) {
+		pos_rep_out->reportedwaypointposition = safe_calloc(1,
+		    sizeof (*pos_rep_out->reportedwaypointposition));
+		encode_pos_asn(&pos_rep_in->rpt_wpt_pos,
+		    pos_rep_out->reportedwaypointposition);
+	}
+	if (!CPDLC_IS_NULL_TIME(pos_rep_in->rpt_wpt_time)) {
+		pos_rep_out->reportedwaypointtime =
+		    safe_calloc(1, sizeof (*pos_rep_out->reportedwaypointtime));
+		encode_time_asn(&pos_rep_in->rpt_wpt_time,
+		    pos_rep_out->reportedwaypointtime);
+	}
+	if (!CPDLC_IS_NULL_ALT(pos_rep_in->rpt_wpt_alt)) {
+		pos_rep_out->reportedwaypointaltitude = safe_calloc(1,
+		    sizeof (*pos_rep_out->reportedwaypointaltitude));
+		encode_alt_asn(&pos_rep_in->rpt_wpt_alt,
+		    pos_rep_out->reportedwaypointaltitude);
+	}
+}
+
+static void
 msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 {
 	CPDLC_ASSERT(seg != NULL);
@@ -799,6 +950,8 @@ msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		case CPDLC_ARG_POSREPORT:
+			encode_posreport_asn(&seg->args[i].pos_rep,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		case CPDLC_ARG_PDC:
 			break;
@@ -997,6 +1150,78 @@ decode_time_asn(const Time_t *time_in)
 	}
 }
 
+static cpdlc_time_t
+decode_rmng_fuel_asn(const Remainingfuel_t *fuel_in)
+{
+	if (fuel_in != NULL) {
+		return ((cpdlc_time_t){ fuel_in->timehours,
+		    fuel_in->timeminutes });
+	} else {
+		return (CPDLC_NULL_TIME);
+	}
+}
+
+static int
+decode_temp_asn(const Temperature_t *temp_in)
+{
+	if (temp_in != NULL) {
+		switch (temp_in->present) {
+		default:
+			return (CPDLC_NULL_TEMP);
+		case Temperature_PR_temperaturec:
+			return (temp_in->choice.temperaturec);
+		case Temperature_PR_temperaturef:
+			return (FAH2C(temp_in->choice.temperaturef));
+		}
+	} else {
+		return (CPDLC_NULL_TEMP);
+	}
+}
+
+static cpdlc_wind_t
+decode_winds_asn(const Winds_t *wind_in)
+{
+	if (wind_in == NULL)
+		return (CPDLC_NULL_WIND);
+	switch (wind_in->windspeed.present) {
+	default:
+		return (CPDLC_NULL_WIND);
+	case Windspeed_PR_windspeedenglish:
+		return ((cpdlc_wind_t){ wind_in->winddirection,
+		    wind_in->windspeed.choice.windspeedenglish });
+	case Windspeed_PR_windspeedmetric:
+		return ((cpdlc_wind_t){ wind_in->winddirection,
+		    round(wind_in->windspeed.choice.windspeedmetric * 1.852) });
+	}
+}
+
+static double
+decode_vvi_asn(const Verticalrate_t *vvi)
+{
+	CPDLC_ASSERT(vvi != NULL);
+	switch (vvi->present) {
+	default:
+		return (0);
+	case Verticalrate_PR_verticalrateenglish:
+		return (vvi->choice.verticalrateenglish * 100);
+	case Verticalrate_PR_verticalratemetric:
+		return (MET2FEET(vvi->choice.verticalratemetric * 10));
+	}
+}
+
+static int
+decode_vvi_chg_asn(const Verticalchange_t *chg, bool *vvi_set)
+{
+	CPDLC_ASSERT(vvi_set != NULL);
+	if (chg == NULL) {
+		*vvi_set = false;
+		return (0);
+	}
+	*vvi_set = true;
+	return ((chg->verticaldirection == Verticaldirection_up ? 1 : -1) *
+	    decode_vvi_asn(&chg->verticalrate));
+}
+
 static cpdlc_lat_lon_t
 latlon_asn2cpdlc(const LatitudeLongitude_t *latlon)
 {
@@ -1042,15 +1267,25 @@ decode_deg_asn(const Degrees_t *deg, bool *tru)
 }
 
 static double
-decode_dist_asn(const Distance_t *dist)
+decode_dist_asn(const Distance_t *dist, bool *set)
 {
-	CPDLC_ASSERT(dist != NULL);
+	if (dist == NULL) {
+		if (set != NULL)
+			*set = false;
+		return (0);
+	}
 	switch (dist->present) {
 	default:
+		if (set != NULL)
+			*set = false;
 		return (0);
 	case Distance_PR_distancenm:
+		if (set != NULL)
+			*set = true;
 		return (dist->choice.distancenm / 10.0);
 	case Distance_PR_distancekm:
+		if (set != NULL)
+			*set = true;
 		return (dist->choice.distancekm / 1.852);
 	}
 }
@@ -1063,7 +1298,7 @@ decode_dist_off_asn(const Distanceoffset_t *dist_off)
 	default:
 		return (0);
 	case Distanceoffset_PR_distanceoffsetnm:
-		return (dist_off->choice.distanceoffsetnm / 10.0);
+		return (dist_off->choice.distanceoffsetnm);
 	case Distanceoffset_PR_distanceoffsetkm:
 		return (dist_off->choice.distanceoffsetkm / 1.852);
 	}
@@ -1114,7 +1349,7 @@ decode_pos_asn(const Position_t *pos_in)
 		pos_out.pbd.degrees = decode_deg_asn(
 		    &pos_in->choice.placebearingdistance.degrees, NULL);
 		pos_out.pbd.dist_nm = decode_dist_asn(
-		    &pos_in->choice.placebearingdistance.distance);
+		    &pos_in->choice.placebearingdistance.distance, NULL);
 		break;
 	}
 	return (pos_out);
@@ -1165,20 +1400,6 @@ decode_freq_asn(const Frequency_t *freq)
 		return (freq->choice.frequencyvhf / 1000.0);
 	case Frequency_PR_frequencyuhf:
 		return (freq->choice.frequencyuhf / 1000.0);
-	}
-}
-
-static double
-decode_vvi_asn(const Verticalrate_t *vvi)
-{
-	CPDLC_ASSERT(vvi != NULL);
-	switch (vvi->present) {
-	default:
-		return (0);
-	case Verticalrate_PR_verticalrateenglish:
-		return (vvi->choice.verticalrateenglish * 100);
-	case Verticalrate_PR_verticalratemetric:
-		return (MET2FEET(vvi->choice.verticalratemetric * 10));
 	}
 }
 
@@ -1291,7 +1512,7 @@ decode_pbd_asn(const Placebearingdistance_t *pbd_in, cpdlc_pbd_t *pbd_out)
 	ia5strlcpy_in(pbd_out->fixname, &pbd_in->fixname,
 	    sizeof (pbd_out->fixname));
 	pbd_out->degrees = decode_deg_asn(&pbd_in->degrees, NULL);
-	pbd_out->dist_nm = decode_dist_asn(&pbd_in->distance);
+	pbd_out->dist_nm = decode_dist_asn(&pbd_in->distance, NULL);
 	pbd_out->lat_lon = latlon_asn2cpdlc(pbd_in->latitudelongitude);
 }
 
@@ -1767,6 +1988,65 @@ decode_icao_name(const ICAOunitname_t *icaoname_in,
 	icaoname_out->func = icaoname_in->iCAOfacilityfunction;
 }
 
+static void
+decode_pos_rep_asn(const Positionreport_t *pos_rep_in,
+    cpdlc_pos_rep_t *pos_rep_out)
+{
+	CPDLC_ASSERT(pos_rep_in != NULL);
+	CPDLC_ASSERT(pos_rep_out != NULL);
+
+	pos_rep_out->cur_pos = decode_pos_asn(&pos_rep_in->positioncurrent);
+	pos_rep_out->time_cur_pos =
+	    decode_time_asn(&pos_rep_in->timeatpositioncurrent);
+	pos_rep_out->cur_alt = decode_alt_asn(&pos_rep_in->altitude);
+	pos_rep_out->fix_next = decode_pos_asn(pos_rep_in->fixnext);
+	pos_rep_out->time_fix_next =
+	    decode_time_asn(pos_rep_in->timeetaatfixnext);
+	pos_rep_out->fix_next_p1 = decode_pos_asn(pos_rep_in->fixnextplusone);
+	pos_rep_out->time_dest =
+	    decode_time_asn(pos_rep_in->timeetadestination);
+	pos_rep_out->rmng_fuel =
+	    decode_rmng_fuel_asn(pos_rep_in->remainingfuel);
+	pos_rep_out->temp = decode_temp_asn(pos_rep_in->temperature);
+	pos_rep_out->wind = decode_winds_asn(pos_rep_in->winds);
+	if (pos_rep_in->turbulence != NULL)
+		pos_rep_out->turb = (*pos_rep_in->turbulence) + 1;
+	else
+		pos_rep_out->turb = CPDLC_TURB_NONE;
+	if (pos_rep_in->icing != NULL)
+		pos_rep_out->icing = (*pos_rep_in->icing) + 1;
+	else
+		pos_rep_out->icing = CPDLC_ICING_NONE;
+	pos_rep_out->spd = decode_spd_asn(pos_rep_in->speed);
+	if (pos_rep_in->speedground != NULL) {
+		pos_rep_out->spd_gnd = ((cpdlc_spd_t){
+		    .gnd = true,
+		    .spd = *pos_rep_in->speedground
+		});
+	} else {
+		pos_rep_out->spd_gnd = CPDLC_NULL_SPD;
+	}
+	pos_rep_out->vvi = decode_vvi_chg_asn(pos_rep_in->verticalchange,
+	    &pos_rep_out->vvi_set);
+	pos_rep_out->trk = decode_deg_asn(pos_rep_in->trackangle, NULL);
+	pos_rep_out->hdg_true = decode_deg_asn(pos_rep_in->trueheading, NULL);
+	pos_rep_out->dist_nm = decode_dist_asn(pos_rep_in->distance,
+	    &pos_rep_out->dist_set);
+	if (pos_rep_in->supplementaryinformation != NULL) {
+		ia5strlcpy_in(pos_rep_out->remarks,
+		    pos_rep_in->supplementaryinformation,
+		    sizeof (pos_rep_out->remarks));
+	} else {
+		pos_rep_out->remarks[0] = '\0';
+	}
+	pos_rep_out->rpt_wpt_pos =
+	    decode_pos_asn(pos_rep_in->reportedwaypointposition);
+	pos_rep_out->rpt_wpt_time =
+	    decode_time_asn(pos_rep_in->reportedwaypointtime);
+	pos_rep_out->rpt_wpt_alt =
+	    decode_alt_asn(pos_rep_in->reportedwaypointaltitude);
+}
+
 static bool
 decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
     const void *elem)
@@ -1785,11 +2065,10 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    get_asn_arg_ptr(info, i, elem));
 			break;
 		case CPDLC_ARG_TIME:
+		case CPDLC_ARG_TIME_DUR:
 			seg->args[i].time = decode_time_asn(
 			    get_asn_arg_ptr(info, i, elem));
 			break;
-		case CPDLC_ARG_TIME_DUR:
-			return (false);
 		case CPDLC_ARG_POSITION:
 			seg->args[i].pos = decode_pos_asn(
 			    get_asn_arg_ptr(info, i, elem));
@@ -1799,8 +2078,8 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    decode_dir_asn(get_asn_arg_ptr(info, i, elem));
 			break;
 		case CPDLC_ARG_DISTANCE:
-			seg->args[i].dist =
-			    decode_dist_asn(get_asn_arg_ptr(info, i, elem));
+			seg->args[i].dist = decode_dist_asn(
+			    get_asn_arg_ptr(info, i, elem), NULL);
 			break;
 		case CPDLC_ARG_DISTANCE_OFFSET:
 			seg->args[i].dist =
@@ -1862,6 +2141,9 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    get_asn_arg_ptr(info, i, elem));
 			break;
 		case CPDLC_ARG_POSREPORT:
+			decode_pos_rep_asn(get_asn_arg_ptr(info, i, elem),
+			    &seg->args[i].pos_rep);
+			break;
 		case CPDLC_ARG_PDC:
 			// TODO
 			return (false);
@@ -1955,7 +2237,7 @@ cpdlc_msg_decode_asn_impl(cpdlc_msg_t *msg, const void *struct_ptr, bool is_dl)
 		    &dl->aTCdownlinkmsgelementid)) {
 			return (false);
 		}
-		for (int i = 1;
+		for (int i = 0;
 		    dl->aTCdownlinkmsgelementid_seqOf != NULL &&
 		    i < dl->aTCdownlinkmsgelementid_seqOf->list.count; i++) {
 			if (dl->aTCdownlinkmsgelementid_seqOf->list.array[i] !=
@@ -1973,7 +2255,7 @@ cpdlc_msg_decode_asn_impl(cpdlc_msg_t *msg, const void *struct_ptr, bool is_dl)
 		    &ul->aTCuplinkmsgelementid)) {
 			return (false);
 		}
-		for (int i = 1;
+		for (int i = 0;
 		    ul->aTCuplinkmsgelementid_seqOf != NULL &&
 		    i < ul->aTCuplinkmsgelementid_seqOf->list.count; i++) {
 			if (ul->aTCuplinkmsgelementid_seqOf->list.array[i] !=

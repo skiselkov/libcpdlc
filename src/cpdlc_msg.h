@@ -460,7 +460,7 @@ typedef enum {
 } cpdlc_pos_type_t;
 
 #define	CPDLC_NULL_POS		((cpdlc_pos_t){false})
-#define	CPDLC_IS_NULL_POS(pos)	(!(pos)->set)
+#define	CPDLC_IS_NULL_POS(pos)	(!(pos).set)
 
 typedef struct {
 	bool			set;

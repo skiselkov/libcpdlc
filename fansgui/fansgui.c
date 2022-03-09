@@ -468,6 +468,7 @@ char2fontcell(char c, int *font_x, int *font_y)
 			FONT_MAP('#', 30, 2);
 			FONT_MAP('&', 31, 2);
 			FONT_MAP('`', 32, 2);
+			FONT_MAP('\370', 32, 2);
 			FONT_MAP('^', 33, 2);	/* special for fans_t */
 			FONT_MAP('v', 34, 2);
 			FONT_MAP('_', 35, 2);	/* special for fans_t */

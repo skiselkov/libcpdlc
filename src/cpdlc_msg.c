@@ -653,8 +653,10 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 		APPEND_SNPRINTF(n, buf, cap, "FUEL %02dH%02dM ",
 		    rep->rmng_fuel.hrs, rep->rmng_fuel.mins);
 	}
-	if (!CPDLC_IS_NULL_TEMP(rep->temp))
-		APPEND_SNPRINTF(n, buf, cap, "OAT %+dC ", rep->temp);
+	if (!CPDLC_IS_NULL_TEMP(rep->temp)) {
+		APPEND_SNPRINTF(n, buf, cap, "OAT %+d" CPDLC_DEG_SYMBOL "C ",
+		    rep->temp);
+	}
 	if (!CPDLC_IS_NULL_WIND(rep->wind)) {
 		APPEND_SNPRINTF(n, buf, cap, "WIND %03d/%d ",
 		    rep->wind.dir, rep->wind.spd);
@@ -817,7 +819,7 @@ encode_freq(double freq, bool readable, unsigned *n_bytes_p, char **buf_p,
 	CPDLC_ASSERT(cap_p != NULL);
 
 	if (readable) {
-		if (freq <= 21) {
+		if (freq <= 28) {
 			/* HF */
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 			    "%.04f MHZ", freq);
@@ -827,7 +829,7 @@ encode_freq(double freq, bool readable, unsigned *n_bytes_p, char **buf_p,
 			    "%.03f MHZ", freq);
 		}
 	} else {
-		if (freq <= 21) {
+		if (freq <= 28) {
 			/* HF */
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 			    " %.04f", freq);
@@ -997,16 +999,21 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 	case CPDLC_ARG_DISTANCE:
 	case CPDLC_ARG_DISTANCE_OFFSET:
 		if (readable) {
-			if (arg->dist - (int)arg->dist == 0) {
+			if (fabs(arg->dist - trunc(arg->dist)) < 0.01) {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
 				    "%.0f NM", arg->dist);
 			} else {
 				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-				    "%.01f NM", arg->dist);
+				    "%.1f NM", arg->dist);
 			}
 		} else {
-			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    " %.01f", arg->dist);
+			if (fabs(arg->dist - trunc(arg->dist)) < 0.01) {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %.0f", arg->dist);
+			} else {
+				APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
+				    " %.1f", arg->dist);
+			}
 		}
 		break;
 	case CPDLC_ARG_VVI:
@@ -1299,6 +1306,11 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 
 	APPEND_SNPRINTF(n_bytes, buf, cap, "/TS=%02d%02d%02d",
 	    msg->ts.hrs, msg->ts.mins, msg->ts.secs);
+	if (msg->to[0] != '\0') {
+		char textbuf[32] = {};
+		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
+	}
 	APPEND_SNPRINTF(n_bytes, buf, cap, "/MIN=%d", msg->min);
 	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
@@ -1316,17 +1328,12 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 		cpdlc_escape_percent(msg->from, textbuf, sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", textbuf);
 	}
-	if (msg->to[0] != '\0') {
-		char textbuf[32] = {};
-		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
-	}
 //	if (!asn1) {
-		for (unsigned i = 0; i < msg->num_segs; i++)
-			encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
-//	} else {
 		CPDLC_UNUSED(asn1);
 		cpdlc_msg_encode_asn_impl(msg, &n_bytes, &buf, &cap);
+//	} else {
+		for (unsigned i = 0; i < msg->num_segs; i++)
+			encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
 //	}
 	APPEND_SNPRINTF(n_bytes, buf, cap, "\n");
 
@@ -2734,7 +2741,7 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 {
 	const char *start, *term;
 	cpdlc_msg_t *msg;
-	bool pkt_type_seen = false;
+	bool pkt_type_seen = false, msg_seen = false, asn1_seen = false;
 	bool skipped_cr = false;
 
 	CPDLC_ASSERT(in_buf != NULL);
@@ -2833,26 +2840,35 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 			cpdlc_unescape_percent(textbuf, msg->from,
 			    sizeof (msg->from));
 		} else if (strncmp(in_buf, "MSG=", 4) == 0) {
-			cpdlc_msg_seg_t *seg;
+			if (!asn1_seen) {
+				cpdlc_msg_seg_t *seg;
 
-			if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
-				MALFORMED_MSG("too many message segments");
-				goto errout;
+				if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
+					MALFORMED_MSG("too many message "
+					    "segments");
+					goto errout;
+				}
+				seg = &msg->segs[msg->num_segs];
+				if (!msg_decode_seg(seg, &in_buf[4], sep,
+				    reason, reason_cap)) {
+					goto errout;
+				}
+				if (msg->num_segs > 0 &&
+				    seg->info->is_dl != is_dl) {
+					MALFORMED_MSG("can't mix DM and UM "
+					    "message segments");
+					goto errout;
+				}
+				msg->num_segs++;
+				msg_seen = true;
 			}
-			seg = &msg->segs[msg->num_segs];
-			if (!msg_decode_seg(seg, &in_buf[4], sep, reason,
-			    reason_cap))
-				goto errout;
-			if (msg->num_segs > 0 && seg->info->is_dl != is_dl) {
-				MALFORMED_MSG("can't mix DM and UM message "
-				    "segments");
-				goto errout;
-			}
-			msg->num_segs++;
 		} else if (strncmp(in_buf, "ASN1=", 5) == 0) {
-			if (!msg_decode_asn1(is_dl, msg, &in_buf[5], sep,
-			    reason, reason_cap)) {
-				goto errout;
+			if (!msg_seen) {
+				if (!msg_decode_asn1(is_dl, msg, &in_buf[5],
+				    sep, reason, reason_cap)) {
+					goto errout;
+				}
+				asn1_seen =true;
 			}
 		} else {
 			MALFORMED_MSG("unknown message header");

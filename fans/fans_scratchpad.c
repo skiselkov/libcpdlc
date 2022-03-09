@@ -472,12 +472,12 @@ fans_scratchpad_xfer_offset(fans_t *box, fms_off_t *useroff,
 	}
 	if (error == FANS_ERR_NONE) {
 		if (strlen(userbuf) != 0) {
-			float nm = 0;
+			int nm = 0;
 			cpdlc_dir_t dir;
 
 			if (strlen(userbuf) == 0 ||
 			    !parse_dir(userbuf, useroff, &dir) ||
-			    (sscanf(userbuf, "%f", &nm) != 1 &&
+			    (sscanf(userbuf, "%d", &nm) != 1 &&
 			    useroff->nm == 0) ||
 			    (nm <= 0 && useroff->nm == 0) || nm > 999) {
 				error = FANS_ERR_INVALID_ENTRY;
