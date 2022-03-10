@@ -2775,6 +2775,7 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 	msg = safe_calloc(1, sizeof (*msg));
 	msg->min = CPDLC_INVALID_MSG_SEQ_NR;
 	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
+	msg->ts = make_timestamp();
 
 	start = in_buf;
 	while (in_buf < term) {
@@ -2886,10 +2887,6 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 
 	if (!pkt_type_seen) {
 		MALFORMED_MSG("missing PKT header");
-		goto errout;
-	}
-	if (!msg->ts.set) {
-		MALFORMED_MSG("missing TS header");
 		goto errout;
 	}
 	if (!validate_message(msg, reason, reason_cap))
