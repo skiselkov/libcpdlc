@@ -861,6 +861,56 @@ encode_posreport_asn(const cpdlc_pos_rep_t *pos_rep_in,
 }
 
 static void
+encode_acf_eqpt_code(const cpdlc_acf_eqpt_code_t *eqpt_in,
+    Aircraftequipmentcode_t *eqpt_out)
+{
+	CPDLC_ASSERT(eqpt_in != NULL);
+	CPDLC_ASSERT(eqpt_out != NULL);
+
+	eqpt_out->cOMNAVapproachequipmentavailable =
+	    eqpt_in->com_nav_app_eqpt_avail;
+	for (unsigned i = 0; i < eqpt_in->num_com_nav_eqpt_st; i++) {
+		COMNAVequipmentstatus_t *st_p = safe_calloc(1, sizeof (*st_p));
+		*st_p = eqpt_in->com_nav_eqpt_st[i];
+		SEQ_ADD(eqpt_out->cOMNAVequipmentstatus_seqOf, st_p);
+	}
+	eqpt_out->sSRequipmentavailable = eqpt_in->ssr_eqpt;
+}
+
+static void
+encode_pdc_asn(const cpdlc_pdc_t *pdc_in, Predepartureclearance_t *pdc_out)
+{
+	CPDLC_ASSERT(pdc_in != NULL);
+	CPDLC_ASSERT(pdc_out != NULL);
+
+	ia5strlcpy_out(&pdc_out->aircraftflightidentification, pdc_in->acf_id);
+	if (pdc_in->acf_type[0] != '\0') {
+		pdc_out->aircrafttype =
+		    safe_calloc(1, sizeof (*pdc_out->aircrafttype));
+		ia5strlcpy_out(pdc_out->aircrafttype, pdc_in->acf_type);
+	}
+	if (pdc_in->acf_eqpt_code.com_nav_app_eqpt_avail ||
+	    pdc_in->acf_eqpt_code.num_com_nav_eqpt_st != 0 ||
+	    pdc_in->acf_eqpt_code.ssr_eqpt != CPDLC_SSR_EQPT_NIL) {
+		pdc_out->aircraftequipmentcode =
+		    safe_calloc(1, sizeof (*pdc_out->aircraftequipmentcode));
+		encode_acf_eqpt_code(&pdc_in->acf_eqpt_code,
+		    pdc_out->aircraftequipmentcode);
+	}
+	encode_time_asn(&pdc_in->time_dep, &pdc_out->timedepartureedct);
+	encode_route_asn(&pdc_in->route, &pdc_out->routeclearance);
+	if (!CPDLC_IS_NULL_ALT(pdc_in->alt_restr)) {
+		pdc_out->altituderestriction =
+		    safe_calloc(1, sizeof (*pdc_out->altituderestriction));
+		encode_alt_asn(&pdc_in->alt_restr,
+		    pdc_out->altituderestriction);
+	}
+	pdc_out->frequencydeparture = round(pdc_in->freq * 1000);
+	encode_squawk_asn(pdc_in->squawk, &pdc_out->beaconcode);
+	pdc_out->pDCrevision = pdc_in->revision;
+}
+
+static void
 msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 {
 	CPDLC_ASSERT(seg != NULL);
@@ -954,6 +1004,9 @@ msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		case CPDLC_ARG_PDC:
+			CPDLC_ASSERT(seg->args[i].pdc != NULL);
+			encode_pdc_asn(seg->args[i].pdc,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		case CPDLC_ARG_TP4TABLE:
 			encode_tp4table_asn(seg->args[i].tp4,
@@ -1900,12 +1953,11 @@ decode_route_add_info(const Routeinformationadditional_t *add_info_in,
 	return (true);
 }
 
-static cpdlc_route_t *
-decode_route_asn(const Routeclearance_t *rc)
+static bool
+decode_route_asn(const Routeclearance_t *rc, cpdlc_route_t *route)
 {
-	cpdlc_route_t *route = safe_calloc(1, sizeof (*route));
-
 	CPDLC_ASSERT(rc != NULL);
+	CPDLC_ASSERT(route != NULL);
 
 	if (rc->airportdeparture != NULL) {
 		ia5strlcpy_in(route->orig_icao, rc->airportdeparture,
@@ -1948,19 +2000,16 @@ decode_route_asn(const Routeclearance_t *rc)
 	}
 	if (rc->routeinformation_seqOf != NULL) {
 		if (!decode_route_info(rc->routeinformation_seqOf, route))
-			goto errout;
+			return (false);
 	}
 	if (rc->routeinformationadditional != NULL) {
 		if (!decode_route_add_info(rc->routeinformationadditional,
 		    &route->add_info)) {
-			goto errout;
+			return (false);
 		}
 	}
 
 	return (route);
-errout:
-	free(route);
-	return (NULL);
 }
 
 static void
@@ -2047,6 +2096,56 @@ decode_pos_rep_asn(const Positionreport_t *pos_rep_in,
 	    decode_alt_asn(pos_rep_in->reportedwaypointaltitude);
 }
 
+static void
+decode_acf_eqpt_code_asn(const Aircraftequipmentcode_t *eqpt_in,
+    cpdlc_acf_eqpt_code_t *eqpt_out)
+{
+	CPDLC_ASSERT(eqpt_out != NULL);
+	if (eqpt_in == NULL) {
+		memset(eqpt_out, 0, sizeof (*eqpt_out));
+		return;
+	}
+	eqpt_out->com_nav_app_eqpt_avail =
+	    (eqpt_in->cOMNAVapproachequipmentavailable != 0);
+	if (eqpt_in->cOMNAVequipmentstatus_seqOf != NULL) {
+		for (int i = 0; eqpt_out->num_com_nav_eqpt_st < 16 &&
+		    i < eqpt_in->cOMNAVequipmentstatus_seqOf->list.count; i++) {
+			const COMNAVequipmentstatus_t *st_p =
+			    eqpt_in->cOMNAVequipmentstatus_seqOf->list.array[i];
+			if (st_p != NULL) {
+				eqpt_out->com_nav_eqpt_st[
+				    eqpt_out->num_com_nav_eqpt_st] = *st_p;
+			}
+		}
+	}
+	eqpt_out->ssr_eqpt = eqpt_in->sSRequipmentavailable;
+}
+
+static bool
+decode_pdc_asn(const Predepartureclearance_t *pdc_in, cpdlc_pdc_t *pdc_out)
+{
+	CPDLC_ASSERT(pdc_in != NULL);
+	CPDLC_ASSERT(pdc_out != NULL);
+
+	ia5strlcpy_in(pdc_out->acf_id, &pdc_in->aircraftflightidentification,
+	    sizeof (pdc_out->acf_id));
+	if (pdc_in->aircrafttype != NULL) {
+		ia5strlcpy_in(pdc_out->acf_type, pdc_in->aircrafttype,
+		    sizeof (pdc_out->acf_type));
+	}
+	decode_acf_eqpt_code_asn(pdc_in->aircraftequipmentcode,
+	    &pdc_out->acf_eqpt_code);
+	pdc_out->time_dep = decode_time_asn(&pdc_in->timedepartureedct);
+	if (!decode_route_asn(&pdc_in->routeclearance, &pdc_out->route))
+		return (false);
+	pdc_out->alt_restr = decode_alt_asn(pdc_in->altituderestriction);
+	pdc_out->freq = pdc_in->frequencydeparture / 1000.0;
+	pdc_out->squawk = decode_squawk_asn(&pdc_in->beaconcode);
+	pdc_out->revision = pdc_in->pDCrevision;
+
+	return (true);
+}
+
 static bool
 decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
     const void *elem)
@@ -2095,9 +2194,11 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			break;
 		case CPDLC_ARG_ROUTE:
 			seg->args[i].route =
-			    decode_route_asn(get_asn_arg_ptr(info, i, elem));
-			if (seg->args[i].route == NULL)
+			    safe_calloc(1, sizeof (*seg->args[i].route));
+			if (!decode_route_asn(get_asn_arg_ptr(info, i, elem),
+			    seg->args[i].route)) {
 				return (false);
+			}
 			break;
 		case CPDLC_ARG_PROCEDURE:
 			decode_proc_asn(get_asn_arg_ptr(info, i, elem),
@@ -2145,8 +2246,14 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			    &seg->args[i].pos_rep);
 			break;
 		case CPDLC_ARG_PDC:
-			// TODO
-			return (false);
+			CPDLC_ASSERT(seg->args[i].pdc == NULL);
+			seg->args[i].pdc =
+			    safe_calloc(1, sizeof (*seg->args[i].pdc));
+			if (!decode_pdc_asn(get_asn_arg_ptr(info, i, elem),
+			    seg->args[i].pdc)) {
+				return (false);
+			}
+			break;
 		case CPDLC_ARG_TP4TABLE:
 			seg->args[i].tp4 = decode_tp4table_asn(
 			    get_asn_arg_ptr(info, i, elem));
