@@ -32,10 +32,28 @@
 extern "C" {
 #endif
 
-bool cpdlc_msg_encode_asn_impl(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
+enum {
+    CPDLC_IMI_LEN = 3,
+    CPDLC_CS_LEN = 7,
+    CPDLC_DATA_OFF = CPDLC_IMI_LEN + CPDLC_CS_LEN
+};
+
+bool cpdlc_msg_encode_arinc622(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
     char **buf_p, unsigned *cap_p);
-bool cpdlc_msg_decode_asn_impl(cpdlc_msg_t *msg, const void *struct_ptr,
+bool cpdlc_msg_decode_arinc622(cpdlc_msg_t *msg, const void *struct_ptr,
     bool is_dl);
+
+static inline void
+cpdlc_padd_callsign(const char *cs_in, char cs_out[8])
+{
+	CPDLC_ASSERT(cs_in != NULL);
+	CPDLC_ASSERT(cs_out != NULL);
+	snprintf(cs_out, 8, "%7s", cs_in);
+	for (int i = 0; i < 7; i++) {
+		if (cs_out[i] == ' ')
+			cs_out[i] = '.';
+	}
+}
 
 #ifdef	__cplusplus
 }

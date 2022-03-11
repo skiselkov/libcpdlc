@@ -367,7 +367,8 @@ typedef enum {
 	CPDLC_ARG_PERSONS,
 	CPDLC_ARG_POSREPORT,
 	CPDLC_ARG_PDC,
-	CPDLC_ARG_TP4TABLE
+	CPDLC_ARG_TP4TABLE,
+	CPDLC_ARG_ERRINFO
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -792,6 +793,20 @@ typedef struct {
 	double			val;
 } cpdlc_altimeter_t;
 
+typedef enum {
+	CPDLC_ERRINFO_APP_ERROR =		0,
+	CPDLC_ERRINFO_DUP_MIN =			1,
+	CPDLC_ERRINFO_UNRECOG_MRN =		2,
+	CPDLC_ERRINFO_END_SVC_WITH_PDG_MSGS =	3,
+	CPDLC_ERRINFO_END_SVC_WITH_NO_RESP =	4,
+	CPDLC_ERRINFO_INSUFF_MSG_STORAGE =	5,
+	CPDLC_ERRINFO_NO_AVBL_MIN =		6,
+	CPDLC_ERRINFO_COMMANDED_TERM =		7,
+	CPDLC_ERRINFO_INSUFF_DATA =		8,
+	CPDLC_ERRINFO_UNEXPCT_DATA =		9,
+	CPDLC_ERRINFO_INVAL_DATA =		10
+} cpdlc_errinfo_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
@@ -817,6 +832,7 @@ typedef union {
 	cpdlc_pos_rep_t		pos_rep;
 	cpdlc_pdc_t		*pdc;
 	cpdlc_tp4table_t	tp4;
+	cpdlc_errinfo_t		errinfo;
 } cpdlc_arg_t;
 
 enum {
@@ -824,7 +840,7 @@ enum {
     CPDLC_MAX_RESP_MSGS = 4,
     CPDLC_MAX_MSG_SEGS = 5,
     CPDLC_MAX_VERSION_NR = 1,
-    CPDLC_CALLSIGN_LEN = 16
+    CPDLC_CALLSIGN_LEN = 8
 };
 
 typedef struct {
@@ -867,6 +883,13 @@ typedef struct {
 	unsigned		secs;
 } cpdlc_timestamp_t;
 
+typedef enum {
+	CPDLC_IMI_DATA,
+	CPDLC_IMI_CONN_REQUEST,
+	CPDLC_IMI_CONN_CONFIRM,
+	CPDLC_IMI_DISC_REQUEST,
+} cpdlc_imi_t;
+
 typedef struct {
 	cpdlc_pkt_t		pkt_type;
 	unsigned		min;
@@ -879,6 +902,12 @@ typedef struct {
 	char			*logon_data;
 	unsigned		num_segs;
 	cpdlc_msg_seg_t		segs[CPDLC_MAX_MSG_SEGS];
+	bool			fmt_plain;
+	bool			fmt_arinc622;
+	struct {
+		cpdlc_imi_t	imi;
+		char		acf_id[CPDLC_CALLSIGN_LEN];
+	} arinc622;
 } cpdlc_msg_t;
 
 extern const cpdlc_msg_info_t *cpdlc_ul_infos;
@@ -889,8 +918,6 @@ CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
-    unsigned cap);
-CPDLC_API unsigned cpdlc_msg_encode_asn1(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
 CPDLC_API unsigned cpdlc_msg_readable(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);

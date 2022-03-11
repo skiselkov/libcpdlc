@@ -51,7 +51,7 @@ DAEMON_OBJS=\
 	$(SRCPREFIX)/cpdlc_hexcode.o \
 	$(SRCPREFIX)/cpdlc_infos.o \
 	$(SRCPREFIX)/cpdlc_msg.o \
-	$(SRCPREFIX)/cpdlc_msg_asn.o \
+	$(SRCPREFIX)/cpdlc_msg_arinc622.o \
 	$(SRCPREFIX)/cpdlc_string.o \
 	$(ASN_SRC_OBJS)
 

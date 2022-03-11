@@ -1553,8 +1553,8 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM159_ERROR_description,
 	.text = "ERROR [error information]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
-	// TODO
+	.args = { CPDLC_ARG_ERRINFO },
+	ASN_UPLINK_INFO_01(159Errorinformation),
 	.resp = CPDLC_RESP_NE
     },
     {
@@ -2499,10 +2499,10 @@ static const cpdlc_msg_info_t dl_infos[] = {
     {
 	.is_dl = true,
 	.msg_type = CPDLC_DM62_ERROR_errorinfo,
-	ASN_DOWNLINK_INFO_01(62Errorinformation),
 	.text = "ERROR [error information]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
+	.args = { CPDLC_ARG_ERRINFO },
+	ASN_DOWNLINK_INFO_01(62Errorinformation),
 	.resp = CPDLC_RESP_N
     },
     {

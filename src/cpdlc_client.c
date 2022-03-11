@@ -1759,16 +1759,24 @@ cpdlc_msg_token_t
 cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 {
 	cpdlc_msg_token_t tok;
+	cpdlc_msg_t *msg_copy;
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(msg != NULL);
 
 	mutex_enter(&cl->lock);
+	if (cl->logon.from == NULL) {
+		mutex_exit(&cl->lock);
+		return (CPDLC_INVALID_MSG_TOKEN);
+	}
+	msg_copy = cpdlc_msg_copy(msg);
+	cpdlc_msg_set_from(msg_copy, cl->logon.from);
 	if (cl->logon_status != CPDLC_LOGON_COMPLETE) {
 		mutex_exit(&cl->lock);
 		return (CPDLC_INVALID_MSG_TOKEN);
 	}
-	tok = send_msg_impl(cl, msg, true);
+	tok = send_msg_impl(cl, msg_copy, true);
+	cpdlc_msg_free(msg_copy);
 	mutex_exit(&cl->lock);
 
 	return (tok);

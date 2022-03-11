@@ -36,9 +36,10 @@
 
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
+#include "cpdlc_crc.h"
 #include "cpdlc_hexcode.h"
 #include "cpdlc_msg.h"
-#include "cpdlc_msg_asn.h"
+#include "cpdlc_msg_arinc622.h"
 #include "cpdlc_string.h"
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
@@ -895,6 +896,36 @@ serialize_pdc(const cpdlc_pdc_t *pdc, bool readable,
 	}
 }
 
+static const char *
+errinfo2str(cpdlc_errinfo_t errinfo)
+{
+	switch (errinfo) {
+	case CPDLC_ERRINFO_APP_ERROR:
+		return ("APPLICATION ERROR");
+	case CPDLC_ERRINFO_DUP_MIN:
+		return ("DUPLICATE MESSAGE IDENTIFICATION NUMBER");
+	case CPDLC_ERRINFO_UNRECOG_MRN:
+		return ("UNRECOGNIZED MESSAGE REFERENCE NUMBER");
+	case CPDLC_ERRINFO_END_SVC_WITH_PDG_MSGS:
+		return ("END SERVICE WITH PENDING MESSAGES");
+	case CPDLC_ERRINFO_END_SVC_WITH_NO_RESP:
+		return ("END SERVICE WITH NO VALID RESPONSE");
+	case CPDLC_ERRINFO_INSUFF_MSG_STORAGE:
+		return ("INSUFFICIENT MESSAGE STORAGE");
+	case CPDLC_ERRINFO_NO_AVBL_MIN:
+		return ("NO AVAILABLE MESSAGE IDENTIFICATION NUMBER");
+	case CPDLC_ERRINFO_COMMANDED_TERM:
+		return ("COMMANDED TERMINATION");
+	case CPDLC_ERRINFO_INSUFF_DATA:
+		return ("INSUFFICIENT DATA");
+	case CPDLC_ERRINFO_UNEXPCT_DATA:
+		return ("UNEXPECTED DATA");
+	case CPDLC_ERRINFO_INVAL_DATA:
+		return ("INVALID DATA");
+	}
+	return ("UNKNOWN ERROR");
+}
+
 void
 cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
     bool readable, unsigned *n_bytes_p, char **buf_p, unsigned *cap_p)
@@ -1163,6 +1194,15 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    arg->tp4);
 		}
 		break;
+	case CPDLC_ARG_ERRINFO:
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s",
+			    errinfo2str(arg->errinfo));
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
+			    arg->errinfo);
+		}
+		break;
 	}
 }
 
@@ -1221,6 +1261,14 @@ duplicate_route(const cpdlc_route_t *route_in)
 	return (route_out);
 }
 
+static cpdlc_pdc_t *
+duplicate_pdc(const cpdlc_pdc_t *pdc_in)
+{
+	cpdlc_pdc_t *pdc_out = safe_malloc(sizeof (*pdc_out));
+	memcpy(pdc_out, pdc_in, sizeof (*pdc_out));
+	return (pdc_out);
+}
+
 cpdlc_msg_t *
 cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 {
@@ -1246,6 +1294,10 @@ cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 			    oldseg->args[j].freetext != NULL) {
 				newseg->args[j].freetext = strdup(
 				    oldseg->args[j].freetext);
+			} else if (oldseg->info->args[j] == CPDLC_ARG_PDC &&
+			    oldseg->args[j].pdc != NULL) {
+				newseg->args[j].pdc = duplicate_pdc(
+				    oldseg->args[j].pdc);
 			}
 		}
 	}
@@ -1292,9 +1344,8 @@ pkt_type2str(cpdlc_pkt_t pkt_type)
 	}
 }
 
-static unsigned
-cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
-    bool asn1)
+unsigned
+cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 {
 	unsigned n_bytes = 0;
 
@@ -1304,16 +1355,21 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s",
 	    pkt_type2str(msg->pkt_type));
 
-	APPEND_SNPRINTF(n_bytes, buf, cap, "/TS=%02d%02d%02d",
-	    msg->ts.hrs, msg->ts.mins, msg->ts.secs);
-	if (msg->to[0] != '\0') {
-		char textbuf[32] = {};
-		cpdlc_escape_percent(msg->to, textbuf, sizeof (textbuf));
-		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
+	if (msg->fmt_plain) {
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/TS=%02d%02d%02d",
+		    msg->ts.hrs, msg->ts.mins, msg->ts.secs);
+		if (msg->to[0] != '\0') {
+			char textbuf[32] = {};
+			cpdlc_escape_percent(msg->to, textbuf,
+			    sizeof (textbuf));
+			APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
+		}
 	}
-	APPEND_SNPRINTF(n_bytes, buf, cap, "/MIN=%d", msg->min);
-	if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
-		APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
+	if (msg->fmt_plain || msg->is_logon || msg->is_logoff) {
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/MIN=%d", msg->min);
+		if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
+			APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
+	}
 	if (msg->is_logon) {
 		char textbuf[64] = {};
 		CPDLC_ASSERT(msg->logon_data != NULL);
@@ -1323,37 +1379,22 @@ cpdlc_msg_encode_common(const cpdlc_msg_t *msg, char *buf, unsigned cap,
 	}
 	if (msg->is_logoff)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGOFF");
-	if (msg->from[0] != '\0') {
+	if ((msg->fmt_plain || msg->is_logon || msg->is_logoff) &&
+	    msg->from[0] != '\0') {
 		char textbuf[32] = {};
-		cpdlc_escape_percent(msg->from, textbuf, sizeof (textbuf));
+		cpdlc_escape_percent(msg->from, textbuf,
+		    sizeof (textbuf));
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/FROM=%s", textbuf);
 	}
-//	if (!asn1) {
-		CPDLC_UNUSED(asn1);
-		cpdlc_msg_encode_asn_impl(msg, &n_bytes, &buf, &cap);
-//	} else {
+	if (msg->fmt_arinc622)
+		cpdlc_msg_encode_arinc622(msg, &n_bytes, &buf, &cap);
+	if (msg->fmt_plain) {
 		for (unsigned i = 0; i < msg->num_segs; i++)
 			encode_seg(&msg->segs[i], &n_bytes, &buf, &cap);
-//	}
+	}
 	APPEND_SNPRINTF(n_bytes, buf, cap, "\n");
 
 	return (n_bytes);
-}
-
-unsigned
-cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
-{
-	CPDLC_ASSERT(msg != NULL);
-	CPDLC_ASSERT(buf != NULL || cap == 0);
-	return (cpdlc_msg_encode_common(msg, buf, cap, false));
-}
-
-unsigned
-cpdlc_msg_encode_asn1(const cpdlc_msg_t *msg, char *buf, unsigned cap)
-{
-	CPDLC_ASSERT(msg != NULL);
-	CPDLC_ASSERT(buf != NULL || cap == 0);
-	return (cpdlc_msg_encode_common(msg, buf, cap, true));
 }
 
 static void
@@ -2671,8 +2712,14 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
+		case CPDLC_ARG_ERRINFO:
+			if (sscanf(start, "%u", (unsigned *)&arg->errinfo) !=
+			    1 || arg->errinfo > CPDLC_ERRINFO_INVAL_DATA) {
+				MALFORMED_MSG("unknown errinfo enum value");
+				return (false);
+			}
+			break;
 		}
-
 		SKIP_NONSPACE(start, end);
 		SKIP_SPACE(start, end);
 	}
@@ -2691,7 +2738,7 @@ end:
 }
 
 static bool
-msg_decode_asn1(bool is_dl, cpdlc_msg_t *msg, const char *start,
+msg_decode_arinc622(bool is_dl, cpdlc_msg_t *msg, const char *start,
     const char *end, char *reason, unsigned reason_cap)
 {
 	uint8_t *rawbuf;
@@ -2699,37 +2746,72 @@ msg_decode_asn1(bool is_dl, cpdlc_msg_t *msg, const char *start,
 	asn_TYPE_descriptor_t *td;
 	asn_dec_rval_t rval;
 	void *struct_ptr = NULL;
+	char imi[4];
+	uint16_t crc;
 
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(start != NULL);
 	CPDLC_ASSERT(end != NULL);
 	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
 
+	if (end - start <= CPDLC_DATA_OFF + CPDLC_CRC_LEN) {
+		MALFORMED_MSG("malformed ARINC 622 data: message too short");
+		return (false);
+	}
+	cpdlc_strlcpy(imi, start, sizeof (imi));
+	if (strcmp(imi, "CR1") == 0) {
+		msg->arinc622.imi = CPDLC_IMI_CONN_REQUEST;
+	} else if (strcmp(imi, "CC1") == 0) {
+		msg->arinc622.imi = CPDLC_IMI_CONN_CONFIRM;
+	} else if (strcmp(imi, "AT1") == 0) {
+		msg->arinc622.imi = CPDLC_IMI_DATA;
+	} else if (strcmp(imi, "DR1") == 0) {
+		msg->arinc622.imi = CPDLC_IMI_DISC_REQUEST;
+	} else {
+		MALFORMED_MSG("malformed ARINC 622 data: unknown IMI \"%s\"",
+		    imi);
+		return (false);
+	}
+	cpdlc_strlcpy(msg->arinc622.acf_id, &start[CPDLC_IMI_LEN],
+	    sizeof (msg->arinc622.acf_id));
+	start += CPDLC_DATA_OFF;
 	if ((end - start) % 2 != 0) {
-		MALFORMED_MSG("malformed ASN.1 tuple: expected even number "
+		MALFORMED_MSG("malformed ARINC 622 data: expected even number "
 		    "of hex chars");
 		return (false);
 	}
 	rawsz = (end - start) / 2;
-	rawbuf = safe_malloc(rawsz);
-	if (!cpdlc_hex_dec(start, end - start, rawbuf, rawsz)) {
-		MALFORMED_MSG("malformed ASN.1 tuple: invalid hex chars found");
+	rawbuf = safe_malloc(CPDLC_IMI_LEN + CPDLC_CS_LEN + rawsz);
+	memcpy(rawbuf, imi, CPDLC_IMI_LEN);
+	memcpy(&rawbuf[CPDLC_IMI_LEN], msg->arinc622.acf_id, CPDLC_CS_LEN);
+	if (!cpdlc_hex_dec(start, end - start, &rawbuf[CPDLC_DATA_OFF],
+	    rawsz - CPDLC_DATA_OFF)) {
+		MALFORMED_MSG("malformed ARINC 622 data: invalid hex chars "
+		    "found");
+		goto errout;
+	}
+	crc = cpdlc_crc16(rawbuf, rawsz - CPDLC_CRC_LEN);
+	if (((crc >> 8) & 0xff) != rawbuf[rawsz - 2] ||
+	    (crc & 0xff) != rawbuf[rawsz - 1]) {
+		MALFORMED_MSG("malformed ARINC 622 data: CRC mismatch");
 		goto errout;
 	}
 	td = (is_dl ? &asn_DEF_ATCdownlinkmessage : &asn_DEF_ATCuplinkmessage);
-	rval = uper_decode_complete(0, td, &struct_ptr, rawbuf, rawsz);
+	rval = uper_decode_complete(0, td, &struct_ptr, rawbuf,
+	    rawsz - CPDLC_CRC_LEN);
 	if (rval.code != RC_OK) {
-		MALFORMED_MSG("error decoding ASN.1 data: error %d", rval.code);
+		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: error %d",
+		    rval.code);
 		goto errout;
 	}
-	if (rval.consumed < rawsz) {
-		MALFORMED_MSG("error decoding ASN.1 data: extraneous data at "
-		    "end of ASN.1 input");
+	if (rval.consumed < rawsz - CPDLC_CRC_LEN) {
+		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: "
+		    "extraneous data at end of ASN.1 input");
 		goto errout;
 	}
-	if (!cpdlc_msg_decode_asn_impl(msg, struct_ptr, is_dl)) {
-		MALFORMED_MSG("error decoding ASN.1 data: error interpreting "
-		    "parsed data structures");
+	if (!cpdlc_msg_decode_arinc622(msg, struct_ptr, is_dl)) {
+		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: "
+		    "error interpreting parsed data structures");
 		ASN_STRUCT_FREE(*td, struct_ptr);
 		goto errout;
 	}
@@ -2747,7 +2829,7 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 {
 	const char *start, *term;
 	cpdlc_msg_t *msg;
-	bool pkt_type_seen = false, msg_seen = false, asn1_seen = false;
+	bool pkt_type_seen = false;
 	bool skipped_cr = false;
 
 	CPDLC_ASSERT(in_buf != NULL);
@@ -2847,7 +2929,7 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 			cpdlc_unescape_percent(textbuf, msg->from,
 			    sizeof (msg->from));
 		} else if (strncmp(in_buf, "MSG=", 4) == 0) {
-			if (!asn1_seen) {
+			if (!msg->fmt_arinc622) {
 				cpdlc_msg_seg_t *seg;
 
 				if (msg->num_segs == CPDLC_MAX_MSG_SEGS) {
@@ -2867,16 +2949,14 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 					goto errout;
 				}
 				msg->num_segs++;
-				msg_seen = true;
 			}
-		} else if (strncmp(in_buf, "ASN1=", 5) == 0) {
-			if (!msg_seen) {
-				if (!msg_decode_asn1(is_dl, msg, &in_buf[5],
-				    sep, reason, reason_cap)) {
-					goto errout;
-				}
-				asn1_seen =true;
+			msg->fmt_plain = true;
+		} else if (strncmp(in_buf, "ARINC622=", 9) == 0) {
+			if (!msg->fmt_plain && !msg_decode_arinc622(is_dl,
+			    msg, &in_buf[9], sep, reason, reason_cap)) {
+				goto errout;
 			}
+			msg->fmt_arinc622 = true;
 		} else {
 			MALFORMED_MSG("unknown message header");
 			goto errout;
@@ -3194,6 +3274,12 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_POSREPORT:
 		arg->pos_rep = *(cpdlc_pos_rep_t *)arg_val1;
 		break;
+	case CPDLC_ARG_TP4TABLE:
+		arg->tp4 = *(cpdlc_tp4table_t *)arg_val1;
+		break;
+	case CPDLC_ARG_ERRINFO:
+		arg->errinfo = *(cpdlc_errinfo_t *)arg_val1;
+		break;
 	default:
 		CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) "
 		    "contains invalid argument %d type %x", msg, seg_nr,
@@ -3325,6 +3411,10 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(cpdlc_tp4table_t *)arg_val1 = arg->tp4;
 		return (sizeof (arg->tp4));
+	case CPDLC_ARG_ERRINFO:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(cpdlc_errinfo_t *)arg_val1 = arg->errinfo;
+		return (sizeof (arg->errinfo));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
 	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,

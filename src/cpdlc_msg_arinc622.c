@@ -28,8 +28,9 @@
 
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
+#include "cpdlc_crc.h"
 #include "cpdlc_hexcode.h"
-#include "cpdlc_msg_asn.h"
+#include "cpdlc_msg_arinc622.h"
 
 #define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
 	do { \
@@ -137,6 +138,8 @@ arg_type2asn_sz(cpdlc_arg_type_t type)
 		return (sizeof (Predepartureclearance_t));
 	case CPDLC_ARG_TP4TABLE:
 		return (sizeof (Tp4table_t));
+	case CPDLC_ARG_ERRINFO:
+		return (sizeof (Errorinformation_t));
 	}
 	CPDLC_VERIFY(0);
 }
@@ -911,6 +914,13 @@ encode_pdc_asn(const cpdlc_pdc_t *pdc_in, Predepartureclearance_t *pdc_out)
 }
 
 static void
+encode_errinfo_asn(cpdlc_errinfo_t errinfo_in, Errorinformation_t *errinfo_out)
+{
+	CPDLC_ASSERT(errinfo_out != NULL);
+	*errinfo_out = errinfo_in;
+}
+
+static void
 msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 {
 	CPDLC_ASSERT(seg != NULL);
@@ -1012,6 +1022,10 @@ msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 			encode_tp4table_asn(seg->args[i].tp4,
 			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
+		case CPDLC_ARG_ERRINFO:
+			encode_errinfo_asn(seg->args[i].errinfo,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
+			break;
 		}
 	}
 }
@@ -1066,14 +1080,34 @@ msg_encode_asn_ul(const cpdlc_msg_t *msg_in, ATCuplinkmessage_t *msg_out)
 	}
 }
 
+static const char *
+imi2str(const cpdlc_imi_t imi)
+{
+	switch (imi) {
+	case CPDLC_IMI_DATA:
+		return ("AT1");
+	case CPDLC_IMI_CONN_REQUEST:
+		return ("CR1");
+	case CPDLC_IMI_CONN_CONFIRM:
+		return ("CC1");
+	case CPDLC_IMI_DISC_REQUEST:
+		return ("DR1");
+	}
+	CPDLC_VERIFY(0);
+}
+
 bool
-cpdlc_msg_encode_asn_impl(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
+cpdlc_msg_encode_arinc622(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
     char **buf_p, unsigned *cap_p)
 {
 	asn_TYPE_descriptor_t *td;
 	void *struct_ptr, *rawbuf;
+	uint8_t *crc_inbuf;
 	char *hexbuf;
 	ssize_t sz;
+	const char *cs;
+	char cs_padd[8];
+	uint16_t crc;
 
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(n_bytes_p != NULL);
@@ -1094,9 +1128,19 @@ cpdlc_msg_encode_asn_impl(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
 	sz = uper_encode_to_new_buffer(td, NULL, struct_ptr, &rawbuf);
 	if (sz < 0)
 		return (false);
+	crc_inbuf = safe_malloc(CPDLC_DATA_OFF + sz);
+	cs = (msg->segs[0].info->is_dl ? msg->from : msg->to);
+	cpdlc_padd_callsign(cs, cs_padd);
+	snprintf((char *)crc_inbuf, CPDLC_DATA_OFF + sz, "%s%s",
+	    imi2str(msg->arinc622.imi), cs_padd);
+	memcpy(&crc_inbuf[CPDLC_DATA_OFF], rawbuf, sz);
+	crc = cpdlc_crc16(crc_inbuf, CPDLC_DATA_OFF + sz);
+	free(crc_inbuf);
+
 	hexbuf = safe_calloc(1, 2 * sz + 1);
 	cpdlc_hex_enc(rawbuf, sz, hexbuf, 2 * sz + 1);
-	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "/ASN1=%s", hexbuf);
+	APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "/ARINC622=%s%s%s%04x",
+	    imi2str(msg->arinc622.imi), cs_padd, hexbuf, crc);
 	free(hexbuf);
 	free(rawbuf);
 	ASN_STRUCT_FREE(*td, struct_ptr);
@@ -2146,6 +2190,13 @@ decode_pdc_asn(const Predepartureclearance_t *pdc_in, cpdlc_pdc_t *pdc_out)
 	return (true);
 }
 
+static cpdlc_errinfo_t
+decode_errinfo_asn(const Errorinformation_t *errinfo)
+{
+	CPDLC_ASSERT(errinfo != NULL);
+	return (*errinfo);
+}
+
 static bool
 decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
     const void *elem)
@@ -2258,6 +2309,10 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			seg->args[i].tp4 = decode_tp4table_asn(
 			    get_asn_arg_ptr(info, i, elem));
 			break;
+		case CPDLC_ARG_ERRINFO:
+			seg->args[i].errinfo = decode_errinfo_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
 		}
 	}
 	return (true);
@@ -2331,7 +2386,7 @@ decode_msg_header_asn(cpdlc_msg_t *msg, const ATCmessageheader_t *hdr)
 }
 
 bool
-cpdlc_msg_decode_asn_impl(cpdlc_msg_t *msg, const void *struct_ptr, bool is_dl)
+cpdlc_msg_decode_arinc622(cpdlc_msg_t *msg, const void *struct_ptr, bool is_dl)
 {
 	CPDLC_ASSERT(msg != NULL);
 	CPDLC_ASSERT(struct_ptr != NULL);

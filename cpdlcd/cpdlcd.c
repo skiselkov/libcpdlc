@@ -331,12 +331,10 @@ static struct lws_protocols proto_list_lws[] =
     { .name = NULL }	/* list terminator */
 };
 
-static void send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    const char *fmt, va_list ap);
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...);
+    cpdlc_errinfo_t errinfo);
 static void send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...);
+    cpdlc_errinfo_t errinfo);
 static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
 static void close_conn(conn_t *conn);
 static void conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg);
@@ -1254,12 +1252,12 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	if (conn->logon_status == LOGON_STARTED ||
 	    conn->logon_status == LOGON_COMPLETING) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON ALREADY IN PROGRESS");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
 		return;
 	}
 	if (cpdlc_msg_get_from(msg) == NULL) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON REQUIRES FROM= HEADER");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
 		return;
 	}
 	/* Clear any previous logon on non-ATC connections */
@@ -1431,27 +1429,15 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
  *	it will be a downlink error message. The error message will also
  *	have its MRN set appropriately to mark it as a response to
  *	`orig_msg'.
- * @param fmt A printf-style format string (+ arguments) for the free text
- *	details in the error message body.
+ * @param errinfo A cpdlc_errinfo_t enum containing the error.
  */
 static void
-send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt,
-    va_list ap)
+send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
+    cpdlc_errinfo_t errinfo)
 {
-	int l;
-	va_list ap2;
-	char *buf;
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn != NULL);
-	ASSERT(fmt != NULL);
-
-	va_copy(ap2, ap);
-	l = vsnprintf(NULL, 0, fmt, ap2);
-	va_end(ap2);
-
-	buf = safe_malloc(l + 1);
-	vsnprintf(buf, l + 1, fmt, ap);
 
 	if (orig_msg != NULL) {
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
@@ -1467,33 +1453,21 @@ send_error_msg_v(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt,
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
-	cpdlc_msg_seg_set_arg(msg, 0, 0, buf, NULL);
+	cpdlc_msg_seg_set_arg(msg, 0, 0, &errinfo, NULL);
 
 	conn_send_msg(conn, msg);
 
-	free(buf);
 	cpdlc_msg_free(msg);
 }
 
 static void
-send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg, const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	send_error_msg_v(conn, orig_msg, fmt, ap);
-	va_end(ap);
-}
-
-static void
 send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
-    const char *fmt, ...)
+    cpdlc_errinfo_t errinfo)
 {
 	const list_t *l;
 
 	ASSERT(to != NULL);
 	ASSERT(orig_msg != NULL);
-	ASSERT(fmt != NULL);
 
 	mutex_enter(&conns_by_from_lock);
 	l = htbl_lookup_multi(&conns_by_from, to);
@@ -1501,13 +1475,10 @@ send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
 		for (void *mv = list_head(l), *mv_next = NULL; mv != NULL;
 		    mv = mv_next) {
 			conn_t *conn = HTBL_VALUE_MULTI(mv);
-			va_list ap;
 
 			mv_next = list_next(l, mv);
 			ASSERT(conn != NULL);
-			va_start(ap, fmt);
-			send_error_msg_v(conn, orig_msg, fmt, ap);
-			va_end(ap);
+			send_error_msg(conn, orig_msg, errinfo);
 		}
 	}
 	mutex_exit(&conns_by_from_lock);
@@ -1666,7 +1637,7 @@ forward_msg_cb(const cpdlc_msg_t *msg, const char *addr_str, void *userinfo)
 	} else {
 		if (!store_msg(msg, to, false)) {
 			send_error_msg_to(cpdlc_msg_get_from(msg), msg,
-			    "TOO MANY QUEUED MESSAGES");
+			    CPDLC_ERRINFO_INSUFF_MSG_STORAGE);
 		}
 	}
 	mutex_exit(&conns_by_from_lock);
@@ -1726,7 +1697,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	mutex_enter(&conn->lock);
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, "LOGON REQUIRED");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1756,8 +1727,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 */
 		if (!conn->is_atc && !msg_is_not_cda(msg)) {
 			conn_log_msg(conn->addr_str, msg, true);
-			send_error_msg(conn, msg,
-			    "MESSAGE CANNOT CONTAIN TO= HEADER");
+			send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
 			cpdlc_msg_free(msg);
 			return;
 		}
@@ -1777,7 +1747,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * otherwise have no default send target.
 		 */
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, "MESSAGE MISSING TO= HEADER");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1791,15 +1761,14 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg,
-		    "MESSAGE UPLINK/DOWNLINK MISMATCH");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
 	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
 	    !msg_auto_assign_from(msg)) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, "REMOTE END NOT CONNECTED");
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}
