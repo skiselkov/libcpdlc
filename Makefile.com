@@ -102,10 +102,9 @@ LWS_LIBS=../libwebsockets-3.1.0/lib/libwebsockets.a
 LWS_OBJS=../libwebsockets-3.1.0/lib/libwebsockets.a
 
 ACFUTILS=../libacfutils
-GMP=../gmp-6.2.0
-GNUTLS=../gnutls-3.6.11.1
-NETTLE=../nettle-3.5
-PKG_CONFIG_PATH = $(GNUTLS)/install/lib/pkgconfig:$(NETTLE)/install/lib/pkgconfig:$(GMP)/install/lib/pkgconfig
+GNUTLS=../gnutls-$(PLATFORM_NAME)
+NETTLE=../nettle-$(PLATFORM_NAME)
+PKG_CONFIG_PATH = $(GNUTLS)/lib/pkgconfig:$(NETTLE)/lib64/pkgconfig:$(NETTLE)/lib/pkgconfig
 
 # Older MinGW doesn't contain these, so define them here
 MATH_DEFINES=\

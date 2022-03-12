@@ -35,7 +35,7 @@ LIBS += -fPIC -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
 	-Wl,-Bstatic \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-	--static --libs gnutls libidn2) \
+	--static --libs gnutls) \
 	-Wl,-Bdynamic \
 	$(LIBCRYPT) -lpthread -lm
 
