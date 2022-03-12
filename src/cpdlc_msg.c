@@ -1203,6 +1203,14 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 			    arg->errinfo);
 		}
 		break;
+	case CPDLC_ARG_VERSION:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%d",
+		    readable ? "" : " ", arg->version);
+		break;
+	case CPDLC_ARG_ATIS_CODE:
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%c",
+		    readable ? "" : " ", arg->atis_code);
+		break;
 	}
 }
 
@@ -1249,6 +1257,7 @@ cpdlc_msg_alloc(cpdlc_pkt_t pkt_type)
 	msg->ts = make_timestamp();
 	msg->mrn = CPDLC_INVALID_MSG_SEQ_NR;
 	msg->pkt_type = pkt_type;
+	msg->fmt_plain = true;
 
 	return (msg);
 }
@@ -1277,6 +1286,7 @@ cpdlc_msg_copy(const cpdlc_msg_t *oldmsg)
 	memcpy(newmsg, oldmsg, sizeof (*newmsg));
 	if (oldmsg->logon_data != NULL)
 		newmsg->logon_data = strdup(oldmsg->logon_data);
+	newmsg->arinc622 = oldmsg->arinc622;
 
 	for (unsigned i = 0; i < oldmsg->num_segs; i++) {
 		const cpdlc_msg_seg_t *oldseg = &oldmsg->segs[i];
@@ -1329,6 +1339,80 @@ cpdlc_msg_free(cpdlc_msg_t *msg)
 	free(msg);
 }
 
+int
+cpdlc_msg_option_add(cpdlc_msg_t *msg, const char *opt)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(opt != NULL);
+	if (msg->num_opts >= CPDLC_MAX_OPTS)
+		return (-1);
+	for (unsigned i = 0; i < msg->num_opts; i++) {
+		if (strcmp(msg->opts[i], opt) == 0)
+			return (i);
+	}
+	cpdlc_strlcpy(msg->opts[msg->num_opts], opt, sizeof (*msg->opts));
+	return (msg->num_opts++);
+}
+
+void
+cpdlc_msg_option_remove(cpdlc_msg_t *msg, const char *opt)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(opt != NULL);
+	for (unsigned i = 0; i < msg->num_opts; i++) {
+		if (strcmp(msg->opts[i], opt) == 0) {
+			for (; i + 1 < msg->num_opts; i++) {
+				cpdlc_strlcpy(msg->opts[i], msg->opts[i + 1],
+				    sizeof (*msg->opts));
+			}
+			msg->num_opts--;
+			return;
+		}
+	}
+	CPDLC_VERIFY_MSG(0, "Option \"%s\" not found", opt);
+}
+
+bool
+cpdlc_msg_option_is_set(const cpdlc_msg_t *msg, const char *opt)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(opt != NULL);
+	for (unsigned i = 0; i < msg->num_opts; i++) {
+		if (strcmp(msg->opts[i], opt) == 0)
+			return (true);
+	}
+	return (false);
+}
+
+unsigned
+cpdlc_msg_options_count(const cpdlc_msg_t *msg)
+{
+	CPDLC_ASSERT(msg != NULL);
+	return (msg->num_opts);
+}
+
+const char *
+cpdlc_msg_option_get(const cpdlc_msg_t *msg, unsigned nr)
+{
+	CPDLC_ASSERT(msg != NULL);
+	CPDLC_ASSERT(nr < msg->num_opts);
+	return (msg->opts[nr]);
+}
+
+void
+cpdlc_msg_set_imi(cpdlc_msg_t *msg, cpdlc_imi_t imi)
+{
+	CPDLC_ASSERT(msg != NULL);
+	msg->arinc622.imi = imi;
+}
+
+cpdlc_imi_t
+cpdlc_msg_get_imi(const cpdlc_msg_t *msg)
+{
+	CPDLC_ASSERT(msg != NULL);
+	return (msg->arinc622.imi);
+}
+
 static const char *
 pkt_type2str(cpdlc_pkt_t pkt_type)
 {
@@ -1355,17 +1439,17 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	APPEND_SNPRINTF(n_bytes, buf, cap, "PKT=%s",
 	    pkt_type2str(msg->pkt_type));
 
-	if (msg->fmt_plain) {
+	if (msg->fmt_plain && msg->fmt_arinc622) {
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/TS=%02d%02d%02d",
 		    msg->ts.hrs, msg->ts.mins, msg->ts.secs);
-		if (msg->to[0] != '\0') {
-			char textbuf[32] = {};
-			cpdlc_escape_percent(msg->to, textbuf,
-			    sizeof (textbuf));
-			APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
-		}
 	}
-	if (msg->fmt_plain || msg->is_logon || msg->is_logoff) {
+	if (msg->to[0] != '\0' && msg->fmt_plain) {
+		char textbuf[32] = {};
+		cpdlc_escape_percent(msg->to, textbuf,
+		    sizeof (textbuf));
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/TO=%s", textbuf);
+	}
+	if (msg->fmt_plain || msg->num_segs == 0) {
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/MIN=%d", msg->min);
 		if (msg->mrn != CPDLC_INVALID_MSG_SEQ_NR)
 			APPEND_SNPRINTF(n_bytes, buf, cap, "/MRN=%d", msg->mrn);
@@ -1379,8 +1463,13 @@ cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf, unsigned cap)
 	}
 	if (msg->is_logoff)
 		APPEND_SNPRINTF(n_bytes, buf, cap, "/LOGOFF");
-	if ((msg->fmt_plain || msg->is_logon || msg->is_logoff) &&
-	    msg->from[0] != '\0') {
+	if (msg->num_opts != 0)
+		APPEND_SNPRINTF(n_bytes, buf, cap, "/OPTIONS=");
+	for (unsigned i = 0; i < msg->num_opts; i++) {
+		APPEND_SNPRINTF(n_bytes, buf, cap, "%s%s",
+		    msg->opts[i], i + 1 < msg->num_opts ? "," : "");
+	}
+	if (msg->fmt_plain && msg->from[0] != '\0') {
 		char textbuf[32] = {};
 		cpdlc_escape_percent(msg->from, textbuf,
 		    sizeof (textbuf));
@@ -1467,11 +1556,6 @@ validate_logon_logoff_message(const cpdlc_msg_t *msg, char *reason,
 	if (msg->is_logon && msg->is_logoff) {
 		MALFORMED_MSG("message can either be a LOGON or LOGOFF "
 		    "message, but not both");
-		return (false);
-	}
-	if (msg->num_segs != 0) {
-		MALFORMED_MSG("%s messages may not contain MSG segments",
-		    msgtype);
 		return (false);
 	}
 	if (msg->from[0] == '\0') {
@@ -2719,6 +2803,19 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
+		case CPDLC_ARG_VERSION:
+			if (sscanf(start, "%u", &arg->version) != 1) {
+				MALFORMED_MSG("malformed versionnumber value");
+				return (false);
+			}
+			break;
+		case CPDLC_ARG_ATIS_CODE:
+			if (sscanf(start, "%c", &arg->atis_code) != 1 ||
+			    arg->atis_code < 'A' || arg->atis_code > 'Z') {
+				MALFORMED_MSG("invalid ATIS code");
+				return (false);
+			}
+			break;
 		}
 		SKIP_NONSPACE(start, end);
 		SKIP_SPACE(start, end);
@@ -2742,7 +2839,7 @@ msg_decode_arinc622(bool is_dl, cpdlc_msg_t *msg, const char *start,
     const char *end, char *reason, unsigned reason_cap)
 {
 	uint8_t *rawbuf;
-	unsigned rawsz;
+	unsigned binsz, rawsz;
 	asn_TYPE_descriptor_t *td;
 	asn_dec_rval_t rval;
 	void *struct_ptr = NULL;
@@ -2780,12 +2877,13 @@ msg_decode_arinc622(bool is_dl, cpdlc_msg_t *msg, const char *start,
 		    "of hex chars");
 		return (false);
 	}
-	rawsz = (end - start) / 2;
-	rawbuf = safe_malloc(CPDLC_IMI_LEN + CPDLC_CS_LEN + rawsz);
+	binsz = (end - start) / 2;
+	rawsz = CPDLC_IMI_LEN + CPDLC_CS_LEN + binsz;
+	rawbuf = safe_malloc(rawsz);
 	memcpy(rawbuf, imi, CPDLC_IMI_LEN);
 	memcpy(&rawbuf[CPDLC_IMI_LEN], msg->arinc622.acf_id, CPDLC_CS_LEN);
 	if (!cpdlc_hex_dec(start, end - start, &rawbuf[CPDLC_DATA_OFF],
-	    rawsz - CPDLC_DATA_OFF)) {
+	    binsz)) {
 		MALFORMED_MSG("malformed ARINC 622 data: invalid hex chars "
 		    "found");
 		goto errout;
@@ -2797,14 +2895,14 @@ msg_decode_arinc622(bool is_dl, cpdlc_msg_t *msg, const char *start,
 		goto errout;
 	}
 	td = (is_dl ? &asn_DEF_ATCdownlinkmessage : &asn_DEF_ATCuplinkmessage);
-	rval = uper_decode_complete(0, td, &struct_ptr, rawbuf,
-	    rawsz - CPDLC_CRC_LEN);
+	rval = uper_decode_complete(0, td, &struct_ptr, &rawbuf[CPDLC_DATA_OFF],
+	    binsz - CPDLC_CRC_LEN);
 	if (rval.code != RC_OK) {
 		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: error %d",
 		    rval.code);
 		goto errout;
 	}
-	if (rval.consumed < rawsz - CPDLC_CRC_LEN) {
+	if (rval.consumed < binsz - CPDLC_CRC_LEN) {
 		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: "
 		    "extraneous data at end of ASN.1 input");
 		goto errout;
@@ -2957,6 +3055,20 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 				goto errout;
 			}
 			msg->fmt_arinc622 = true;
+		} else if (strncmp(in_buf, "OPTIONS=", 8) == 0) {
+			char tmp[128];
+			unsigned n_opts;
+			char **opts;
+			cpdlc_strlcpy(tmp, &in_buf[8], MIN(sizeof (tmp),
+			    (unsigned)(sep - &in_buf[8]) + 1));
+			opts = cpdlc_strsplit(tmp, ",", false, &n_opts);
+			for (unsigned i = 0; i < n_opts && i < CPDLC_MAX_OPTS;
+			    i++) {
+				cpdlc_strlcpy(msg->opts[i], opts[i],
+				    sizeof (msg->opts[i]));
+				msg->num_opts++;
+			}
+			cpdlc_free_strlist(opts, n_opts);
 		} else {
 			MALFORMED_MSG("unknown message header");
 			goto errout;
@@ -3280,6 +3392,12 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_ERRINFO:
 		arg->errinfo = *(cpdlc_errinfo_t *)arg_val1;
 		break;
+	case CPDLC_ARG_VERSION:
+		arg->version = *(unsigned *)arg_val1;
+		break;
+	case CPDLC_ARG_ATIS_CODE:
+		arg->atis_code = *(char *)arg_val1;
+		break;
 	default:
 		CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) "
 		    "contains invalid argument %d type %x", msg, seg_nr,
@@ -3415,6 +3533,14 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(cpdlc_errinfo_t *)arg_val1 = arg->errinfo;
 		return (sizeof (arg->errinfo));
+	case CPDLC_ARG_VERSION:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(unsigned *)arg_val1 = arg->version;
+		return (sizeof (arg->version));
+	case CPDLC_ARG_ATIS_CODE:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(char *)arg_val1 = arg->version;
+		return (sizeof (arg->atis_code));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
 	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,

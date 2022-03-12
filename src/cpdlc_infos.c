@@ -1544,8 +1544,7 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.msg_type = CPDLC_UM158_ATIS_code,
 	.text = "ATIS [atis code]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
-	// TODO
+	.args = { CPDLC_ARG_ATIS_CODE },
 	.resp = CPDLC_RESP_R,
 	.timeout = MED_TIMEOUT
     },
@@ -2677,8 +2676,8 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_type = CPDLC_DM73_VERSION_number,
 	.text = "[version nr]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
-	// TODO
+	.args = { CPDLC_ARG_VERSION },
+	ASN_DOWNLINK_INFO_01(73Versionnumber),
 	.resp = CPDLC_RESP_N
     },
     {
@@ -2730,8 +2729,7 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	.msg_type = CPDLC_DM79_ATIS_code,
 	.text = "ATIS [atis code]",
 	.num_args = 1,
-	.args = { CPDLC_ARG_FREETEXT },
-	//
+	.args = { CPDLC_ARG_ATIS_CODE },
 	.resp = CPDLC_RESP_N
     },
     {

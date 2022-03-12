@@ -140,6 +140,10 @@ arg_type2asn_sz(cpdlc_arg_type_t type)
 		return (sizeof (Tp4table_t));
 	case CPDLC_ARG_ERRINFO:
 		return (sizeof (Errorinformation_t));
+	case CPDLC_ARG_VERSION:
+		return (sizeof (Versionnumber_t));
+	case CPDLC_ARG_ATIS_CODE:
+		return (sizeof (Atiscode_t));
 	}
 	CPDLC_VERIFY(0);
 }
@@ -921,6 +925,20 @@ encode_errinfo_asn(cpdlc_errinfo_t errinfo_in, Errorinformation_t *errinfo_out)
 }
 
 static void
+encode_version_asn(unsigned ver_in, Versionnumber_t *ver_out)
+{
+	CPDLC_ASSERT(ver_out != NULL);
+	*ver_out = ver_in;
+}
+
+static void
+encode_atis_code_asn(char code_in, Atiscode_t *code_out)
+{
+	char str[2] = { code_in };
+	ia5strlcpy_out(code_out, str);
+}
+
+static void
 msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 {
 	CPDLC_ASSERT(seg != NULL);
@@ -1024,6 +1042,14 @@ msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 			break;
 		case CPDLC_ARG_ERRINFO:
 			encode_errinfo_asn(seg->args[i].errinfo,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
+			break;
+		case CPDLC_ARG_VERSION:
+			encode_version_asn(seg->args[i].version,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
+			break;
+		case CPDLC_ARG_ATIS_CODE:
+			encode_atis_code_asn(seg->args[i].atis_code,
 			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		}
@@ -2197,6 +2223,22 @@ decode_errinfo_asn(const Errorinformation_t *errinfo)
 	return (*errinfo);
 }
 
+static unsigned
+decode_version_asn(const Versionnumber_t *ver)
+{
+	CPDLC_ASSERT(ver != NULL);
+	return (*ver);
+}
+
+static char
+decode_atis_code_asn(const Atiscode_t *code)
+{
+	char str[2];
+	CPDLC_ASSERT(code != NULL);
+	ia5strlcpy_in(str, code, sizeof (str));
+	return (MIN(MAX(str[0], 'A'), 'Z'));
+}
+
 static bool
 decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
     const void *elem)
@@ -2311,6 +2353,14 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			break;
 		case CPDLC_ARG_ERRINFO:
 			seg->args[i].errinfo = decode_errinfo_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
+		case CPDLC_ARG_VERSION:
+			seg->args[i].version = decode_version_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
+		case CPDLC_ARG_ATIS_CODE:
+			seg->args[i].atis_code = decode_atis_code_asn(
 			    get_asn_arg_ptr(info, i, elem));
 			break;
 		}

@@ -654,6 +654,7 @@ fans_alloc(const fans_funcs_t *funcs, void *userinfo)
 		memcpy(&box->funcs, funcs, sizeof (*funcs));
 	box->userinfo = userinfo;
 	box->cl = cpdlc_client_alloc(false);
+	cpdlc_client_set_arinc622(box->cl, true);
 	CPDLC_ASSERT(box->cl != NULL);
 	cpdlc_strlcpy(box->hostname, "localhost", sizeof (box->hostname));
 	box->msglist = cpdlc_msglist_alloc(box->cl);

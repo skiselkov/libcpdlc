@@ -161,6 +161,9 @@ typedef struct {
 	gnutls_session_t	session;
 	bool			tls_handshake_complete;
 
+	bool			fmt_plain;
+	bool			fmt_arinc622;
+
 	mutex_t			lock;
 
 	/* protected by `lock' */
@@ -1155,15 +1158,16 @@ complete_logon(conn_t *conn)
 		return;
 	}
 	msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
-	cpdlc_msg_set_mrn(msg, conn->logon_min);
+	cpdlc_msg_set_to(msg, conn->logon_from);
 	if (conn->logon_success && !conn->is_atc &&
 	    conn->logon_to[0] == '\0') {
+		cpdlc_errinfo_t err = CPDLC_ERRINFO_INSUFF_DATA;
 		conn->logon_status = LOGON_NONE;
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
-		cpdlc_msg_seg_set_arg(msg, 0, 0, "LOGON REQUIRES TO= HEADER",
-		    NULL);
+		cpdlc_msg_seg_set_arg(msg, 0, 0, &err, NULL);
 	} else if (conn->logon_success) {
 		ident_list_t *idl = safe_calloc(1, sizeof (*idl));
+		cpdlc_tp4table_t tp4 = CPDLC_TP4_LABEL_A;
 
 		conn->logon_status = LOGON_COMPLETE;
 
@@ -1178,12 +1182,21 @@ complete_logon(conn_t *conn)
 		mutex_exit(&conns_by_from_lock);
 
 		cpdlc_msg_set_logon_data(msg, "SUCCESS");
-		cpdlc_msg_set_from(msg, "ATN");
+		cpdlc_msg_set_from(msg, "AFN");
+
+		if (conn->fmt_arinc622 && !conn->is_atc) {
+			cpdlc_msg_set_to(msg, conn->logon_from);
+			cpdlc_msg_add_seg(msg, false,
+			    CPDLC_UM163_FACILITY_designation_tp4table, 0);
+			cpdlc_msg_seg_set_arg(msg, 0, 0, conn->logon_to, NULL);
+			cpdlc_msg_seg_set_arg(msg, 0, 1, &tp4, NULL);
+			cpdlc_msg_set_imi(msg, CPDLC_IMI_CONN_REQUEST);
+		}
 	} else {
 		conn->logon_status = LOGON_NONE;
 
 		cpdlc_msg_set_logon_data(msg, "FAILURE");
-		cpdlc_msg_set_from(msg, "ATN");
+		cpdlc_msg_set_from(msg, "AFN");
 	}
 
 	memset(conn->logon_to, 0, sizeof (conn->logon_to));
@@ -1289,6 +1302,9 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	conn->logon_status = LOGON_STARTED;
 	conn->logon_min = cpdlc_msg_get_min(msg);
 
+	conn->fmt_plain = (cpdlc_msg_option_is_set(msg, "PLAIN") ||
+	    cpdlc_msg_options_count(msg) == 0);
+	conn->fmt_arinc622 = cpdlc_msg_option_is_set(msg, "ARINC622");
 	/* This is async */
 	conn->auth_key = auth_sess_open(msg, conn->addr_str,
 	    logon_done_cb, conn);
@@ -1390,13 +1406,18 @@ conn_send_buf(conn_t *conn, const char *buf, size_t buflen)
  * sending to a client. The caller retains ownership of the `msg' object.
  */
 static void
-conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
+conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
 {
 	unsigned l;
 	char *buf;
+	cpdlc_msg_t *msg;
 
 	ASSERT(conn != NULL);
-	ASSERT(msg != NULL);
+	ASSERT(msg_in != NULL);
+	msg = cpdlc_msg_copy(msg_in);
+
+	msg->fmt_plain = conn->fmt_plain;
+	msg->fmt_arinc622 = conn->fmt_arinc622;
 
 	l = cpdlc_msg_encode(msg, NULL, 0);
 	buf = safe_malloc(l + 1);
@@ -1417,6 +1438,7 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg)
 			conn->logoff_time = time(NULL);
 		}
 	}
+	cpdlc_msg_free(msg);
 }
 
 /*
@@ -1454,6 +1476,7 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
 	cpdlc_msg_seg_set_arg(msg, 0, 0, &errinfo, NULL);
+	cpdlc_msg_set_to(msg, conn->logon_from);
 
 	conn_send_msg(conn, msg);
 
@@ -1720,12 +1743,20 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		/* These messages do not get logged */
 		return;
 	}
+	/* Consume a downlink version number message */
+	if (!conn->is_atc && msg->num_segs == 1 &&
+	    msg->segs[0].info->msg_type == CPDLC_DM73_VERSION_number) {
+		conn_log_msg(conn->addr_str, msg, true);
+		cpdlc_msg_free(msg);
+		return;
+	}
 	if (msg->to[0] != '\0') {
 		/*
 		 * Aircraft stations can only communicate with their
 		 * LOGON target.
 		 */
-		if (!conn->is_atc && !msg_is_not_cda(msg)) {
+		if (!conn->is_atc && strcmp(msg->to, conn->to) != 0 &&
+		    !msg_is_not_cda(msg)) {
 			conn_log_msg(conn->addr_str, msg, true);
 			send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
 			cpdlc_msg_free(msg);

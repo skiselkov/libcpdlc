@@ -74,6 +74,11 @@ typedef void (*cpdlc_msg_sent_cb_t)(cpdlc_client_t *client,
 CPDLC_API cpdlc_client_t *cpdlc_client_alloc(bool is_atc);
 CPDLC_API void cpdlc_client_free(cpdlc_client_t *cl);
 
+CPDLC_API void cpdlc_client_set_plain(cpdlc_client_t *cl, bool flag);
+CPDLC_API bool cpdlc_client_get_plain(const cpdlc_client_t *cl);
+CPDLC_API void cpdlc_client_set_arinc622(cpdlc_client_t *cl, bool flag);
+CPDLC_API bool cpdlc_client_get_arinc622(const cpdlc_client_t *cl);
+
 CPDLC_API bool cpdlc_client_get_is_atc(const cpdlc_client_t *cl);
 
 CPDLC_API void cpdlc_client_set_host(cpdlc_client_t *cl, const char *host);

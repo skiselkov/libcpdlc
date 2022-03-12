@@ -368,7 +368,9 @@ typedef enum {
 	CPDLC_ARG_POSREPORT,
 	CPDLC_ARG_PDC,
 	CPDLC_ARG_TP4TABLE,
-	CPDLC_ARG_ERRINFO
+	CPDLC_ARG_ERRINFO,
+	CPDLC_ARG_VERSION,
+	CPDLC_ARG_ATIS_CODE
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -833,6 +835,8 @@ typedef union {
 	cpdlc_pdc_t		*pdc;
 	cpdlc_tp4table_t	tp4;
 	cpdlc_errinfo_t		errinfo;
+	unsigned		version;
+	char			atis_code;
 } cpdlc_arg_t;
 
 enum {
@@ -890,6 +894,8 @@ typedef enum {
 	CPDLC_IMI_DISC_REQUEST,
 } cpdlc_imi_t;
 
+#define	CPDLC_MAX_OPTS		4
+
 typedef struct {
 	cpdlc_pkt_t		pkt_type;
 	unsigned		min;
@@ -908,6 +914,8 @@ typedef struct {
 		cpdlc_imi_t	imi;
 		char		acf_id[CPDLC_CALLSIGN_LEN];
 	} arinc622;
+	unsigned		num_opts;
+	char			opts[CPDLC_MAX_OPTS][12];
 } cpdlc_msg_t;
 
 extern const cpdlc_msg_info_t *cpdlc_ul_infos;
@@ -916,6 +924,15 @@ extern const cpdlc_msg_info_t *cpdlc_dl_infos;
 CPDLC_API cpdlc_msg_t *cpdlc_msg_alloc(cpdlc_pkt_t pkt_type);
 CPDLC_API cpdlc_msg_t *cpdlc_msg_copy(const cpdlc_msg_t *oldmsg);
 CPDLC_API void cpdlc_msg_free(cpdlc_msg_t *msg);
+
+CPDLC_API int cpdlc_msg_option_add(cpdlc_msg_t *msg, const char *opt);
+CPDLC_API void cpdlc_msg_option_remove(cpdlc_msg_t *msg, const char *opt);
+CPDLC_API bool cpdlc_msg_option_is_set(const cpdlc_msg_t *msg, const char *opt);
+CPDLC_API unsigned cpdlc_msg_options_count(const cpdlc_msg_t *msg);
+CPDLC_API const char *cpdlc_msg_option_get(const cpdlc_msg_t *msg, unsigned nr);
+
+CPDLC_API void cpdlc_msg_set_imi(cpdlc_msg_t *msg, cpdlc_imi_t imi);
+CPDLC_API cpdlc_imi_t cpdlc_msg_get_imi(const cpdlc_msg_t *msg);
 
 CPDLC_API unsigned cpdlc_msg_encode(const cpdlc_msg_t *msg, char *buf,
     unsigned cap);
