@@ -33,10 +33,8 @@ CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)
 LIBS += -fPIC -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils $(LWS_LIBS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --libs) \
-	-Wl,-Bstatic \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config \
-	--static --libs gnutls libidn2) \
-	-Wl,-Bdynamic \
+	--libs gnutls libidn2) \
 	$(LIBCRYPT) -lpthread -lm
 
 DAEMON_OBJS=\
