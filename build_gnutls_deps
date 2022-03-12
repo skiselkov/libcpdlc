@@ -36,7 +36,7 @@ Linux)
 	    build_dep "win-64" "$NETTLE_CONFOPTS --host=x86_64-w64-mingw32" \
 	    "$NETTLE" "nettle" "$NETTLE_PRODUCT"
 
-	NETTLE_PKG_CONFIG_PATH="nettle-linux-64/lib64/pkgconfig"
+	NETTLE_PKG_CONFIG_PATH="nettle-linux-64/lib64/pkgconfig:nettle-linux-64/lib/pkgconfig"
 	HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags hogweed)" \
 	HOGWEED_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs hogweed)" \
 	NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
@@ -65,47 +65,3 @@ Darwin)
 	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT"
 	;;
 esac
-
-
-exit
-
-if [[ "$do_clean" = 0 ]]; then
-	[ -d "${NETTLE}" ] || tar xJf "${NETTLE}.tar.xz"
-	if ! [ -f "${NETTLE}/install_tgt/lib/pkgconfig/nettle.pc" ] &&
-	    ! [ -f "${NETTLE}/install_tgt/lib64/pkgconfig/nettle.pc" ]; then
-	    (
-		cd "${NETTLE}" && \
-		LDFLAGS="$STATIC_LIB_OPTS" \
-		./configure  \
-		    --prefix="$(pwd)/install_tgt" $HOST_SUFFIX && \
-		make -j ${NCPUS} && make install
-	    ) || exit 1
-	fi
-else
-	echo rm -rf "${NETTLE}"
-	rm -rf "${NETTLE}"
-fi
-
-if [[ "$do_clean" == 0 ]]; then
-	[ -d "${GNUTLS}" ] || tar xJf "${GNUTLS}.tar.xz"
-	if ! [ -f "${GNUTLS}/install_tgt/lib/pkgconfig/gnutls.pc" ]; then
-	    (
-		NETTLE_PKG_CONFIG_PATH="../${NETTLE}/install_tgt/lib/pkgconfig:../${NETTLE}/install_tgt/lib64/pkgconfig"
-		cd "${GNUTLS}" && \
-		LIBS="$STATC_LIB_OPTS" \
-		HOGWEED_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags hogweed)" \
-		HOGWEED_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs hogweed)" \
-		NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
-		NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
-		./configure --prefix="$(pwd)/install_tgt" \
-		    --enable-static --disable-shared \
-		    --with-included-libtasn1 --with-pic \
-		    --with-included-unistring --without-p11-kit --disable-doc \
-		    --disable-tools --disable-cxx --disable-tests $HOST_SUFFIX && \
-		make -j ${NCPUS} && make install
-	    ) || exit 1
-	fi
-else
-	echo rm -rf "${GNUTLS}"
-	rm -rf "${GNUTLS}"
-fi
