@@ -1411,10 +1411,21 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
 	unsigned l;
 	char *buf;
 	cpdlc_msg_t *msg;
+	bool is_end_svc = false;
 
 	ASSERT(conn != NULL);
 	ASSERT(msg_in != NULL);
 	msg = cpdlc_msg_copy(msg_in);
+
+	for (unsigned i = 0, n = msg->num_segs; i < n; i++) {
+		ASSERT(msg->segs[i].info != NULL);
+		if (!msg->segs[i].info->is_dl &&
+		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
+			is_end_svc = true;
+		}
+	}
+	if (is_end_svc)
+		cpdlc_msg_set_imi(msg, CPDLC_IMI_DISC_REQUEST);
 
 	msg->fmt_plain = conn->fmt_plain;
 	msg->fmt_arinc622 = conn->fmt_arinc622;
@@ -1425,18 +1436,13 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
 	conn_log_buf(conn->addr_str, buf, false);
 	conn_send_buf(conn, buf, l);
 	free(buf);
-
 	/*
 	 * Check if the message being sent is a service termination.
 	 * In that case, terminate the connection's logon status.
 	 */
-	for (unsigned i = 0, n = msg->num_segs; i < n; i++) {
-		ASSERT(msg->segs[i].info != NULL);
-		if (!msg->segs[i].info->is_dl &&
-		    msg->segs[i].info->msg_type == CPDLC_UM161_END_SVC) {
-			conn_reset_logon(conn);
-			conn->logoff_time = time(NULL);
-		}
+	if (is_end_svc) {
+		conn_reset_logon(conn);
+		conn->logoff_time = time(NULL);
 	}
 	cpdlc_msg_free(msg);
 }
