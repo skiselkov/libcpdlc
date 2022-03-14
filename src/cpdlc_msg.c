@@ -1211,6 +1211,18 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%c",
 		    readable ? "" : " ", arg->atis_code);
 		break;
+	case CPDLC_ARG_LEGTYPE:
+		if (readable) {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%.*f %s",
+			    fmod(arg->legtype.param, 1) < 0.01 ? 0 : 1,
+			    arg->legtype.param,
+			    arg->legtype.is_time ? "MINUTES" : "NM");
+		} else {
+			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%.1f%s",
+			    arg->legtype.param,
+			    arg->legtype.is_time ? "M" : "");
+		}
+		break;
 	}
 }
 
@@ -2816,6 +2828,16 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 				return (false);
 			}
 			break;
+		case CPDLC_ARG_LEGTYPE:
+			arg_end = find_arg_end(start, end);
+			if (sscanf(start, "%lf", &arg->legtype.param) != 1 ||
+			    arg->legtype.param <= 0.09 ||
+			    arg->legtype.param >= 99.91) {
+				MALFORMED_MSG("malformed leg type param");
+				return (false);
+			}
+			arg->legtype.is_time = (arg_end[-1] == 'M');
+			break;
 		}
 		SKIP_NONSPACE(start, end);
 		SKIP_SPACE(start, end);
@@ -3398,6 +3420,9 @@ cpdlc_msg_seg_set_arg(cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 	case CPDLC_ARG_ATIS_CODE:
 		arg->atis_code = *(char *)arg_val1;
 		break;
+	case CPDLC_ARG_LEGTYPE:
+		arg->legtype = *(cpdlc_legtype_t *)arg_val1;
+		break;
 	default:
 		CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) "
 		    "contains invalid argument %d type %x", msg, seg_nr,
@@ -3541,6 +3566,10 @@ cpdlc_msg_seg_get_arg(const cpdlc_msg_t *msg, unsigned seg_nr, unsigned arg_nr,
 		CPDLC_ASSERT(arg_val1 != NULL);
 		*(char *)arg_val1 = arg->version;
 		return (sizeof (arg->atis_code));
+	case CPDLC_ARG_LEGTYPE:
+		CPDLC_ASSERT(arg_val1 != NULL);
+		*(cpdlc_legtype_t *)arg_val1 = arg->legtype;
+		return (sizeof (arg->legtype));
 	}
 	CPDLC_VERIFY_MSG(0, "Message %p segment %d (%d/%d/%d) contains "
 	    "invalid argument %d type %x", msg, seg_nr, info->is_dl,

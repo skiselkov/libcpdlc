@@ -144,6 +144,8 @@ arg_type2asn_sz(cpdlc_arg_type_t type)
 		return (sizeof (Versionnumber_t));
 	case CPDLC_ARG_ATIS_CODE:
 		return (sizeof (Atiscode_t));
+	case CPDLC_ARG_LEGTYPE:
+		return (sizeof (Legtype_t));
 	}
 	CPDLC_VERIFY(0);
 }
@@ -935,7 +937,24 @@ static void
 encode_atis_code_asn(char code_in, Atiscode_t *code_out)
 {
 	char str[2] = { code_in };
+	CPDLC_ASSERT(code_out != NULL);
 	ia5strlcpy_out(code_out, str);
+}
+
+static void
+encode_legtype_asn(cpdlc_legtype_t leg_in, Legtype_t *leg_out)
+{
+	CPDLC_ASSERT(leg_out != NULL);
+	if (leg_in.is_time) {
+		leg_out->present = Legtype_PR_legtime;
+		leg_out->choice.legtime = round(leg_in.param * 10);
+	} else {
+		leg_out->present = Legtype_PR_legdistance;
+		leg_out->choice.legdistance.present =
+		    Legdistance_PR_legdistanceenglish;
+		leg_out->choice.legdistance.choice.legdistanceenglish =
+		    round(leg_in.param * 10);
+	}
 }
 
 static void
@@ -1050,6 +1069,10 @@ msg_encode_seg_common(const cpdlc_msg_seg_t *seg, void *el)
 			break;
 		case CPDLC_ARG_ATIS_CODE:
 			encode_atis_code_asn(seg->args[i].atis_code,
+			    get_asn_arg_ptr_wr(seg->info, i, el));
+			break;
+		case CPDLC_ARG_LEGTYPE:
+			encode_legtype_asn(seg->args[i].legtype,
 			    get_asn_arg_ptr_wr(seg->info, i, el));
 			break;
 		}
@@ -2239,6 +2262,23 @@ decode_atis_code_asn(const Atiscode_t *code)
 	return (MIN(MAX(str[0], 'A'), 'Z'));
 }
 
+static cpdlc_legtype_t
+decode_legtype_asn(const Legtype_t *leg)
+{
+	CPDLC_ASSERT(leg != NULL);
+	switch (leg->present) {
+	default:
+		return ((cpdlc_legtype_t){});
+	case Legtype_PR_legdistance:
+		return ((cpdlc_legtype_t){
+		    false,
+		    leg->choice.legdistance.choice.legdistanceenglish / 10.0
+		});
+	case Legtype_PR_legtime:
+		return ((cpdlc_legtype_t){ true, leg->choice.legtime / 10.0 });
+	}
+}
+
 static bool
 decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
     const void *elem)
@@ -2361,6 +2401,10 @@ decode_msg_elem(cpdlc_msg_seg_t *seg, const cpdlc_msg_info_t *info,
 			break;
 		case CPDLC_ARG_ATIS_CODE:
 			seg->args[i].atis_code = decode_atis_code_asn(
+			    get_asn_arg_ptr(info, i, elem));
+			break;
+		case CPDLC_ARG_LEGTYPE:
+			seg->args[i].legtype = decode_legtype_asn(
 			    get_asn_arg_ptr(info, i, elem));
 			break;
 		}

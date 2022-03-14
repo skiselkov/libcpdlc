@@ -370,7 +370,8 @@ typedef enum {
 	CPDLC_ARG_TP4TABLE,
 	CPDLC_ARG_ERRINFO,
 	CPDLC_ARG_VERSION,
-	CPDLC_ARG_ATIS_CODE
+	CPDLC_ARG_ATIS_CODE,
+	CPDLC_ARG_LEGTYPE
 } cpdlc_arg_type_t;
 
 typedef enum {
@@ -809,6 +810,11 @@ typedef enum {
 	CPDLC_ERRINFO_INVAL_DATA =		10
 } cpdlc_errinfo_t;
 
+typedef struct {
+	bool			is_time;
+	double			param;	/* minutes, or nm */
+} cpdlc_legtype_t;
+
 typedef union {
 	cpdlc_alt_t		alt;
 	cpdlc_spd_t		spd;
@@ -837,6 +843,7 @@ typedef union {
 	cpdlc_errinfo_t		errinfo;
 	unsigned		version;
 	char			atis_code;
+	cpdlc_legtype_t		legtype;
 } cpdlc_arg_t;
 
 enum {

@@ -84,6 +84,16 @@
 	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg4) } \
 	}
 
+#define	ASN_UPLINK_INFO_5(typename, arg1, arg2, arg3, arg4, arg5) \
+	.asn_elem_id = ATCuplinkmsgelementid_PR_uM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg1) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg2) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg3) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg4) }, \
+	    { offsetof(ATCuplinkmsgelementid_t, choice.uM ## typename.arg5) } \
+	}
+
 #define	ASN_DOWNLINK_INFO_01(typename) \
 	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
 	.asn_arg_info = { \
@@ -117,6 +127,19 @@
 		choice.dM ## typename.arg2) }, \
 	    { offsetof(ATCdownlinkmsgelementid_t, \
 		choice.dM ## typename.arg3) } \
+	}
+
+#define	ASN_DOWNLINK_INFO_4(typename, arg1, arg2, arg3, arg4) \
+	.asn_elem_id = ATCdownlinkmsgelementid_PR_dM ## typename, \
+	.asn_arg_info = { \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg1) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg2) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg3) }, \
+	    { offsetof(ATCdownlinkmsgelementid_t, \
+		choice.dM ## typename.arg4) } \
 	}
 
 static const cpdlc_msg_info_t ul_infos[] = {
@@ -937,9 +960,10 @@ static const cpdlc_msg_info_t ul_infos[] = {
 	.num_args = 5,
 	.args = {
 	    CPDLC_ARG_POSITION, CPDLC_ARG_ALTITUDE, CPDLC_ARG_DEGREES,
-	    CPDLC_ARG_DIRECTION, CPDLC_ARG_TIME_DUR
+	    CPDLC_ARG_DIRECTION, CPDLC_ARG_LEGTYPE
 	},
-	// TODO
+	ASN_UPLINK_INFO_5(91Holdclearance, position, altitude, degrees,
+	    direction, legtype),
 	.resp = CPDLC_RESP_WU,
 	.timeout = SHORT_TIMEOUT
     },
@@ -2721,7 +2745,8 @@ static const cpdlc_msg_info_t dl_infos[] = {
 	    CPDLC_ARG_TIME, CPDLC_ARG_DISTANCE, CPDLC_ARG_TOFROM,
 	    CPDLC_ARG_POSITION
 	},
-	// TODO
+	ASN_DOWNLINK_INFO_4(78TimeDistanceTofromPosition, time,
+	    distance, tofrom, position),
 	.resp = CPDLC_RESP_N
     },
     {
