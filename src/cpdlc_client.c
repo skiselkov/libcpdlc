@@ -1819,7 +1819,8 @@ cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 		mutex_exit(&cl->lock);
 		return (CPDLC_INVALID_MSG_TOKEN);
 	}
-	cpdlc_msg_set_to(msg_copy, cl->logon.to);
+	if (cl->logon.to != NULL)
+		cpdlc_msg_set_to(msg_copy, cl->logon.to);
 	tok = send_msg_impl(cl, msg_copy, true);
 	cpdlc_msg_free(msg_copy);
 	mutex_exit(&cl->lock);
