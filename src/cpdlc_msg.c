@@ -2926,7 +2926,7 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 			msg->fmt_plain = true;
 		} else if (strncmp(in_buf, "ARINC622=", 9) == 0) {
 			if (!msg->fmt_plain && !cpdlc_msg_decode_arinc622(msg,
-			    start, sep, is_dl, reason, reason_cap)) {
+			    &in_buf[9], sep, is_dl, reason, reason_cap)) {
 				goto errout;
 			}
 			msg->fmt_arinc622 = true;
