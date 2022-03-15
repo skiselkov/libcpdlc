@@ -31,73 +31,13 @@
 #include <string.h>
 #include <time.h>
 
-#include "asn1/ATCdownlinkmessage.h"
-#include "asn1/ATCuplinkmessage.h"
-
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
-#include "cpdlc_crc.h"
 #include "cpdlc_hexcode.h"
 #include "cpdlc_msg.h"
 #include "cpdlc_msg_arinc622.h"
+#include "cpdlc_msg_impl.h"
 #include "cpdlc_string.h"
-
-#define	APPEND_SNPRINTF(__total_bytes, __bufptr, __bufcap, ...) \
-	do { \
-		int __needed = snprintf((__bufptr), (__bufcap), __VA_ARGS__); \
-		int __consumed = MIN(__needed, (int)__bufcap); \
-		(__bufptr) += __consumed; \
-		(__bufcap) -= __consumed; \
-		(__total_bytes) += __needed; \
-	} while (0)
-
-/* IMPORTANT: Bounds check must come first! */
-#define	SKIP_SPACE(__start, __end) \
-	do { \
-		while ((__start) < (__end) && isspace((__start)[0])) \
-			(__start)++; \
-	} while (0)
-
-/* IMPORTANT: Bounds check must come first! */
-#define	SKIP_NONSPACE(__start, __end) \
-	do { \
-		while ((__start) < (__end) && !isspace((__start)[0])) \
-			(__start)++; \
-	} while (0)
-
-#define	MALFORMED_MSG(...) \
-	do { \
-		set_error(reason, reason_cap, "Malformed message: " \
-		    __VA_ARGS__); \
-	} while (0)
-
-static inline bool
-is_valid_crs(unsigned deg)
-{
-	return (deg >= 1 && deg <= 360);
-}
-
-static inline bool
-is_valid_lat_lon(cpdlc_lat_lon_t ll)
-{
-	return (ll.lat >= -90 && ll.lat <= 90 &&
-	    ll.lon >= -180 && ll.lon <= 180);
-}
-
-static void
-set_error(char *reason, unsigned cap, const char *fmt, ...)
-{
-	va_list ap;
-
-	CPDLC_ASSERT(fmt != NULL);
-
-	if (cap == 0)
-		return;
-
-	va_start(ap, fmt);
-	vsnprintf(reason, cap, fmt, ap);
-	va_end(ap);
-}
 
 static const cpdlc_msg_info_t *
 msg_infos_lookup(bool is_dl, int msg_type, char msg_subtype)
@@ -2856,93 +2796,6 @@ end:
 	return (true);
 }
 
-static bool
-msg_decode_arinc622(bool is_dl, cpdlc_msg_t *msg, const char *start,
-    const char *end, char *reason, unsigned reason_cap)
-{
-	uint8_t *rawbuf;
-	unsigned binsz, rawsz;
-	asn_TYPE_descriptor_t *td;
-	asn_dec_rval_t rval;
-	void *struct_ptr = NULL;
-	char imi[4];
-	uint16_t crc;
-
-	CPDLC_ASSERT(msg != NULL);
-	CPDLC_ASSERT(start != NULL);
-	CPDLC_ASSERT(end != NULL);
-	CPDLC_ASSERT(reason != NULL || reason_cap == 0);
-
-	if (end - start <= CPDLC_DATA_OFF + CPDLC_CRC_LEN) {
-		MALFORMED_MSG("malformed ARINC 622 data: message too short");
-		return (false);
-	}
-	cpdlc_strlcpy(imi, start, sizeof (imi));
-	if (strcmp(imi, "CR1") == 0) {
-		msg->arinc622.imi = CPDLC_IMI_CONN_REQUEST;
-	} else if (strcmp(imi, "CC1") == 0) {
-		msg->arinc622.imi = CPDLC_IMI_CONN_CONFIRM;
-	} else if (strcmp(imi, "AT1") == 0) {
-		msg->arinc622.imi = CPDLC_IMI_DATA;
-	} else if (strcmp(imi, "DR1") == 0) {
-		msg->arinc622.imi = CPDLC_IMI_DISC_REQUEST;
-	} else {
-		MALFORMED_MSG("malformed ARINC 622 data: unknown IMI \"%s\"",
-		    imi);
-		return (false);
-	}
-	cpdlc_strlcpy(msg->arinc622.acf_id, &start[CPDLC_IMI_LEN],
-	    sizeof (msg->arinc622.acf_id));
-	start += CPDLC_DATA_OFF;
-	if ((end - start) % 2 != 0) {
-		MALFORMED_MSG("malformed ARINC 622 data: expected even number "
-		    "of hex chars");
-		return (false);
-	}
-	binsz = (end - start) / 2;
-	rawsz = CPDLC_IMI_LEN + CPDLC_CS_LEN + binsz;
-	rawbuf = safe_malloc(rawsz);
-	memcpy(rawbuf, imi, CPDLC_IMI_LEN);
-	memcpy(&rawbuf[CPDLC_IMI_LEN], msg->arinc622.acf_id, CPDLC_CS_LEN);
-	if (!cpdlc_hex_dec(start, end - start, &rawbuf[CPDLC_DATA_OFF],
-	    binsz)) {
-		MALFORMED_MSG("malformed ARINC 622 data: invalid hex chars "
-		    "found");
-		goto errout;
-	}
-	crc = cpdlc_crc16(rawbuf, rawsz - CPDLC_CRC_LEN);
-	if (((crc >> 8) & 0xff) != rawbuf[rawsz - 2] ||
-	    (crc & 0xff) != rawbuf[rawsz - 1]) {
-		MALFORMED_MSG("malformed ARINC 622 data: CRC mismatch");
-		goto errout;
-	}
-	td = (is_dl ? &asn_DEF_ATCdownlinkmessage : &asn_DEF_ATCuplinkmessage);
-	rval = uper_decode_complete(0, td, &struct_ptr, &rawbuf[CPDLC_DATA_OFF],
-	    binsz - CPDLC_CRC_LEN);
-	if (rval.code != RC_OK) {
-		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: error %d",
-		    rval.code);
-		goto errout;
-	}
-	if (rval.consumed < binsz - CPDLC_CRC_LEN) {
-		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: "
-		    "extraneous data at end of ASN.1 input");
-		goto errout;
-	}
-	if (!cpdlc_msg_decode_arinc622(msg, struct_ptr, is_dl)) {
-		MALFORMED_MSG("error decoding ARINC 622 ASN.1 data: "
-		    "error interpreting parsed data structures");
-		ASN_STRUCT_FREE(*td, struct_ptr);
-		goto errout;
-	}
-	td->free_struct(td, struct_ptr, 0);
-	free(rawbuf);
-	return (true);
-errout:
-	free(rawbuf);
-	return (false);
-}
-
 bool
 cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
     int *consumed, char *reason, unsigned reason_cap)
@@ -3072,8 +2925,8 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 			}
 			msg->fmt_plain = true;
 		} else if (strncmp(in_buf, "ARINC622=", 9) == 0) {
-			if (!msg->fmt_plain && !msg_decode_arinc622(is_dl,
-			    msg, &in_buf[9], sep, reason, reason_cap)) {
+			if (!msg->fmt_plain && !cpdlc_msg_decode_arinc622(msg,
+			    start, sep, is_dl, reason, reason_cap)) {
 				goto errout;
 			}
 			msg->fmt_arinc622 = true;

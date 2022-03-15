@@ -40,8 +40,8 @@ enum {
 
 bool cpdlc_msg_encode_arinc622(const cpdlc_msg_t *msg, unsigned *n_bytes_p,
     char **buf_p, unsigned *cap_p);
-bool cpdlc_msg_decode_arinc622(cpdlc_msg_t *msg, const void *struct_ptr,
-    bool is_dl);
+bool cpdlc_msg_decode_arinc622(cpdlc_msg_t *msg, const char *start,
+    const char *end, bool is_dl, char *reason, unsigned reason_cap);
 
 static inline void
 cpdlc_padd_callsign(const char *cs_in, char cs_out[8])
