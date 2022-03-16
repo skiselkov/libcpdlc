@@ -31,7 +31,7 @@ cpdlc_hex_enc(const void *in_raw, size_t len, void *out_enc, size_t out_cap)
 	/* guarantee zero-termination of output */
 	*out = 0;
 	for (size_t i = 0, j = 0; i < len && j + 3 <= out_cap; i++, j += 2)
-		sprintf(&out[j], "%02x", (unsigned)in_8b[i]);
+		sprintf(&out[j], "%02X", (unsigned)in_8b[i]);
 }
 
 static inline int
