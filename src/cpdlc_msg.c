@@ -1050,7 +1050,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 				    textbuf, sizeof (textbuf));
 			}
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s:%s",
-			    arg->icao_name.is_name ? "NAME:" : "ID:", textbuf);
+			    arg->icao_name.is_name ? "NAME" : "ID", textbuf);
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %d",
 			    arg->icao_name.func);
 		}
