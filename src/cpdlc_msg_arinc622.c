@@ -458,7 +458,7 @@ encode_squawk_asn(unsigned bcn, Beaconcode_t *bcn_out)
 
 	for (int i = 0; i < 4; i++) {
 		Beaconcodeoctaldigit_t *digit = safe_calloc(1, sizeof (*digit));
-		*digit = ((bcn >> (9 - i * 3)) & 7) + '0';
+		*digit = ((bcn >> (9 - i * 3)) & 7);
 		ASN_SEQUENCE_ADD(&bcn_out->list, digit);
 	}
 }
