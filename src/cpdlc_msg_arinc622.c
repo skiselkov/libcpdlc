@@ -477,10 +477,13 @@ encode_icao_name_asn(const cpdlc_icao_name_t *icao_in, ICAOunitname_t *icao_out)
 	CPDLC_ASSERT(icao_in != NULL);
 	CPDLC_ASSERT(icao_out != NULL);
 	if (icao_in->is_name) {
+		char shortened[19];
+
 		icao_out->iCAOfacilityidentification.present =
 		    ICAOfacilityidentification_PR_iCAOfacilityname;
+		cpdlc_strlcpy(shortened, icao_in->name, sizeof (shortened));
 		ia5strlcpy_out(&icao_out->iCAOfacilityidentification.choice.
-		    iCAOfacilityname, icao_in->name);
+		    iCAOfacilityname, shortened);
 	} else {
 		icao_out->iCAOfacilityidentification.present =
 		    ICAOfacilityidentification_PR_iCAOfacilitydesignation;
