@@ -1356,6 +1356,8 @@ cpdlc_msg_set_imi(cpdlc_msg_t *msg, cpdlc_imi_t imi)
 {
 	CPDLC_ASSERT(msg != NULL);
 	msg->arinc622.imi = imi;
+	if (imi == CPDLC_IMI_DISC_REQUEST)
+		msg->is_logoff = true;
 }
 
 cpdlc_imi_t

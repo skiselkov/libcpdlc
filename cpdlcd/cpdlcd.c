@@ -1424,8 +1424,6 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
 			is_end_svc = true;
 		}
 	}
-	if (is_end_svc)
-		cpdlc_msg_set_imi(msg, CPDLC_IMI_DISC_REQUEST);
 
 	msg->fmt_plain = conn->fmt_plain;
 	msg->fmt_arinc622 = conn->fmt_arinc622;
@@ -1726,7 +1724,8 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	mutex_enter(&conn->lock);
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
+		if (!msg->is_logoff)
+			send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
 		cpdlc_msg_free(msg);
 		return;
 	}

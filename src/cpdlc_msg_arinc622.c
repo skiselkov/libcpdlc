@@ -2548,6 +2548,7 @@ cpdlc_msg_decode_arinc622(cpdlc_msg_t *msg, const char *start,
 		msg->arinc622.imi = CPDLC_IMI_DATA;
 	} else if (strcmp(imi, "DR1") == 0) {
 		msg->arinc622.imi = CPDLC_IMI_DISC_REQUEST;
+		msg->is_logoff = true;
 	} else {
 		MALFORMED_MSG("malformed ARINC 622 data: unknown IMI \"%s\"",
 		    imi);
