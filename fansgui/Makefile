@@ -51,7 +51,7 @@ else
 	else
 		# iphlpapi is needed for ZeroMQ
 		PLATFORM_LIBS = -liphlpapi -lopengl32 -lcrypt32 -mwindows \
-		    -fstack-protector
+		    -fstack-protector -static-libgcc
 		EXE_RESOURCES = fansgui.res
 	endif
 endif
@@ -154,7 +154,6 @@ else
 	strip $(OUTDIR)/$(OUTBIN)
 endif
 ifeq ($(PLATFORM_NAME),win-64)
-	cp $(wildcard ../gnutls-win64/bin/*.dll) $(OUTDIR)
 	rm -f $(OUTDIR).zip
 	zip -r $(OUTDIR).zip $(OUTDIR)
 endif
