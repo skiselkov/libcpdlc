@@ -50,10 +50,14 @@ else
 		    -framework Security
 	else
 		# iphlpapi is needed for ZeroMQ
-		PLATFORM_LIBS = -liphlpapi -lopengl32 -mwindows \
+		PLATFORM_LIBS = -liphlpapi -lopengl32 -lcrypt32 -mwindows \
 		    -fstack-protector
 		EXE_RESOURCES = fansgui.res
 	endif
+endif
+
+ifeq ($(PLATFORM_NAME),win-64)
+	CFLAGS += -DLIBCPDLC_GNUTLS_FREE_WORKAROUND
 endif
 
 BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
@@ -80,8 +84,11 @@ LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
     $(PKG_CONFIG_DEPS_FLAGS) --libs) \
 
 ifeq ($(PLATFORM_NAME),win-64)
-	CFLAGS += -I../gnutls-win64/lib $(MATH_DEFINES)
-	LIBS += ../gnutls-win64/lib/libgnutls.dll.a
+	GNUTLS=../gnutls-win-64/lib/pkgconfig:../nettle-win-64/lib/pkgconfig
+	CFLAGS += $(shell PKG_CONFIG_PATH=$(GNUTLS) pkg-config --cflags \
+	    gnutls hogweed)
+	LIBS += $(shell PKG_CONFIG_PATH=$(GNUTLS) pkg-config --libs \
+	    gnutls hogweed)
 else
 	ifeq ($(LWS),yes)
 		CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)

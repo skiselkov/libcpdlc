@@ -58,7 +58,7 @@ execute_process(COMMAND ${LIBACFUTILS}/pkg-config-deps ${PLAT_NAME} ${PKG_CONFIG
     OUTPUT_VARIABLE ACFUTILS_LIBS)
 string(REGEX REPLACE "\n$" "" ACFUTILS_LIBS "${ACFUTILS_LIBS}")
 
-set(GNUTLS "${CMAKE_SOURCE_DIR}/../../gnutls-3.6.11.1/install_tgt")
+set(GNUTLS "${CMAKE_SOURCE_DIR}/../../gnutls-${PLAT_NAME}")
 if(UNIX)
 	execute_process(COMMAND PKG_CONFIG_PATH="${GNUTLS}/lib/pkgconfig" pkg-config --cflags --static gnutls
 	    OUTPUT_VARIABLE GNUTLS_CFLAGS)
