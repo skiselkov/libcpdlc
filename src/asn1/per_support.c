@@ -302,6 +302,7 @@ int uper_put_constrained_whole_number_s(asn_per_outp_t *po, long v, int nbits) {
 	unsigned long uvalue1 = ULONG_MAX;
 	         long svalue  = uvalue1;
 	unsigned long uvalue2 = svalue;
+	(void)uvalue2;
 	assert(uvalue1 == uvalue2);
 	return uper_put_constrained_whole_number_u(po, v, nbits);
 }
