@@ -335,7 +335,7 @@ static struct lws_protocols proto_list_lws[] =
 };
 
 static void send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    cpdlc_errinfo_t errinfo);
+    cpdlc_errinfo_t errinfo, const char *reason);
 static void send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
     cpdlc_errinfo_t errinfo);
 static void send_svc_unavail_msg(conn_t *conn, unsigned orig_min);
@@ -1265,12 +1265,12 @@ process_logon_msg(conn_t *conn, const cpdlc_msg_t *msg)
 	if (conn->logon_status == LOGON_STARTED ||
 	    conn->logon_status == LOGON_COMPLETING) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
+		send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA, NULL);
 		return;
 	}
 	if (cpdlc_msg_get_from(msg) == NULL) {
 		mutex_exit(&conn->lock);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA, NULL);
 		return;
 	}
 	/* Clear any previous logon on non-ATC connections */
@@ -1459,11 +1459,12 @@ conn_send_msg(conn_t *conn, const cpdlc_msg_t *msg_in)
  */
 static void
 send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
-    cpdlc_errinfo_t errinfo)
+    cpdlc_errinfo_t errinfo, const char *reason)
 {
 	cpdlc_msg_t *msg;
 
 	ASSERT(conn != NULL);
+	/* reason can be NULL */
 
 	if (orig_msg != NULL) {
 		msg = cpdlc_msg_alloc(CPDLC_PKT_CPDLC);
@@ -1480,6 +1481,17 @@ send_error_msg(conn_t *conn, const cpdlc_msg_t *orig_msg,
 		cpdlc_msg_add_seg(msg, false, CPDLC_UM159_ERROR_description, 0);
 	}
 	cpdlc_msg_seg_set_arg(msg, 0, 0, &errinfo, NULL);
+
+	if (reason != NULL) {
+		if (orig_msg != NULL && cpdlc_msg_get_dl(orig_msg)) {
+			cpdlc_msg_add_seg(msg, false,
+			    CPDLC_UM169_FREETEXT_NORMAL_text, 0);
+		} else {
+			cpdlc_msg_add_seg(msg, true,
+			    CPDLC_DM67_FREETEXT_NORMAL_text, 0);
+		}
+		cpdlc_msg_seg_set_arg(msg, 1, 0, reason, NULL);
+	}
 	cpdlc_msg_set_to(msg, conn->logon_from);
 
 	conn_send_msg(conn, msg);
@@ -1505,7 +1517,7 @@ send_error_msg_to(const char *to, const cpdlc_msg_t *orig_msg,
 
 			mv_next = list_next(l, mv);
 			ASSERT(conn != NULL);
-			send_error_msg(conn, orig_msg, errinfo);
+			send_error_msg(conn, orig_msg, errinfo, NULL);
 		}
 	}
 	mutex_exit(&conns_by_from_lock);
@@ -1724,8 +1736,10 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	mutex_enter(&conn->lock);
 	if (conn->logon_status != LOGON_COMPLETE && !msg->is_logon) {
 		mutex_exit(&conn->lock);
-		if (!msg->is_logoff)
-			send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
+		if (!msg->is_logoff) {
+			send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR,
+			    NULL);
+		}
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1763,7 +1777,8 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		if (!conn->is_atc && strcmp(msg->to, conn->to) != 0 &&
 		    !msg_is_not_cda(msg)) {
 			conn_log_msg(conn->addr_str, msg, true);
-			send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA);
+			send_error_msg(conn, msg, CPDLC_ERRINFO_UNEXPCT_DATA,
+			    NULL);
 			cpdlc_msg_free(msg);
 			return;
 		}
@@ -1783,7 +1798,7 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 		 * otherwise have no default send target.
 		 */
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA);
+		send_error_msg(conn, msg, CPDLC_ERRINFO_INSUFF_DATA, NULL);
 		cpdlc_msg_free(msg);
 		return;
 	}
@@ -1797,14 +1812,15 @@ conn_process_msg(conn_t *conn, cpdlc_msg_t *msg)
 	 */
 	if (conn->is_atc && msg->segs[0].info->is_dl) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR, NULL);
 		cpdlc_msg_free(msg);
 		return;
 	}
 	if (conn->is_atc && strcmp(cpdlc_msg_get_from(msg), "AUTO") == 0 &&
 	    !msg_auto_assign_from(msg)) {
 		conn_log_msg(conn->addr_str, msg, true);
-		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR);
+		send_error_msg(conn, msg, CPDLC_ERRINFO_APP_ERROR,
+		    "REMOTE END NOT CONNECTED");
 		cpdlc_msg_free(msg);
 		return;
 	}
