@@ -1814,7 +1814,8 @@ cpdlc_client_send_msg(cpdlc_client_t *cl, const cpdlc_msg_t *msg)
 		return (CPDLC_INVALID_MSG_TOKEN);
 	}
 	msg_copy = cpdlc_msg_copy(msg);
-	cpdlc_msg_set_from(msg_copy, cl->logon.from);
+	if (strcmp(cpdlc_msg_get_from(msg_copy), "AUTO") != 0)
+		cpdlc_msg_set_from(msg_copy, cl->logon.from);
 	if (cl->logon_status != CPDLC_LOGON_COMPLETE) {
 		mutex_exit(&cl->lock);
 		return (CPDLC_INVALID_MSG_TOKEN);
