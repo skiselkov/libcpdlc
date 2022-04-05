@@ -1025,7 +1025,7 @@ cpdlc_encode_msg_arg(const cpdlc_arg_type_t arg_type, const cpdlc_arg_t *arg,
 		encode_proc(&arg->proc, readable, n_bytes_p, buf_p, cap_p);
 		break;
 	case CPDLC_ARG_SQUAWK:
-		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%04o",
+		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, "%s%04d",
 		    readable ? "" : " ", arg->squawk);
 		break;
 	case CPDLC_ARG_ICAO_ID:
@@ -1585,7 +1585,7 @@ is_valid_squawk(unsigned squawk)
 	char buf[8];
 	int l;
 
-	l = snprintf(buf, sizeof (buf), "%04o", squawk);
+	l = snprintf(buf, sizeof (buf), "%04d", squawk);
 	return (l == 4 && buf[0] >= '0' && buf[0] <= '7' &&
 	    buf[1] >= '0' && buf[1] <= '7' &&
 	    buf[2] >= '0' && buf[2] <= '7' &&
@@ -2584,7 +2584,7 @@ msg_decode_seg(cpdlc_msg_seg_t *seg, const char *start, const char *end,
 			}
 			break;
 		case CPDLC_ARG_SQUAWK:
-			if (sscanf(start, "%o", &arg->squawk) != 1 ||
+			if (sscanf(start, "%d", &arg->squawk) != 1 ||
 			    !is_valid_squawk(arg->squawk)) {
 				MALFORMED_MSG("invalid squawk code");
 				return (false);
