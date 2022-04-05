@@ -454,13 +454,21 @@ encode_proc_asn(const cpdlc_proc_t *proc_in, Procedurename_t *proc_out)
 static void
 encode_squawk_asn(unsigned bcn, Beaconcode_t *bcn_out)
 {
+	Beaconcodeoctaldigit_t *digits[4] = {
+	    safe_calloc(1, sizeof (**digits)),
+	    safe_calloc(1, sizeof (**digits)),
+	    safe_calloc(1, sizeof (**digits)),
+	    safe_calloc(1, sizeof (**digits))
+	};
+
 	CPDLC_ASSERT(bcn_out != NULL);
 
-	for (int i = 0; i < 4; i++) {
-		Beaconcodeoctaldigit_t *digit = safe_calloc(1, sizeof (*digit));
-		*digit = ((bcn >> (9 - i * 3)) & 7);
-		ASN_SEQUENCE_ADD(&bcn_out->list, digit);
-	}
+	*(digits[0]) = (bcn / 1000) % 10;
+	*(digits[1]) = (bcn / 100) % 10;
+	*(digits[2]) = (bcn / 10) % 10;
+	*(digits[3]) = (bcn / 1) % 10;
+	for (int i = 0; i < 4; i++)
+		ASN_SEQUENCE_ADD(&bcn_out->list, digits[i]);
 }
 
 static void
@@ -1574,7 +1582,7 @@ decode_squawk_asn(const Beaconcode_t *squawk)
 	CPDLC_ASSERT(squawk != NULL);
 	for (int i = 0; i < squawk->list.count; i++) {
 		if (squawk->list.array[i] != NULL)
-			code = (code << 3) | (*squawk->list.array[i]);
+			code = (code * 10) + (*squawk->list.array[i]);
 	}
 	return (code);
 }
