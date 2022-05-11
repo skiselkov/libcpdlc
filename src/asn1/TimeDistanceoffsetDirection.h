@@ -12,7 +12,7 @@
 #include <asn_application.h>
 
 /* Including external dependencies */
-#include "Time.h"
+#include "ASNTime.h"
 #include "Distanceoffset.h"
 #include "Direction.h"
 #include <constr_SEQUENCE.h>

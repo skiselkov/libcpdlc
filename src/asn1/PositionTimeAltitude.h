@@ -13,7 +13,7 @@
 
 /* Including external dependencies */
 #include "Position.h"
-#include "Time.h"
+#include "ASNTime.h"
 #include "Altitude.h"
 #include <constr_SEQUENCE.h>
 

@@ -12,7 +12,7 @@
 #include <asn_application.h>
 
 /* Including external dependencies */
-#include "Time.h"
+#include "ASNTime.h"
 #include "ICAOunitname.h"
 #include "Frequency.h"
 #include <constr_SEQUENCE.h>

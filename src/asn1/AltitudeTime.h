@@ -13,7 +13,7 @@
 
 /* Including external dependencies */
 #include "Altitude.h"
-#include "Time.h"
+#include "ASNTime.h"
 #include <constr_SEQUENCE.h>
 
 #ifdef __cplusplus

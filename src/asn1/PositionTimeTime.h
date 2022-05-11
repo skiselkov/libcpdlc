@@ -46,7 +46,7 @@ extern asn_TYPE_descriptor_t asn_DEF_PositionTimeTime;
 #endif
 
 /* Referred external types */
-#include "Time.h"
+#include "ASNTime.h"
 
 #endif	/* _PositionTimeTime_H_ */
 #include <asn_internal.h>

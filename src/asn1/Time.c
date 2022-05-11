@@ -5,7 +5,7 @@
  * 	`asn1c -gen-PER -fcompound-names`
  */
 
-#include "Time.h"
+#include "ASNTime.h"
 
 static asn_TYPE_member_t asn_MBR_Time_1[] = {
 	{ ATF_NOFLAGS, 0, offsetof(struct Time, timehours),
