@@ -928,7 +928,9 @@ asn_long2INTEGER(INTEGER_t *st, long value) {
 	 * offending bounds check.
 	 */
 #pragma GCC diagnostic push
+#if	defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic warning "-Warray-bounds=0"
+#endif
 	/* Copy the integer body */
 	for(pstart = p, bp = buf, pend1 += add; p != pend1; p += add)
 		*bp++ = *p;
