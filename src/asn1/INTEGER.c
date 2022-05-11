@@ -923,9 +923,16 @@ asn_long2INTEGER(INTEGER_t *st, long value) {
 		}
 		break;
 	}
+	/*
+	 * GCC 11 barfs on this if -Wall is specified. So suppress the
+	 * offending bounds check.
+	 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Warray-bounds=0"
 	/* Copy the integer body */
 	for(pstart = p, bp = buf, pend1 += add; p != pend1; p += add)
 		*bp++ = *p;
+#pragma GCC diagnostic pop
 
 	if(st->buf) FREEMEM(st->buf);
 	st->buf = buf;
