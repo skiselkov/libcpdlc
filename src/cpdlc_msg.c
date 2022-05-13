@@ -567,8 +567,10 @@ serialize_posreport_readable(const cpdlc_pos_rep_t *rep, char *buf,
 			APPEND_SNPRINTF(n, buf, cap, "AT %02d%02dZ ",
 			    rep->rpt_wpt_time.hrs, rep->rpt_wpt_time.mins);
 		}
-		if (!CPDLC_IS_NULL_ALT(rep->rpt_wpt_alt))
+		if (!CPDLC_IS_NULL_ALT(rep->rpt_wpt_alt)) {
 			encode_alt(&rep->rpt_wpt_alt, true, &n, &buf, &cap);
+			APPEND_SNPRINTF(n, buf, cap, " ");
+		}
 	}
 	if (rep->fix_next.set) {
 		serialize_pos(&rep->fix_next, true, posbuf, sizeof (posbuf));
