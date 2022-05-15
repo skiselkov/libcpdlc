@@ -42,7 +42,7 @@
 #define	IS_CLIMBING(vvi)	((vvi) >= VVI_CLB_DES_THRESH)
 #define	IS_DESCENDING(vvi)	((vvi) <= -VVI_CLB_DES_THRESH)
 #define	OFF_ROUTE_THRESH	1.0	/* NM */
-#define	BACK_ON_ROUTE_THRESH	0.5	/* NM */
+#define	BACK_ON_ROUTE_THRESH	0.9	/* NM */
 
 static float
 alt_get(const cpdlc_msg_seg_t *seg, unsigned arg_nr)
