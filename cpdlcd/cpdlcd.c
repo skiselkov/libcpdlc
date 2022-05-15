@@ -423,7 +423,7 @@ logoff_hook(const char *from, const conn_t *conn)
 static void
 wake_up_main_thread(void)
 {
-	uint8_t buf[1];
+	uint8_t buf[1] = {};
 	(void) write(poll_wakeup_pipe[1], buf, sizeof (buf));
 }
 
