@@ -66,37 +66,6 @@ verify_pos_rep(fans_t *box)
 	rep.time_cur_pos = fms_time2cpdlc_time(box->pos_rep.pos_time.set ?
 	    box->pos_rep.pos_time : box->pos_rep.pos_time_auto);
 	fans_get_cur_spd(box, &rep.spd);
-#if 0
-	if (box->pos_rep.clb_des.alt.alt != 0)
-		alt = box->pos_rep.clb_des;
-	else
-		alt = box->pos_rep.clb_des_auto;
-	if (alt.alt.alt != 0) {
-		float vvi = round(fans_get_cur_vvi(box) / 100) * 100;
-		const char *op;
-
-		if (vvi <= VVI_CLB_DES_THRESH && alt.alt.alt > cur_alt.alt.alt)
-			op = "CRZ CLB";
-		else if (alt.alt.alt > cur_alt.alt.alt)
-			op = "CLB";
-		else
-			op = "DES";
-		fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
-		APPEND_SNPRINTF(buf, l, " %s %s", op, alt_buf);
-	}
-
-	APPEND_SNPRINTF(buf, l, " %s", spd_buf);
-
-	if (fabs(box->pos_rep.off.nm) >= 0.1) {
-		APPEND_SNPRINTF(buf, l, " OFFSET %s%.1f",
-		    box->pos_rep.off.dir == CPDLC_DIR_LEFT ? "L" : "R",
-		    box->pos_rep.off.nm);
-	} else if (fabs(box->pos_rep.off_auto.nm) >= 0.1) {
-		APPEND_SNPRINTF(buf, l, " OFFSET %s%.1f",
-		    box->pos_rep.off_auto.dir == CPDLC_DIR_LEFT ? "L" : "R",
-		    box->pos_rep.off_auto.nm);
-	}
-#endif
 	vvi = fans_get_cur_vvi(box);
 	if (!isnan(vvi)) {
 		rep.vvi_set = true;
@@ -108,22 +77,6 @@ verify_pos_rep(fans_t *box)
 	    box->pos_rep.wpt_time : box->pos_rep.wpt_time_auto);
 	rep.rpt_wpt_alt = (!CPDLC_IS_NULL_ALT(box->pos_rep.wpt_alt) ?
 	    box->pos_rep.wpt_alt : box->pos_rep.wpt_alt_auto);
-#if 0
-		if (alt.alt.alt != 0) {
-			fans_print_alt(&alt, alt_buf, sizeof (alt_buf), true);
-			APPEND_SNPRINTF(buf, l, " %s", alt_buf);
-		}
-		if (box->pos_rep.wpt_spd.spd.spd != 0)
-			spd = box->pos_rep.wpt_spd;
-		else
-			spd = box->pos_rep.wpt_spd_auto;
-		if (spd.spd.spd != 0) {
-			fans_print_spd(&spd, spd_buf, sizeof (spd_buf), false,
-			    true);
-			APPEND_SNPRINTF(buf, l, " %s", spd_buf);
-		}
-	}
-#endif
 	rep.fix_next = (box->pos_rep.nxt_fix.set ? box->pos_rep.nxt_fix :
 	    box->pos_rep.nxt_fix_auto);
 	rep.time_fix_next = fms_time2cpdlc_time(box->pos_rep.nxt_fix_time.set ?
