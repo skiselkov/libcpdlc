@@ -393,12 +393,13 @@ fans_print_spd(const cpdlc_spd_t *spd, char *str, size_t cap, bool pretty,
 	if (spd->mach) {
 		if (pretty) {
 			return (snprintf(str, cap, ".%02d MACH",
-			    spd->spd / 10));
+			    (int)round(spd->spd / 10.0)));
 		} else if (units) {
 			return (snprintf(str, cap, "M.%02d",
-			    spd->spd / 10));
+			    (int)round(spd->spd / 10.0)));
 		} else {
-			return (snprintf(str, cap, ".%02d", spd->spd / 10));
+			return (snprintf(str, cap, ".%02d",
+			    (int)round(spd->spd / 10.0)));
 		}
 	} else {
 		if (pretty && units)

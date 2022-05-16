@@ -411,7 +411,7 @@ encode_alt(const cpdlc_alt_t *alt, bool readable, unsigned *n_bytes_p,
 				value = alt->alt;
 				units = " M";
 			} else {
-				value = alt->alt / 100;
+				value = round(alt->alt / 100.0);
 				units = "";
 			}
 		} else {
@@ -428,7 +428,8 @@ encode_alt(const cpdlc_alt_t *alt, bool readable, unsigned *n_bytes_p,
 	} else {
 		APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p, " %s%d%s",
 		    alt->fl ? "FL" : "", (alt->fl && !alt->met) ?
-		    alt->alt / 100 : alt->alt, alt->met ? "M" : "");
+		    (int)round(alt->alt / 100.0) : alt->alt,
+		    alt->met ? "M" : "");
 	}
 }
 
@@ -444,11 +445,12 @@ encode_spd(const cpdlc_spd_t *spd, bool readable, unsigned *n_bytes_p,
 	if (spd->mach) {
 		if (spd->spd < 1000) {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%sM.%02d", readable ? "" : " ", spd->spd / 10);
+			    "%sM.%02d", readable ? "" : " ",
+			    (int)round(spd->spd / 10.0));
 		} else {
 			APPEND_SNPRINTF(*n_bytes_p, *buf_p, *cap_p,
-			    "%sM%d.%02d", readable ? "" : " ",
-			    spd->spd / 1000, (spd->spd % 1000) / 10);
+			    "%sM%d.%02d", readable ? "" : " ", spd->spd / 1000,
+			    (int)round((spd->spd % 1000) / 10.0));
 		}
 	} else {
 		if (readable) {
