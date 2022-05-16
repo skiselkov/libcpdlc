@@ -1439,6 +1439,7 @@ fans_wptinfo2pos(const fms_wpt_info_t *info, cpdlc_pos_t *pos)
 
 	memset(pos, 0, sizeof (*pos));
 	if (info->wpt_name[0] != '\0') {
+		pos->set = true;
 		pos->type = CPDLC_POS_FIXNAME;
 		cpdlc_strlcpy(pos->fixname, info->wpt_name,
 		    sizeof (pos->fixname));
