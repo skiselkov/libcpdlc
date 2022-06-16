@@ -249,15 +249,13 @@ fans_logon_status_draw_cb(fans_t *box)
 	}
 	switch (st) {
 	case CPDLC_LOGON_NONE:
+	case CPDLC_LOGON_LINK_AVAIL:
 		if (box->logon_timed_out)
 			cpdlc_strlcpy(msg, "TIMED OUT", sizeof (msg));
 		else if (box->logon_rejected)
 			snprintf(msg, sizeof (msg), "REJECTED BY %s", box->to);
 		else
 			cpdlc_strlcpy(msg, "LOGON REQUIRED", sizeof (msg));
-		break;
-	case CPDLC_LOGON_LINK_AVAIL:
-		cpdlc_strlcpy(msg, "LOGON REQUIRED", sizeof (msg));
 		break;
 	case CPDLC_LOGON_CONNECTING_LINK:
 	case CPDLC_LOGON_HANDSHAKING_LINK:
