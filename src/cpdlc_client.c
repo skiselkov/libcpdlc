@@ -412,7 +412,7 @@ cpdlc_client_alloc(bool is_atc)
 	cl->keepalive_token = CPDLC_INVALID_MSG_TOKEN;
 
 #ifndef	CPDLC_CLIENT_LWS
-	cl->sock = -1;
+	cl->sock = CPDLC_INVALID_SOCKET;
 #endif
 
 	minilist_create(&cl->outmsgbufs.sending, sizeof (outmsgbuf_t),
@@ -671,7 +671,7 @@ reset_link_state(cpdlc_client_t *cl)
 #else
 		shutdown(cl->sock, SHUT_RDWR);
 #endif
-		cl->sock = -1;
+		cl->sock = CPDLC_INVALID_SOCKET;
 	}
 #endif	/* !CPDLC_CLIENT_LWS */
 
@@ -826,7 +826,7 @@ init_conn(cpdlc_client_t *cl)
 		return;
 	}
 	if (!cpdlc_set_fd_nonblock(sock)) {
-		close(sock);
+		cpdlc_close_socket(sock);
 		set_logon_failure(cl, "%s", cpdlc_get_last_socket_error());
 		init_conn(cl);
 		return;
@@ -837,7 +837,7 @@ init_conn(cpdlc_client_t *cl)
 	 */
 	if (connect(sock, ai->ai_addr, ai->ai_addrlen) < 0) {
 		if (!cpdlc_conn_in_prog()) {
-			close(sock);
+			cpdlc_close_socket(sock);
 			set_logon_failure(cl, "%s",
 			    cpdlc_get_last_socket_error());
 			init_conn(cl);
@@ -921,8 +921,8 @@ complete_conn(cpdlc_client_t *cl)
 	}
 errout:
 	cl->logon_status = CPDLC_LOGON_NONE;
-	close(cl->sock);
-	cl->sock = -1;
+	cpdlc_close_socket(cl->sock);
+	cl->sock = CPDLC_INVALID_SOCKET;
 	/* Try the next socket in line, if one is available */
 	init_conn(cl);
 }

@@ -85,6 +85,12 @@ cpdlc_get_last_socket_error(void)
 	return (buf);
 }
 
+static inline void
+cpdlc_close_socket(cpdlc_socktype_t s)
+{
+	closesocket(s);
+}
+
 #else	/* !defined(_WIN32) */
 
 static inline bool
@@ -115,6 +121,12 @@ static inline const char *
 cpdlc_get_last_socket_error(void)
 {
 	return (strerror(errno));
+}
+
+static inline void
+cpdlc_close_socket(cpdlc_socktype_t s)
+{
+	close(s);
 }
 
 #endif	/* !defined(_WIN32) */
