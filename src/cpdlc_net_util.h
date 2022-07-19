@@ -81,7 +81,10 @@ static inline const char *
 cpdlc_get_last_socket_error(void)
 {
 	static char buf[256];
-	snprintf(buf, sizeof (buf), "WSA error %d", WSAGetLastError());
+	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
+	    FORMAT_MESSAGE_IGNORE_INSERTS, NULL, WSAGetLastError(),
+	    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+	    buf, sizeof (buf), NULL);
 	return (buf);
 }
 
