@@ -51,6 +51,15 @@ Linux)
 	NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
 	    build_dep "win-64" "$GNUTLS_CONFOPTS --host=x86_64-w64-mingw32" \
 	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT"
+	# GnuTLS on MinGW builds screwed with its own internal inet_ntop and
+	# inet_pton built. We don't want that, as any application calling into
+	# the Winsock inet_ntop or inet_pton will clash. Disable the flag and
+	# rebuild.
+	if ! fgrep 'HAVE_DECL_INET_NTOP 1' gnutls-win-64/config.h > /dev/null;
+	    then
+		( cd gnutls-win-64 && patch -p1 < ../gnutls-inet.patch && \
+		    make -j8 && make install )
+	fi
 	;;
 Darwin)
 	build_dep "mac-64" "$NETTLE_CONFOPTS" "$NETTLE" "nettle" \

@@ -1,0 +1,16 @@
+--- gnutls-win-64-old/config.h	2022-07-20 23:28:54.069875464 +0200
++++ gnutls-win-64/config.h	2022-07-20 23:29:01.593936684 +0200
+@@ -590,11 +590,11 @@
+ 
+ /* Define to 1 if you have the declaration of `inet_ntop', and to 0 if you
+    don't. */
+-#define HAVE_DECL_INET_NTOP 0
++#define HAVE_DECL_INET_NTOP 1
+ 
+ /* Define to 1 if you have the declaration of `inet_pton', and to 0 if you
+    don't. */
+-#define HAVE_DECL_INET_PTON 0
++#define HAVE_DECL_INET_PTON 1
+ 
+ /* Define to 1 if you have the declaration of `localtime_r', and to 0 if you
+    don't. */
