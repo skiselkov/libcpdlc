@@ -1169,10 +1169,6 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 	}
 
 	switch (cl->logon_status) {
-	case CPDLC_LOGON_LINK_AVAIL:
-		/* Discard any incoming message traffic in this state. */
-		cpdlc_msg_free(msg);
-		break;
 	case CPDLC_LOGON_IN_PROG:
 		if (msg->is_logon) {
 			const char *logon_data = cpdlc_msg_get_logon_data(msg);
@@ -1202,8 +1198,9 @@ process_msg(cpdlc_client_t *cl, cpdlc_msg_t *msg)
 		}
 		break;
 	default:
-		CPDLC_VERIFY_MSG(0, "Invalid client state %x",
-		    cl->logon_status);
+		/* Discard any incoming message traffic in the other states. */
+		cpdlc_msg_free(msg);
+		break;
 	}
 
 	return (new_msgs);
