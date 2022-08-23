@@ -127,9 +127,7 @@ extern "C" {
 typedef void (*cpdlc_assfail_t)(const char *filename, int line,
     const char *msg, void *userinfo);
 
-extern cpdlc_assfail_t cpdlc_assfail;
-extern void *cpdlc_assfail_userinfo;
-
+void cpdlc_assfail_set(cpdlc_assfail_t cb, void *userinfo);
 void cpdlc_assfail_impl(const char *filename, int line,
     PRINTF_FORMAT(const char *fmt), ...) PRINTF_ATTR(3);
 

@@ -28,11 +28,21 @@
 
 #include "cpdlc_assert.h"
 
-cpdlc_assfail_t cpdlc_assfail = NULL;
-void *cpdlc_assfail_userinfo = NULL;
+static void assfail_default(const char *filename, int line,
+    const char *buf, void *userinfo);
+
+static cpdlc_assfail_t assfail = assfail_default;
+static void *assfail_userinfo = NULL;
 
 /* To avoid having to use the allocator or the stack, which might be b0rked. */
 static char buf[1024];
+
+static void
+assfail_default(const char *filename, int line, const char *buf, void *userinfo)
+{
+	CPDLC_UNUSED(userinfo);
+	fprintf(stderr, "%s:%d: %s\n", filename, line, buf);
+}
 
 void
 cpdlc_assfail_impl(const char *filename, int line, const char *fmt, ...)
@@ -43,5 +53,17 @@ cpdlc_assfail_impl(const char *filename, int line, const char *fmt, ...)
 	vsnprintf(buf, sizeof (buf), fmt, ap);
 	va_end(ap);
 
-	cpdlc_assfail(filename, line, buf, cpdlc_assfail_userinfo);
+	assfail(filename, line, buf, assfail_userinfo);
+}
+
+void
+cpdlc_assfail_set(cpdlc_assfail_t cb, void *userinfo)
+{
+	if (cb != NULL) {
+		assfail = cb;
+		assfail_userinfo = userinfo;
+	} else {
+		assfail = assfail_default;
+		assfail_userinfo = NULL;
+	}
 }
