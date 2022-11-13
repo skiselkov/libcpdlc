@@ -11,14 +11,15 @@ source build_dep.common
 GMP_CONFOPTS="--disable-shared --enable-static --with-pic"
 GMP_PRODUCT="lib/pkgconfig/gmp.pc"
 
-NETTLE_CONFOPTS="--enable-mini-gmp --with-pic --disable-shared --enable-static"
+NETTLE_CONFOPTS="--enable-mini-gmp --with-pic --disable-shared --enable-static \
+    --disable-assembler"
 NETTLE_PRODUCT_LIN="lib64/pkgconfig/nettle.pc"
 NETTLE_PRODUCT="lib/pkgconfig/nettle.pc"
 
 GNUTLS_CONFOPTS="--enable-static --disable-shared --with-included-libtasn1 \
     --with-pic --with-included-unistring --without-p11-kit --disable-doc \
     --disable-tools --disable-cxx --disable-tests --without-idn \
-    --with-nettle-mini"
+    --with-nettle-mini --disable-hardware-acceleration"
 GNUTLS_PRODUCT="lib/pkgconfig/gnutls.pc"
 
 case $(uname) in
