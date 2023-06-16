@@ -1,15 +1,11 @@
 #!/bin/bash
 
-GMP=gmp-6.2.0.tar.xz
-NETTLE=nettle-3.5.tar.xz
-GNUTLS=gnutls-3.6.11.1.tar.xz
+NETTLE=nettle-3.9.1.tar.xz
+GNUTLS=gnutls-3.6.16.tar.xz
 
 set -e
 
 source build_dep.common
-
-GMP_CONFOPTS="--disable-shared --enable-static --with-pic"
-GMP_PRODUCT="lib/pkgconfig/gmp.pc"
 
 NETTLE_CONFOPTS="--enable-mini-gmp --with-pic --disable-shared --enable-static \
     --disable-assembler"
