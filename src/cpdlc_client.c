@@ -671,6 +671,7 @@ reset_link_state(cpdlc_client_t *cl)
 #else
 		shutdown(cl->sock, SHUT_RDWR);
 #endif
+		cpdlc_close_socket(cl->sock);
 		cl->sock = CPDLC_INVALID_SOCKET;
 	}
 #endif	/* !CPDLC_CLIENT_LWS */
