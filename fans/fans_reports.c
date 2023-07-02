@@ -409,7 +409,7 @@ update_leaving_alt(const fans_t *box, fans_report_t *report)
 		case LVL_FROM_ABV:
 			return (cur_alt_ft < rpt_alt_ft);
 		}
-		CPDLC_VERIFY(0);
+		CPDLC_VERIFY_FAIL();
 	} else {
 		return (false);
 	}

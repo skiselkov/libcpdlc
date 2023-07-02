@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2023 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -56,6 +56,12 @@ extern "C" {
 		} \
 	} while (0)
 #define	CPDLC_VERIFY(x)	CPDLC_VERIFY_MSG(x, "%s", "")
+#define	CPDLC_VERIFY_FAIL()	\
+	do { \
+		cpdlc_assfail_impl(cpdlc_ass_basename(__FILE__), \
+		    __LINE__, "internal error"); \
+		abort(); \
+	} while (0)
 
 #define	CPDLC_VERIFY3_impl(x, op, y, type, fmt) \
 	do { \
