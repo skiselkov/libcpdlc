@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Saso Kiselkov
+ * Copyright 2023 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -48,7 +48,10 @@
 
 #ifdef	CPDLC_CLIENT_LWS
 #include <libwebsockets.h>
-#endif
+#elif	defined(CPDLC_WITH_OPENSSL)
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#endif	/* defined(CPDLC_WITH_OPENSSL) */
 
 #include "cpdlc_alloc.h"
 #include "cpdlc_assert.h"
@@ -58,6 +61,22 @@
 #include "cpdlc_thread.h"
 #include "minilist.h"
 
+#ifdef	CPDLC_WITH_OPENSSL
+#define	TLS_CHK_EMPTY
+#define	TLS_CHK(__op__, __err_ret__) \
+	do { \
+		int error = (__op__); \
+		if (error != 1) { \
+			char errbuf[256]; \
+			ERR_error_string_n(error, errbuf, sizeof (errbuf)); \
+			fprintf(stderr, "OpenSSL error performing " #__op__ \
+			    ": %s\n", errbuf); \
+			set_logon_failure(cl, "TLS setup error: %s", errbuf); \
+			cl->logon_status = CPDLC_LOGON_NONE; \
+			return __err_ret__; \
+		} \
+	} while (0)
+#else	/* !CPDLC_WITH_OPENSSL */
 #define	TLS_CHK(__op__) \
 	do { \
 		int error = (__op__); \
@@ -70,6 +89,7 @@
 			return; \
 		} \
 	} while (0)
+#endif	/* !CPDLC_WITH_OPENSSL */
 
 #define	WORKER_POLL_INTVAL	100	/* ms */
 #define	READBUF_SZ		4096	/* bytes */
@@ -134,7 +154,9 @@ struct cpdlc_client_s {
 	char				*cafile;
 	char				*key_file;
 	char				*key_pass;
+#ifndef	CPDLC_WITH_OPENSSL
 	gnutls_pkcs_encrypt_flags_t	key_enctype;
+#endif
 	char				*cert_file;
 #ifndef	CPDLC_CLIENT_LWS
 	/* LWS doesn't support in-memory keys */
@@ -160,10 +182,15 @@ struct cpdlc_client_s {
 	time_t				conn_begin_time;
 	struct addrinfo			*ai;
 	struct addrinfo			*ai_cur;
+#ifdef	CPDLC_WITH_OPENSSL
+	SSL_CTX				*ssl_ctx;
+	SSL				*ssl;
+#else	/* !CPDLC_WITH_OPENSSL */
 	gnutls_session_t		session;
-	bool				handshake_completed;
 	gnutls_certificate_credentials_t xcred;
+#endif	/* !CPDLC_WITH_OPENSSL */
 #endif	/* !CPDLC_CLIENT_LWS */
+	bool				handshake_completed;
 
 	int64_t				bitrate_rx;	/* bit/s */
 	bool				rx_in_prog;
@@ -209,18 +236,22 @@ struct cpdlc_client_s {
 };
 
 #ifdef	CPDLC_CLIENT_LWS
+
 static void init_conn_lws(cpdlc_client_t *cl);
 static bool poll_lws(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
     unsigned *num_out_tokens);
 static int cpdlc_lws_cb(struct lws *wsi, enum lws_callback_reasons reason,
     void *user, void *in, size_t len);
+
 #else	/* !CPDLC_CLIENT_LWS */
+
 static bool resolve_host(cpdlc_client_t *cl);
 static void init_conn(cpdlc_client_t *cl);
 static void complete_conn(cpdlc_client_t *cl);
 static void tls_handshake(cpdlc_client_t *cl);
 static bool poll_for_msgs(cpdlc_client_t *cl,
     cpdlc_msg_token_t **out_tokens, unsigned *num_out_tokens);
+
 #endif	/* !CPDLC_CLIENT_LWS */
 
 static void reset_link_state(cpdlc_client_t *cl);
@@ -231,6 +262,9 @@ static cpdlc_msg_token_t send_msg_impl(cpdlc_client_t *cl,
 
 static void set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
     PRINTF_ATTR(2);
+#ifdef	CPDLC_WITH_OPENSSL
+static void set_logon_failure_openssl(cpdlc_client_t *cl, int error);
+#endif
 
 #ifdef	CPDLC_CLIENT_LWS
 
@@ -259,6 +293,54 @@ set_logon_failure(cpdlc_client_t *cl, const char *fmt, ...)
 	}
 }
 
+#ifdef	CPDLC_WITH_OPENSSL
+
+/**
+ * Sets the logon failure state in response to an OpenSSL error and
+ * translates the passed OpenSSL error number into a readable string.
+ */
+static void
+set_logon_failure_openssl(cpdlc_client_t *cl, int error)
+{
+	char errbuf[256];
+	CPDLC_ASSERT(cl != NULL);
+	ERR_error_string_n(error, errbuf, sizeof (errbuf));
+	set_logon_failure(cl, "TLS setup error: %s", errbuf);
+}
+
+/**
+ * Checks whether an OpenSSL return code corresponds to an condition
+ * indicating that the operation should be retried later when I/O
+ * becomes available (i.e. non-blocking I/O).
+ */
+static bool
+SSL_ret_is_E_AGAIN(const cpdlc_client_t *cl, int ret)
+{
+	int error;
+
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT(cl->ssl != NULL);
+	error = SSL_get_error(cl->ssl, ret);
+	return (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE ||
+	    error == SSL_ERROR_WANT_CONNECT || error == SSL_ERROR_WANT_ACCEPT);
+}
+
+/**
+ * Checks whether an OpenSSL return code corresponds to a fatal error.
+ */
+static bool
+SSL_ret_is_fatal(const cpdlc_client_t *cl, int ret)
+{
+	CPDLC_ASSERT(cl != NULL);
+	return (SSL_get_error(cl->ssl, ret) == SSL_ERROR_SYSCALL);
+}
+
+#endif	/* defined(CPDLC_WITH_OPENSSL) */
+
+/**
+ * Handles the keepalive messaging. This needs to be invoked regularly
+ * to either send or collect keepalive messages.
+ */
 static bool
 check_keepalive(cpdlc_client_t *cl)
 {
@@ -296,6 +378,7 @@ check_keepalive(cpdlc_client_t *cl)
 			break;
 		}
 	}
+	/* Not enough time elapsed, so don't send keepalive */
 	if (time(NULL) - cl->last_data_rdwr < KEEPALIVE_TIMEOUT)
 		return (true);
 
@@ -434,7 +517,9 @@ clear_key_data(cpdlc_client_t *cl)
 
 	cl->key_file = NULL;
 	cl->key_pass = NULL;
+#ifndef	CPDLC_WITH_OPENSSL
 	cl->key_enctype = GNUTLS_PKCS_PLAIN;
+#endif
 	cl->cert_file = NULL;
 
 #ifndef	CPDLC_CLIENT_LWS
@@ -566,15 +651,22 @@ cpdlc_client_get_ca_file(cpdlc_client_t *cl)
 	return (cl->cafile);
 }
 
+#ifdef	CPDLC_WITH_OPENSSL
+void
+cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
+    const char *key_pass, const char *cert_file)
+#else	/* !CPDLC_WITH_OPENSSL */
 void
 cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
     const char *cert_file)
+#endif	/* !CPDLC_WITH_OPENSSL */
 {
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(key_file != NULL || cert_file == NULL);
+#ifndef	CPDLC_WITH_OPENSSL
 	CPDLC_ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
-
+#endif
 	mutex_enter(&cl->lock);
 
 	clear_key_data(cl);
@@ -585,21 +677,30 @@ cpdlc_client_set_key_file(cpdlc_client_t *cl, const char *key_file,
 		cl->cert_file = secure_strdup(cert_file);
 	if (key_pass != NULL)
 		cl->key_pass = secure_strdup(key_pass);
+#ifndef	CPDLC_WITH_OPENSSL
 	cl->key_enctype = key_enctype;
-
+#endif
 	mutex_exit(&cl->lock);
 }
 
 #ifndef	CPDLC_CLIENT_LWS
+
+#ifdef	CPDLC_WITH_OPENSSL
+void
+cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
+    const char *key_pass, const char *cert_pem_data)
+#else	/* !CPDLC_WITH_OPENSSL */
 void
 cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
     const char *key_pass, gnutls_pkcs_encrypt_flags_t key_enctype,
     const char *cert_pem_data)
+#endif	/* !CPDLC_WITH_OPENSSL */
 {
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT(key_pem_data != NULL || cert_pem_data == NULL);
+#ifndef	CPDLC_WITH_OPENSSL
 	CPDLC_ASSERT(key_pass != NULL || key_enctype == GNUTLS_PKCS_PLAIN);
-
+#endif
 	mutex_enter(&cl->lock);
 
 	clear_key_data(cl);
@@ -610,8 +711,9 @@ cpdlc_client_set_key_mem(cpdlc_client_t *cl, const char *key_pem_data,
 		cl->cert_pem_data = secure_strdup(cert_pem_data);
 	if (key_pass != NULL)
 		cl->key_pass = secure_strdup(key_pass);
+#ifndef	CPDLC_WITH_OPENSSL
 	cl->key_enctype = key_enctype;
-
+#endif
 	mutex_exit(&cl->lock);
 }
 
@@ -650,7 +752,20 @@ reset_link_state(cpdlc_client_t *cl)
 		cl->lws_ctx = NULL;
 		cl->lws_sock = NULL;
 	}
-#else	/* !CPDLC_CLIENT_LWS */
+#elif	defined(CPDLC_WITH_OPENSSL)
+	if (cl->handshake_completed) {
+		CPDLC_ASSERT(cl->ssl != NULL);
+		SSL_shutdown(cl->ssl);
+	}
+	if (cl->ssl != NULL) {
+		SSL_free(cl->ssl);
+		cl->ssl = NULL;
+	}
+	if(cl->ssl_ctx != NULL) {
+		SSL_CTX_free(cl->ssl_ctx);
+		cl->ssl_ctx = NULL;
+	}
+#else	/* !CPDLC_CLIENT_LWS && !CPDLC_WITH_OPENSSL */
 	if (cl->session != NULL) {
 		if (cl->handshake_completed) {
 			gnutls_bye(cl->session, GNUTLS_SHUT_RDWR);
@@ -665,6 +780,7 @@ reset_link_state(cpdlc_client_t *cl)
 		gnutls_certificate_free_credentials(cl->xcred);
 		cl->xcred = NULL;
 	}
+#endif	/* !CPDLC_CLIENT_LWS && !CPDLC_WITH_OPENSSL */
 	if (CPDLC_SOCKET_IS_VALID(cl->sock)) {
 #ifdef	_WIN32
 		shutdown(cl->sock, SD_BOTH);
@@ -674,7 +790,6 @@ reset_link_state(cpdlc_client_t *cl)
 		cpdlc_close_socket(cl->sock);
 		cl->sock = CPDLC_INVALID_SOCKET;
 	}
-#endif	/* !CPDLC_CLIENT_LWS */
 
 	while ((outbuf = minilist_remove_head(&cl->outmsgbufs.sending)) !=
 	    NULL) {
@@ -928,6 +1043,115 @@ errout:
 	init_conn(cl);
 }
 
+#ifdef	CPDLC_WITH_OPENSSL
+
+static int
+key_pass_cb(char *buf, int size, int rwflag, void *userdata)
+{
+	const cpdlc_client_t *cl;
+
+	CPDLC_ASSERT(buf != NULL || size == 0);
+	CPDLC_UNUSED(rwflag);
+	CPDLC_ASSERT(userdata != NULL);
+	cl = userdata;
+
+	if (cl->key_pass != NULL) {
+		int key_pass_len = strlen(cl->key_pass);
+		memcpy(buf, cl->key_pass, MIN(size, key_pass_len));
+		return (key_pass_len);
+	} else {
+		return (0);
+	}
+}
+
+static bool
+tls_handshake_openssl(cpdlc_client_t *cl)
+{
+	int ret;
+
+	CPDLC_ASSERT(cl != NULL);
+
+	if (cl->ssl_ctx == NULL) {
+		enum {
+		    SSL_CTX_FLAGS = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
+		    SSL_OP_ALL
+		};
+		const SSL_METHOD *method = TLS_client_method();
+
+		CPDLC_ASSERT(method != NULL);
+		cl->ssl_ctx = SSL_CTX_new(method);
+		CPDLC_ASSERT(cl->ssl_ctx != NULL);
+
+		if (cl->key_pass != NULL) {
+			SSL_CTX_set_default_passwd_cb(cl->ssl_ctx, key_pass_cb);
+			SSL_CTX_set_default_passwd_cb_userdata(cl->ssl_ctx, cl);
+		}
+		if (cl->key_file != NULL) {
+			CPDLC_ASSERT(cl->cert_file != NULL);
+			TLS_CHK(SSL_CTX_use_certificate_file(cl->ssl_ctx,
+			    cl->cert_file, SSL_FILETYPE_PEM), false);
+			TLS_CHK(SSL_CTX_use_PrivateKey_file(cl->ssl_ctx,
+			    cl->key_file, SSL_FILETYPE_PEM), false);
+		} else if (cl->key_pem_data != NULL) {
+			BIO *bio;
+			X509 *cert;
+			EVP_PKEY *pkey;
+
+			CPDLC_ASSERT(cl->cert_pem_data != NULL);
+			bio = BIO_new_mem_buf(cl->cert_pem_data, -1);
+			CPDLC_ASSERT(bio != NULL);
+			cert = PEM_read_bio_X509(bio, NULL, 0, NULL);
+			CPDLC_ASSERT(cert != NULL);
+			ret = SSL_CTX_use_certificate(cl->ssl_ctx, cert);
+			X509_free(cert);
+			BIO_free(bio);
+			if (ret != 1) {
+				set_logon_failure_openssl(cl, ret);
+				return (false);
+			}
+			bio = BIO_new_mem_buf(cl->key_pem_data, -1);
+			CPDLC_ASSERT(bio != NULL);
+			pkey = PEM_read_bio_PrivateKey(bio, NULL, 0, NULL);
+			CPDLC_ASSERT(pkey != NULL);
+			ret = SSL_CTX_use_PrivateKey(cl->ssl_ctx, pkey);
+			EVP_PKEY_free(pkey);
+			BIO_free(bio);
+			if (ret != 1) {
+				set_logon_failure_openssl(cl, ret);
+				return (false);
+			}
+		}
+		if (cl->cafile != NULL) {
+			TLS_CHK(SSL_CTX_load_verify_locations(cl->ssl_ctx,
+			    cl->cafile, NULL), false);
+		}
+		SSL_CTX_set_verify(cl->ssl_ctx, SSL_VERIFY_PEER, NULL);
+		SSL_CTX_set_options(cl->ssl_ctx, SSL_CTX_FLAGS);
+	}
+	if (cl->ssl == NULL) {
+		cl->ssl = SSL_new(cl->ssl_ctx);
+		CPDLC_ASSERT(cl->ssl != NULL);
+		SSL_set_fd(cl->ssl, cl->sock);
+	}
+	ret = SSL_connect(cl->ssl);
+	if (ret == 1) {
+		cl->handshake_completed = true;
+		return (true);
+	} else {
+		int error = SSL_get_error(cl->ssl, ret);
+
+		if (error != SSL_ERROR_WANT_READ &&
+		    error != SSL_ERROR_WANT_WRITE) {
+			set_logon_failure_openssl(cl, error);
+			reset_link_state(cl);
+		}
+		return (false);
+	}
+	return (true);
+}
+
+#else	/* !CPDLC_WITH_OPENSSL */
+
 static void
 report_gnutls_verify_error(cpdlc_client_t *cl)
 {
@@ -951,17 +1175,12 @@ report_gnutls_verify_error(cpdlc_client_t *cl)
 #endif
 }
 
-/*
- * Initiates or completes the TLS handshake procedure.
- */
-static void
-tls_handshake(cpdlc_client_t *cl)
+static bool
+tls_handshake_gnutls(cpdlc_client_t *cl)
 {
 	int ret;
 
 	CPDLC_ASSERT(cl != NULL);
-	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_HANDSHAKING_LINK);
-	CPDLC_ASSERT(!cl->unenc_local);
 
 	if (cl->session == NULL) {
 		TLS_CHK(gnutls_certificate_allocate_credentials(&cl->xcred));
@@ -1004,7 +1223,6 @@ tls_handshake(cpdlc_client_t *cl)
 		gnutls_handshake_set_timeout(cl->session,
 		    GNUTLS_DEFAULT_HANDSHAKE_TIMEOUT);
 	}
-
 	/*
 	 * gnutls_handshake can block for network traffic, so drop the
 	 * client lock here temporarily.
@@ -1012,7 +1230,10 @@ tls_handshake(cpdlc_client_t *cl)
 	mutex_exit(&cl->lock);
 	ret = gnutls_handshake(cl->session);
 	mutex_enter(&cl->lock);
-	if (ret < GNUTLS_E_SUCCESS) {
+	if (ret == GNUTLS_E_SUCCESS) {
+		cl->handshake_completed = true;
+		return (true);
+	} else {
 		if (ret != GNUTLS_E_AGAIN) {
 			if (ret == GNUTLS_E_CERTIFICATE_VERIFICATION_ERROR) {
 				report_gnutls_verify_error(cl);
@@ -1020,12 +1241,31 @@ tls_handshake(cpdlc_client_t *cl)
 				set_logon_failure(cl, "TLS handshake error: "
 				    "%s", gnutls_strerror(ret));
 			}
-			cl->logon_status = CPDLC_LOGON_NONE;
+			reset_link_state(cl);
 		}
-		return;
-	} else {
-		cl->handshake_completed = true;
+		return (false);
 	}
+}
+
+#endif	/* !CPDLC_WITH_OPENSSL */
+
+/*
+ * Initiates or completes the TLS handshake procedure.
+ */
+static void
+tls_handshake(cpdlc_client_t *cl)
+{
+	CPDLC_ASSERT(cl != NULL);
+	CPDLC_ASSERT3U(cl->logon_status, ==, CPDLC_LOGON_HANDSHAKING_LINK);
+	CPDLC_ASSERT(!cl->unenc_local);
+
+#ifdef	CPDLC_WITH_OPENSSL
+	if (!tls_handshake_openssl(cl))
+		return;
+#else	/* !CPDLC_WITH_OPENSSL */
+	if (!tls_handshake_gnutls(cl))
+		return;
+#endif	/* !CPDLC_WITH_OPENSSL */
 	cl->logon_status = CPDLC_LOGON_LINK_AVAIL;
 }
 
@@ -1321,6 +1561,18 @@ do_msg_input(cpdlc_client_t *cl)
 				break;
 			}
 		} else {
+#ifdef	CPDLC_WITH_OPENSSL
+			CPDLC_ASSERT(cl->ssl != NULL);
+			bytes = SSL_read(cl->ssl, buf, recvsz);
+			if (bytes <= 0) {
+				if (!SSL_ret_is_E_AGAIN(cl, bytes) ||
+				    SSL_ret_is_fatal(cl, bytes)) {
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				cl->rx_in_prog = false;
+				break;
+			}
+#else	/* !CPDLC_WITH_OPENSSL */
 			CPDLC_ASSERT(cl->session != NULL);
 			bytes = gnutls_record_recv(cl->session, buf, recvsz);
 			if (bytes < 0) {
@@ -1331,6 +1583,7 @@ do_msg_input(cpdlc_client_t *cl)
 				cl->rx_in_prog = false;
 				break;
 			}
+#endif	/* !CPDLC_WITH_OPENSSL */
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
@@ -1433,6 +1686,20 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 				break;
 			}
 		} else {
+#ifdef	CPDLC_WITH_OPENSSL
+			CPDLC_ASSERT(cl->ssl != NULL);
+			bytes = SSL_write(cl->ssl,
+			    &outmsgbuf->buf[outmsgbuf->bytes_sent], send_sz);
+			if (bytes <= 0) {
+				if (!SSL_ret_is_E_AGAIN(cl, bytes) ||
+				    SSL_ret_is_fatal(cl, bytes)) {
+					cl->logon_status = CPDLC_LOGON_NONE;
+				}
+				minilist_insert_head(&cl->outmsgbufs.sending,
+				    outmsgbuf);
+				break;
+			}
+#else	/* !CPDLC_WITH_OPENSSL */
 			CPDLC_ASSERT(cl->session != NULL);
 			bytes = gnutls_record_send(cl->session,
 			    &outmsgbuf->buf[outmsgbuf->bytes_sent], send_sz);
@@ -1445,6 +1712,7 @@ do_msg_output(cpdlc_client_t *cl, unsigned *num_tokens_p)
 				    outmsgbuf);
 				break;
 			}
+#endif	/* !CPDLC_WITH_OPENSSL */
 		}
 		if (bytes == 0) {
 			/* Remote end closed our connection */
@@ -1596,7 +1864,11 @@ poll_for_msgs(cpdlc_client_t *cl, cpdlc_msg_token_t **out_tokens,
 
 	CPDLC_ASSERT(cl != NULL);
 	CPDLC_ASSERT3U(cl->logon_status, >=, CPDLC_LOGON_LINK_AVAIL);
+#ifdef	CPDLC_WITH_OPENSSL
+	CPDLC_ASSERT(cl->ssl != NULL || cl->unenc_local);
+#else
 	CPDLC_ASSERT(cl->session != NULL || cl->unenc_local);
+#endif
 	CPDLC_ASSERT(CPDLC_SOCKET_IS_VALID(cl->sock));
 	CPDLC_ASSERT(out_tokens != NULL);
 	CPDLC_ASSERT(num_out_tokens != NULL);
@@ -1749,17 +2021,20 @@ cpdlc_client_logoff(cpdlc_client_t *cl, const char *from)
 }
 
 cpdlc_logon_status_t
-cpdlc_client_get_logon_status(cpdlc_client_t *cl, char logon_failure[128])
+cpdlc_client_get_logon_status(const cpdlc_client_t *cl, char logon_failure[128])
 {
 	cpdlc_logon_status_t st;
+	cpdlc_client_t *cl_mut;
 
 	CPDLC_ASSERT(cl != NULL);
+	/* deliberately override mutability, just to grab lock */
+	cl_mut = (cpdlc_client_t *)cl;
 
-	mutex_enter(&cl->lock);
+	mutex_enter(&cl_mut->lock);
 	if (logon_failure != NULL)
 		cpdlc_strlcpy(logon_failure, cl->logon_failure, 128);
 	st = cl->logon_status;
-	mutex_exit(&cl->lock);
+	mutex_exit(&cl_mut->lock);
 
 	return (st);
 }

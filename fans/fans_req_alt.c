@@ -24,6 +24,7 @@
  */
 
 #include <math.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"

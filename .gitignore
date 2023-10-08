@@ -1,8 +1,7 @@
 *.o
 .DS_Store
 Makefile.vars
-test/msgtest
-test/client_test
+test/build
 ca_cert.pem
 ca_key.pem
 cpdlcd/cpdlcd

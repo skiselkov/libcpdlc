@@ -29,8 +29,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef	CPDLC_WITH_OPENSSL
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
+#endif	/* !defined(CPDLC_WITH_OPENSSL) */
 
 #include "cpdlc_msg.h"
 
@@ -88,16 +90,30 @@ CPDLC_API unsigned cpdlc_client_get_port(cpdlc_client_t *cl);
 CPDLC_API void cpdlc_client_set_ca_file(cpdlc_client_t *cl, const char *cafile);
 CPDLC_API const char *cpdlc_client_get_ca_file(cpdlc_client_t *cl);
 
+#ifdef	CPDLC_WITH_OPENSSL
+CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
+    const char *key_file, const char *key_pass, const char *cert_file);
+#else	/* !defined(CPDLC_WITH_OPENSSL) */
 CPDLC_API void cpdlc_client_set_key_file(cpdlc_client_t *cl,
     const char *key_file, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_file);
+#endif	/* !defined(CPDLC_WITH_OPENSSL) */
+
 #ifndef	CPDLC_CLIENT_LWS
+
+#ifdef	CPDLC_WITH_OPENSSL
+CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
+    const char *key_pem_data, const char *key_pass, const char *cert_pem_data);
+#else	/* !defined(CPDLC_WITH_OPENSSL) */
 CPDLC_API void cpdlc_client_set_key_mem(cpdlc_client_t *cl,
     const char *key_pem_data, const char *key_pass,
     gnutls_pkcs_encrypt_flags_t key_enctype, const char *cert_pem_data);
+#endif	/* !defined(CPDLC_WITH_OPENSSL) */
+
 CPDLC_API void cpdlc_client_set_unencrypted_loopback(cpdlc_client_t *cl,
     bool flag);
 CPDLC_API bool cpdlc_client_get_unencrypted_loopback(const cpdlc_client_t *cl);
+
 #endif	/* !CPDLC_CLIENT_LWS */
 
 CPDLC_API size_t cpdlc_client_get_cda(cpdlc_client_t *cl, char *buf,
@@ -110,7 +126,7 @@ CPDLC_API void cpdlc_client_logon(cpdlc_client_t *cl, const char *logon_data,
 CPDLC_API void cpdlc_client_logoff(cpdlc_client_t *cl, const char *from);
 
 CPDLC_API cpdlc_logon_status_t cpdlc_client_get_logon_status(
-    cpdlc_client_t *cl, char logon_failure[128]);
+    const cpdlc_client_t *cl, char logon_failure[128]);
 CPDLC_API void cpdlc_client_reset_logon_failure(cpdlc_client_t *cl);
 
 CPDLC_API cpdlc_msg_token_t cpdlc_client_send_msg(cpdlc_client_t *cl,

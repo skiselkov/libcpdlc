@@ -26,6 +26,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "../src/cpdlc_assert.h"
 #include "../src/cpdlc_string.h"

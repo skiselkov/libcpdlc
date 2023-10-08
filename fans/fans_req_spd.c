@@ -23,6 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <stddef.h>
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"

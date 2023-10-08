@@ -26,6 +26,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <time.h>
 

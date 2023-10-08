@@ -26,6 +26,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "../src/cpdlc_assert.h"
 

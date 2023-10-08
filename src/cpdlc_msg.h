@@ -388,7 +388,7 @@ typedef enum {
 	CPDLC_DIR_SW =		10
 } cpdlc_dir_t;
 
-#define	CPDLC_NULL_SPD		((cpdlc_spd_t){0, 0})
+#define	CPDLC_NULL_SPD		((cpdlc_spd_t){false, false, false, 0})
 #define	CPDLC_IS_NULL_SPD(_sp)	((_sp).spd == 0)
 
 typedef struct {

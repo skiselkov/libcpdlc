@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Saso Kiselkov
+ * Copyright 2023 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -29,6 +29,8 @@
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "../src/cpdlc_alloc.h"
 #include "../src/cpdlc_assert.h"
@@ -65,6 +67,7 @@ init_term(void)
 
 	setlocale(LC_ALL, "");
 	win = initscr();
+	raw();
 	keypad(stdscr, true);
 	nodelay(win, true);
 	noecho();
@@ -87,7 +90,7 @@ init_term(void)
 		buf[i] = ' ';
 	for (int y = 0; y < max_y; y++) {
 		move(y, 0);
-		printw(buf);
+		printw("%s", buf);
 	}
 	refresh();
 	free(buf);
@@ -100,9 +103,12 @@ is_fms_entry_key(int c)
 	    (c >= '0' && c <= '9') || c == '/' || c == ' ' || c == '.');
 }
 
-static void
+static bool
 proc_input(int c)
 {
+	if (c == 'Q' - 64 || c == 'C' - 64) {
+		return (false);
+	}
 	if (c == KEY_BACKSPACE || c == KEY_DC) {
 		fans_push_key(fans, FMS_KEY_CLR_DEL);
 	} else if (is_fms_entry_key(c)) {
@@ -128,14 +134,18 @@ proc_input(int c)
 	} else if (c == KEY_PPAGE) {
 		fans_push_key(fans, FMS_KEY_PREV);
 	}
+	return (true);
 }
 
-static void
+static bool
 read_input(void)
 {
 	int c = getch();
-	if (c != ERR)
-		proc_input(c);
+	if (c != ERR) {
+		return (proc_input(c));
+	} else {
+		return (true);
+	}
 }
 
 static const char *
@@ -268,7 +278,16 @@ draw_screen(void)
 			attroff(COLOR_PAIR(FMS_COLOR_WHITE_INV));
 	}
 
-	move(OFF_Y + FMS_ROWS + 2, 0);
+	move(OFF_Y + FMS_ROWS + 2, 6);
+	printw("   \u2195\u2194    Select LSK");
+	move(OFF_Y + FMS_ROWS + 3, 6);
+	printw("[Return] Push LSK");
+	move(OFF_Y + FMS_ROWS + 4, 6);
+	printw(" [PgUp]  PREV");
+	move(OFF_Y + FMS_ROWS + 5, 6);
+	printw(" [PgDn]  NEXT");
+	move(OFF_Y + FMS_ROWS + 7, 6);
+	printw("[Ctrl+Q] Quit");
 
 	refresh();
 }
@@ -277,18 +296,24 @@ int
 main(void)
 {
 	struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
+	struct stat st;
 
 	init_term();
 
 	fans = fans_alloc(NULL, NULL);
 	CPDLC_ASSERT(fans != NULL);
-
+	if (stat("ca_cert.pem", &st) == 0) {
+		cpdlc_client_t *cl = fans_get_client(fans);
+		cpdlc_client_set_ca_file(cl, "ca_cert.pem");
+	}
 	draw_screen();
 	for (;;) {
 		int res = poll(&pfd, 1, POLL_INTVAL);
 
-		if (res == 1)
-			read_input();
+		if (res == 1) {
+			if (!read_input())
+				break;
+		}
 		fans_update(fans);
 		draw_screen();
 	}

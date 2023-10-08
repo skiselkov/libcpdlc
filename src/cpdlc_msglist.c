@@ -23,6 +23,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include "cpdlc_alloc.h"
