@@ -86,7 +86,7 @@
 			set_logon_failure(cl, "TLS setup error: %s", \
 			    gnutls_strerror(error)); \
 			cl->logon_status = CPDLC_LOGON_NONE; \
-			return; \
+			return (false); \
 		} \
 	} while (0)
 #endif	/* !CPDLC_WITH_OPENSSL */
