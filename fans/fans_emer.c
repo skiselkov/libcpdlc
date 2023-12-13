@@ -147,7 +147,7 @@ draw_main_page(fans_t *box)
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R3, "OFFSET TO");
 	fans_put_off(box, LSK3_ROW, 0, true, &box->emer.off,
-	    false, false);
+	    NULL, false);
 
 	fans_put_lsk_title(box, FMS_KEY_LSK_R4, "DIVERT TO");
 	fans_put_pos(box, LSK4_ROW, 0, true, &box->emer.divert, NULL, false);
