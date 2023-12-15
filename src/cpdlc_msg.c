@@ -2883,14 +2883,15 @@ cpdlc_msg_decode(const char *in_buf, bool is_dl, cpdlc_msg_t **msg_p,
 				goto errout;
 			}
 		} else if (strncmp(in_buf, "LOGON=", 6) == 0) {
-			int l = (sep - &in_buf[6]);
-			char textbuf[l + 1];
+			unsigned l = (sep - &in_buf[6]);
+			char *textbuf = safe_malloc(l + 1);
 
 			free(msg->logon_data);
 			cpdlc_strlcpy(textbuf, &in_buf[6], l + 1);
 			msg->logon_data = safe_malloc(l + 1);
 			cpdlc_unescape_percent(textbuf, msg->logon_data, l + 1);
 			msg->is_logon = true;
+			free(textbuf);
 		} else if (strncmp(in_buf, "LOGOFF", 6) == 0) {
 			msg->is_logoff = true;
 		} else if (strncmp(in_buf, "TO=", 3) == 0) {

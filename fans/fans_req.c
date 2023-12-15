@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 Saso Kiselkov
+ * Copyright 2023 Saso Kiselkov
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "../src/cpdlc_assert.h"
+#include "../src/cpdlc_alloc.h"
 
 #include "fans_req.h"
 #include "fans_scratchpad.h"
@@ -121,7 +122,7 @@ fans_req_add_common(fans_t *box, cpdlc_msg_t *msg, const char *extra_prepend)
 		    strlen(extra_prepend) : 0) + 1;
 		unsigned bufsz = sizeof (box->req_common.freetext) +
 		    REQ_FREETEXT_LINES + prepend_len + 1;
-		char buf[bufsz];
+		char *buf = safe_malloc(bufsz);
 		unsigned seg;
 
 		memset(buf, 0, bufsz);
@@ -141,6 +142,7 @@ fans_req_add_common(fans_t *box, cpdlc_msg_t *msg, const char *extra_prepend)
 			    CPDLC_DM67_FREETEXT_NORMAL_text, 0);
 		}
 		cpdlc_msg_seg_set_arg(msg, seg, 0, buf, NULL);
+		free(buf);
 	}
 }
 

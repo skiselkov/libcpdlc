@@ -24,10 +24,10 @@
 
 include ../Makefile.com
 
-CFLAGS += -W -Wall -Wextra -Werror -Wno-unused-result -fPIC -O0 -g -DDEBUG \
-	-Wno-missing-field-initializers \
-	-Wno-format-truncation \
-	-std=c99 $(PLATFORM_DEFS) -D_GNU_SOURCE \
+CFLAGS += -W -Wall -Wextra -Werror -Werror=vla -Wno-unused-result \
+	-Wno-missing-field-initializers -Wno-format-truncation \
+	-std=c11 $(PLATFORM_DEFS) -fPIC -g -O0 -D_GNU_SOURCE -DDEBUG \
+	-D_LACF_WITHOUT_XPLM \
 	-I$(SRCPREFIX)/asn1 -I$(ACFUTILS)/src $(LWS_CFLAGS) \
 	$(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) --cflags) \
 	$(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config gnutls --cflags)

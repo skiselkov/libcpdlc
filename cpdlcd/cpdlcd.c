@@ -356,10 +356,12 @@ str_subst(char *str, const char *pattern, const char *replace)
 	for (srch = str, hit = strstr(srch, pattern);
 	    srch < str + strlen(str) && hit != NULL;
 	    srch = hit + strlen(pattern), hit = strstr(srch, pattern)) {
-		char buf[hit - srch + 1];
+		unsigned l = hit - srch + 1;
+		char *buf = safe_malloc(l);
 
-		strlcpy(buf, srch, hit - srch + 1);
+		strlcpy(buf, srch, l);
 		append_format(&result, &sz, "%s%s", buf, replace);
+		free(buf);
 	}
 	append_format(&result, &sz, "%s", srch);
 	free(str);

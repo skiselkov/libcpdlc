@@ -56,10 +56,6 @@ else
 	endif
 endif
 
-ifeq ($(PLATFORM_NAME),win-64)
-	CFLAGS += -DLIBCPDLC_GNUTLS_FREE_WORKAROUND
-endif
-
 BOGUS_WARNINGS = -Wno-unused-result -Wno-missing-field-initializers
 ifneq ($(PLATFORM_NAME),mac-64)
 	BOGUS_WARNINGS += -Wno-format-truncation -Wno-stringop-truncation
@@ -74,7 +70,7 @@ LIBS += $(shell PKG_CONFIG_PATH=$(ZEROMQ)/lib/pkgconfig pkg-config \
 
 CFLAGS += -std=c99 -W -Wall -Wextra $(BOGUS_WARNINGS) -Werror -O2 -g -DDEBUG \
     -DLIBCPDLC_VERSION='"$(LIBCPDLC_VERSION)"' $(PLATFORM_DEFS) \
-    -D_GNU_SOURCE \
+    -D_GNU_SOURCE -DCPDLC_WITH_OPENSSL -D_LACF_WITHOUT_XPLM \
     -I$(SRCPREFIX) -I$(SRCPREFIX)/asn1 -I$(ACFUTILS)/src \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --cflags)
@@ -83,28 +79,13 @@ LIBS += -L$(ACFUTILS)/qmake/$(PLATFORM_LIBNAME) -lacfutils \
     $(shell $(ACFUTILS)/pkg-config-deps $(PLATFORM_NAME) \
     $(PKG_CONFIG_DEPS_FLAGS) --libs) \
 
-ifeq ($(PLATFORM_NAME),win-64)
-	GNUTLS=../gnutls-win-64/lib/pkgconfig:../nettle-win-64/lib/pkgconfig
-	CFLAGS += $(shell PKG_CONFIG_PATH=$(GNUTLS) pkg-config --cflags \
-	    gnutls hogweed)
-	LIBS += $(shell PKG_CONFIG_PATH=$(GNUTLS) pkg-config --libs \
-	    gnutls hogweed)
-else
+ifneq ($(PLATFORM_NAME),win-64)
 	ifeq ($(LWS),yes)
 		CFLAGS += -DCPDLC_CLIENT_LWS $(LWS_CFLAGS)
 		LIBS += $(LWS_LIBS)
 	else
-		CFLAGS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
-		    pkg-config --cflags gnutls nettle hogweed)
 		ifeq ($(PLATFORM_NAME),linux-64)
-			LIBS += -Wl,-Bstatic \
-			    $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
-			    pkg-config --libs --static gnutls libidn2 gmp) \
-			    -Wl,-Bdynamic
 			LIBS += -static-libgcc
-		else
-			LIBS += $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) \
-			    pkg-config --libs --static gnutls gmp)
 		endif
 	endif
 endif
