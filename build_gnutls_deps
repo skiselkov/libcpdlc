@@ -15,7 +15,8 @@ NETTLE_PRODUCT="lib/pkgconfig/nettle.pc"
 GNUTLS_CONFOPTS="--enable-static --disable-shared --with-included-libtasn1 \
     --with-pic --with-included-unistring --without-p11-kit --disable-doc \
     --disable-tools --disable-cxx --disable-tests --without-idn \
-    --with-nettle-mini --disable-hardware-acceleration"
+    --with-nettle-mini --disable-hardware-acceleration --without-brotli
+    --without-zstd"
 GNUTLS_PRODUCT="lib/pkgconfig/gnutls.pc"
 
 case $(uname) in
