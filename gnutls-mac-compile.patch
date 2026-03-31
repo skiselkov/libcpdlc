@@ -1,0 +1,11 @@
+--- gnutls-3.7.11/lib/system/certs.c	2024-05-15 14:10:27.000000000 +0200
++++ gnutls-3.7.11-new/lib/system/certs.c	2026-03-31 16:18:43.249763676 +0200
+@@ -278,7 +278,7 @@
+ }
+ #elif defined(__APPLE__) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+ static
+-int osstatus_error(status)
++int osstatus_error(int status)
+ {
+ 	CFStringRef err_str = SecCopyErrorMessageString(status, NULL);
+ 	_gnutls_debug_log("Error loading system root certificates: %s\n",

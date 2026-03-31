@@ -70,6 +70,6 @@ Darwin)
 	NETTLE_CFLAGS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --cflags nettle)" \
 	NETTLE_LIBS="$(PKG_CONFIG_PATH=$NETTLE_PKG_CONFIG_PATH pkg-config --libs nettle)" \
 	    build_dep "mac-64" "$GNUTLS_CONFOPTS" \
-	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT"
+	    "$GNUTLS" "gnutls" "$GNUTLS_PRODUCT" "gnutls-mac-compile.patch"
 	;;
 esac
