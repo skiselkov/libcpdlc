@@ -16,7 +16,8 @@ GNUTLS_CONFOPTS="--enable-static --disable-shared --with-included-libtasn1 \
     --with-pic --with-included-unistring --without-p11-kit --disable-doc \
     --disable-tools --disable-cxx --disable-tests --without-idn \
     --with-nettle-mini --disable-hardware-acceleration --without-zlib \
-    --without-brotli --without-zstd --without-tpm --without-tpm2"
+    --without-brotli --without-zstd --without-tpm --without-tpm2 \
+    --enable-dyn-ncrypt"
 GNUTLS_PRODUCT="lib/pkgconfig/gnutls.pc"
 
 case $(uname) in
