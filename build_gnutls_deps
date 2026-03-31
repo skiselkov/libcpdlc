@@ -1,7 +1,7 @@
 #!/bin/bash
 
 NETTLE=nettle-3.10.2.tar.xz
-GNUTLS=gnutls-3.8.11.tar.xz
+GNUTLS=gnutls-3.7.11.tar.xz
 
 set -e
 
@@ -16,7 +16,7 @@ GNUTLS_CONFOPTS="--enable-static --disable-shared --with-included-libtasn1 \
     --with-pic --with-included-unistring --without-p11-kit --disable-doc \
     --disable-tools --disable-cxx --disable-tests --without-idn \
     --with-nettle-mini --disable-hardware-acceleration --without-zlib \
-    --without-brotli --without-zstd"
+    --without-brotli --without-zstd --without-tpm --without-tpm2"
 GNUTLS_PRODUCT="lib/pkgconfig/gnutls.pc"
 
 case $(uname) in

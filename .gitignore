@@ -43,7 +43,7 @@ test/build/client_test
 test/build/cmake_install.cmake
 test/build/msgtest
 gmp-6.2.0
-gnutls-3.8.11
+gnutls-3.7.11
 nettle-3.10.2
 gmp-linux-64
 gmp-mac-64
